@@ -104,17 +104,58 @@ def _layer_int(v):
         return 0
 
 
-def _mid_bearing(geom):
-    """Midpoint [lon,lat] + bearing (deg, compass clockwise-from-N) of a line — for placing a
-    name label and rotating it to follow the road."""
+def _straight_run(geom, fc, steps=40, perp_frac=0.10, perp_floor=3.0):
+    """At fraction `fc` along `geom`: the point [lon,lat], the screen-space angle there (deck CCW
+    from east, Web-Mercator latitude-corrected like the arrows), and `fit_m` — the CONTIGUOUS
+    straight run of road CENTRED on that point. Walking out each way stops where the road leaves a
+    narrow cone around the local tangent (perp > perp_frac*along + perp_floor m), so a straight,
+    centred label of <= fit_m metres lies FULLY on the road (not merely within its extent)."""
+    d = 0.01
+    m = geom.interpolate(fc, normalized=True)
+    a = geom.interpolate(max(fc - d, 0.0), normalized=True)
+    b = geom.interpolate(min(fc + d, 1.0), normalized=True)
+    cl = math.cos(math.radians(m.y)) or 1e-6
+    tx, ty = (b.x - a.x) * cl, (b.y - a.y)                  # tangent (lon scaled to lat metres)
+    tn = math.hypot(tx, ty) or 1e-9
+    tx, ty = tx / tn, ty / tn
+    ang = math.degrees(math.atan2((b.y - a.y) / cl, b.x - a.x))
+
+    def run(sign):
+        last = 0.0
+        for i in range(1, steps + 1):
+            fr = fc + sign * (i / steps) * 0.5
+            if fr < 0.0 or fr > 1.0:
+                break
+            q = geom.interpolate(fr, normalized=True)
+            ax = (q.x - m.x) * cl * 111320
+            ay = (q.y - m.y) * 111320
+            along = ax * tx + ay * ty
+            if abs(-ax * ty + ay * tx) > perp_frac * abs(along) + perp_floor:
+                break                                       # road left the tangent cone -> stop
+            last = abs(along)
+        return last
+
+    fit_m = 2 * min(run(1), run(-1))
+    na = ang
+    while na > 90:
+        na -= 180
+    while na <= -90:
+        na += 180
+    return [round(m.x, 6), round(m.y, 6)], round(na, 1), fit_m
+
+
+def _label_candidates(geom, stride_m=80):
+    """Name-label candidates along `geom`: one every ~stride_m, each a (pos, na, fit_m) from
+    `_straight_run`. Long roads thus get several candidates (more places to show the name); the
+    viewer keeps those that fit at the current zoom and collision-places them."""
+    out = []
     try:
-        m = geom.interpolate(0.5, normalized=True)
-        p0 = geom.interpolate(0.46, normalized=True)
-        p1 = geom.interpolate(0.54, normalized=True)
-        return [round(m.x, 6), round(m.y, 6)], math.degrees(math.atan2(p1.x - p0.x, p1.y - p0.y))
+        n = max(1, round(geom.length * 111320 / stride_m))
+        for k in range(n):
+            out.append(_straight_run(geom, (k + 0.5) / n))
     except Exception:
-        c = geom.centroid
-        return [round(c.x, 6), round(c.y, 6)], 0.0
+        pass
+    return out
 
 
 _ARROW_STEP_M = 18   # base sample spacing; the viewer subsamples by zoom for ~constant px spacing
@@ -187,12 +228,14 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     _style = load_style()
     astyle = _style.get("arrows", {})
     a_sample = astyle.get("sample_m", _ARROW_STEP_M)   # along-road bake step (metres)
+    nstyle = _style.get("names", {})
+    n_sample = nstyle.get("sample_m", 80)              # label-candidate spacing along each road
 
     out = Path(out_dir); (out / "data").mkdir(parents=True, exist_ok=True)
     feats = []
     gdf = layer.gdf
     _SVC_MINOR = ("driveway", "parking_aisle", "drive-through", "drive_through")
-    names_acc = {}   # name -> (length, midpoint, bearing); keep the longest piece per name
+    label_feats = []   # name-label candidates: one per named piece (the viewer fits + places them)
     arrow_feats = []   # oneway arrow markers, sampled along the lines (OSM-style)
     for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, combo, d, w, c in zip(
             gdf.geometry, gdf.edge_id, gdf.highway, gdf.name, gdf.length_m,
@@ -208,15 +251,16 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         g = road_group(hw)
         if g == "service" and str(svc).strip().lower() in _SVC_MINOR:
             g = "service_minor"                          # driveways/parking aisles -> narrower
-        mid, bearing = _mid_bearing(geom)
-        if nm and g in NAME_GROUPS:                       # collect one label per road name
-            prev = names_acc.get(nm)
-            if prev is None or (length_m or 0) > prev[0]:
-                names_acc[nm] = (length_m or 0, mid, bearing)
+        if nm and g in NAME_GROUPS:                       # name-label candidates ALONG the piece
+            pr = road_z(hw)
+            for pos, na, fit_m in _label_candidates(geom, n_sample):
+                if fit_m >= 20:                           # skip points without room for any name
+                    label_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": pos},
+                        "properties": {"nm": nm, "na": na, "len": round(fit_m), "pr": pr, "g": g}})
         if ow:                                            # oneway -> arrows along the line
             for pos, ang, seq in _arrow_points(geom, a_sample):
                 arrow_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": pos},
-                                    "properties": {"ang": ang, "seq": seq}})
+                                    "properties": {"ang": ang, "seq": seq, "g": g}})
         feats.append({"type": "Feature", "geometry": sg.mapping(geom), "properties": {
             "c": _rgb(s.fill),
             "cc": _rgb(casing) if casing else None,
@@ -235,16 +279,10 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     (out / "data" / "roads_merged.geojson").write_text(
         json.dumps({"type": "FeatureCollection", "features": feats}))
 
-    # one name label per road (deduped, longest piece); angle kept upright for readability
-    label_feats = []
-    for nm, (_ln, mid, bearing) in names_acc.items():
-        na = 90 - bearing
-        while na > 90:
-            na -= 180
-        while na <= -90:
-            na += 180
-        label_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": mid},
-                            "properties": {"nm": nm, "na": round(na, 1)}})
+    # name-label candidates (one per named piece): each carries `na` (Mercator-correct, upright),
+    # `len` = fit_m (straight centred span, m) and `pr` (road rank). The viewer keeps the ones that
+    # fit at the current zoom, then collision-places them — repeating a name along long roads but
+    # never overlapping another label.
     (out / "data" / "labels.geojson").write_text(
         json.dumps({"type": "FeatureCollection", "features": label_feats}))
     (out / "data" / "arrows.geojson").write_text(
@@ -271,6 +309,11 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             .replace("__ARROWSPACING__", str(astyle.get("spacing_px", 150)))
             .replace("__ARROWSIZE__", str(astyle.get("size_px", 7)))
             .replace("__ARROWCOLOR__", str(astyle.get("color", "#8a8a8a")))
+            .replace("__NAMEMIN__", str(nstyle.get("min_size", 10)))
+            .replace("__NAMEMAX__", str(nstyle.get("max_size", 22)))
+            .replace("__NAMEWK__", str(nstyle.get("width_ratio", 1.25)))
+            .replace("__NAMEGLYPH__", str(nstyle.get("glyph", 0.64)))
+            .replace("__NAMEREPEAT__", str(nstyle.get("repeat_px", 300)))
             .replace("__ARROWS__", "true" if "arrows" in overlays else "false")
             .replace("__NAMES__", "true" if "names" in overlays else "false")
             .replace("__ARROWSCHK__", "checked" if "arrows" in overlays else "")
@@ -319,7 +362,7 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   <label><input type="checkbox" id="mc" checked> cycling</label>
   <b>Overlays</b>
   <label><input type="checkbox" id="arrows" __ARROWSCHK__> oneway arrows (z≥__ARROWMINZ__)</label>
-  <label><input type="checkbox" id="names" __NAMESCHK__> street names (z≥13)</label>
+  <label><input type="checkbox" id="names" __NAMESCHK__> street names (by class)</label>
   __BOUNDROW__
   <b>Legend (modes)</b><div id="legend">__LEGEND__</div>
 </div>
@@ -407,26 +450,84 @@ function draw(){
     );
   }
   const z = map.getZoom();
-  if(S.arrows && z >= __ARROWMINZ__){   // OSM-style oneway arrows, ~constant px spacing (global, not per-edge)
-    const cosC = Math.cos(map.getCenter().lat*Math.PI/180);
-    const tM = __ARROWSPACING__ * (156543.03 * cosC / Math.pow(2, z));   // target spacing (px) -> ground metres
-    const seen = new Set();                                 // keep one arrow per tM grid cell
-    const data = ARROWS.filter(f => {
+  const cosC = Math.cos(map.getCenter().lat*Math.PI/180);
+  const mpp = 156543.03 * cosC / Math.pow(2, z);        // metres per pixel — shared by arrows + names
+  const MINF = __NAMEMIN__, MAXF = __NAMEMAX__, GLYPH = __NAMEGLYPH__, WK = __NAMEWK__;  // from names.* (YAML)
+  // a name must fit the road in BOTH directions: along its straight run (length) AND across its
+  // painted width (so the text sits INSIDE the road, not towering over a hairline). The font is the
+  // smaller of the two fits; 0 => doesn't fit yet at this zoom -> hidden.
+  const fontFor = f => {
+    const lenFont = 0.9 * (f.properties.len / mpp) / (f.properties.nm.length * GLYPH);   // along length
+    const wpx = interp(FILL[f.properties.g]||FILL.residential, z, HI_RATE[f.properties.g]||1.55);
+    const fs = Math.min(lenFont, wpx * WK);                                               // across width
+    return fs >= MINF ? Math.min(fs, MAXF) : 0;
+  };
+  const boxOf = (f, fs) => {                            // a label's oriented box (its own font size)
+    const c = f.geometry.coordinates, a = f.properties.na * Math.PI/180;
+    return {x: c[0]*111320*cosC, y: c[1]*111320, ax: Math.cos(a), ay: Math.sin(a),
+            hl: (f.properties.nm.length*fs*GLYPH/2 + fs*0.5)*mpp, hw: fs*0.8*mpp, nm: f.properties.nm};
+  };
+
+  // names: size each candidate to fill its road, keep those that reach MINF, then greedily place —
+  // important roads first, repeating a name along long roads (>= CELL apart), never overlapping a
+  // label. Computed FIRST so arrows can avoid the placed ones.
+  let nameFit = [], nameZones = [];
+  if(S.names){
+    const cand = [];
+    for(const f of LABELS){ const fs = fontFor(f); if(fs){ f.__fs = fs; cand.push(f); } }
+    cand.sort((a,b) => (b.properties.pr - a.properties.pr) || (b.properties.len - a.properties.len));
+    const CELL = __NAMEREPEAT__*mpp, REP2 = CELL*CELL; // grid cell == same-name repeat distance (px)
+    const grid = new Map();
+    for(const f of cand){
+      const b = boxOf(f, f.__fs), gx = Math.round(b.x/CELL), gy = Math.round(b.y/CELL);
+      let ok = true;
+      for(let ix=gx-1; ix<=gx+1 && ok; ix++) for(let iy=gy-1; iy<=gy+1 && ok; iy++){
+        const bucket = grid.get(ix+","+iy); if(!bucket) continue;
+        for(const p of bucket){
+          const dx = b.x-p.x, dy = b.y-p.y;
+          if(p.nm===b.nm && dx*dx+dy*dy < REP2){ ok=false; break; }                         // repeat gap
+          if(Math.abs(dx*b.ax+dy*b.ay) < b.hl+p.hl && Math.abs(-dx*b.ay+dy*b.ax) < b.hw+p.hw){ ok=false; break; } // overlap
+        }
+      }
+      if(ok){ nameFit.push(f); nameZones.push(b);
+        const kk = gx+","+gy; let bk = grid.get(kk); if(!bk){ bk=[]; grid.set(kk,bk); } bk.push(b); }
+    }
+  }
+
+  if(S.arrows && z >= __ARROWMINZ__){   // oneway arrows: must fit the road WIDTH (hidden/scaled on thin
+    const tM = __ARROWSPACING__ * mpp;                   // roads), grid-deduped to ~spacing_px, off names
+    const AMIN = Math.min(3.5, __ARROWSIZE__);           // hide arrows where the road is thinner than this (px)
+    const awid = f => interp(FILL[f.properties.g]||FILL.service, z, HI_RATE[f.properties.g]||1.55);
+    const seen = new Set();                              // keep one arrow per tM grid cell (global)
+    let data = ARROWS.filter(f => {
+      if(awid(f) < AMIN) return false;                   // road too thin to carry an arrow at this zoom
       const c = f.geometry.coordinates;
       const k = Math.round(c[0]*111320*cosC/tM) + "," + Math.round(c[1]*111320/tM);
       if(seen.has(k)) return false; seen.add(k); return true;
     });
+    if(nameZones.length){                                // drop arrows sitting inside a name box
+      data = data.filter(f => {
+        const c = f.geometry.coordinates, px = c[0]*111320*cosC, py = c[1]*111320;
+        for(const n of nameZones){
+          const dx = px - n.x, dy = py - n.y;
+          if(Math.abs(dx*n.ax + dy*n.ay) < n.hl && Math.abs(-dx*n.ay + dy*n.ax) < n.hw) return false;
+        }
+        return true;
+      });
+    }
     layers.push(new deck.IconLayer({id:"arrows", data,
       getIcon: () => ({url: ARROW_ICON, width: 48, height: 20, anchorX: 24, anchorY: 10}),
       getPosition: f => f.geometry.coordinates, getAngle: f => f.properties.ang,
-      sizeUnits:"pixels", getSize: __ARROWSIZE__, billboard:true}));
+      sizeUnits:"pixels", getSize: f => Math.min(awid(f), __ARROWSIZE__), billboard:true,
+      updateTriggers:{getSize:[zt]}}));
   }
-  if(S.names && z >= 13){      // one label per road name, white halo
-    layers.push(new deck.TextLayer({id:"names", data: LABELS, characterSet:"auto",
+  if(nameFit.length){           // road-name labels (white halo), each sized to fill its road
+    layers.push(new deck.TextLayer({id:"names", data: nameFit, characterSet:"auto",
       getPosition: f => f.geometry.coordinates, getText: f => f.properties.nm, getAngle: f => f.properties.na,
-      sizeUnits:"pixels", getSize: 12, getColor:[30,30,30], billboard:true,
+      sizeUnits:"pixels", getSize: f => f.__fs, getColor:[30,30,30], billboard:true,
       fontSettings:{sdf:true}, outlineWidth: 3, outlineColor:[255,255,255],
-      getTextAnchor:"middle", getAlignmentBaseline:"center"}));
+      getTextAnchor:"middle", getAlignmentBaseline:"center",
+      updateTriggers:{getSize:[zt]}}));
   }
   if(S.boundary && BOUNDARY.length){   // clip/area boundary, purple dashed outline, on top (duckOSM look)
     layers.push(new deck.GeoJsonLayer({id:"boundary", data:{type:"FeatureCollection", features:BOUNDARY},

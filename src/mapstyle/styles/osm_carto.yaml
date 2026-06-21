@@ -70,7 +70,17 @@ roads:
 arrows:
   min_zoom:    16        # don't draw arrows below this zoom
   spacing_px:  120       # target on-screen gap between arrows — LOWER = MORE arrows
-  size_px:     6         # arrow icon size, in pixels
+  size_px:     6         # arrow icon size, in pixels (also the cap; arrows scale down on thin roads)
   color:       "#8a8a8a" # arrow fill colour (gray reads better than a dark slate)
   sample_m:    10        # base sampling step along the road (metres); keep well below the smallest
                          # on-screen cell so every cell gets an arrow (bake density, not final count)
+
+# street-name labels. Each name is sized to fit its road in BOTH directions (length + width) and
+# repeated along long roads; tune the size range / density here.
+names:
+  min_size:    10        # smallest font (px); below this the name is hidden (road too short/thin)
+  max_size:    22        # largest font (px); cap so names never get huge
+  width_ratio: 1.25      # font size as a multiple of the road's painted width (keeps text inside it)
+  glyph:       0.64      # average glyph width as a fraction of font size (text-width estimate)
+  repeat_px:   300       # minimum on-screen gap between repeats of the same name
+  sample_m:    80        # spacing of label candidates along each road (bake density)
