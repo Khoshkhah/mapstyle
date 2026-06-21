@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mapstyle"
+version = "0.0.1"
+description = "OSM full-base-map styling — roadstyle's engine generalized to polygons + points + multi-layer composition"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Kaveh" }]
+keywords = ["osm", "basemap", "roadstyle", "folium", "lonboard", "cartography"]
+
+# Reuses roadstyle for the road layers; adds polygon/point stylers + composition.
+dependencies = [
+    "roadstyle",      # installed editable from ../roadstyle (the styling brain)
+    "geopandas",
+    "shapely",
+    "folium",
+    "pyyaml",         # stylesheet config (styles/*.yaml)
+]
+
+[project.optional-dependencies]
+duckdb = ["duckdb"]                 # read basemap.* layers straight from a duckmap .duckdb
+lonboard = ["lonboard", "pyarrow"]   # WebGL backend for large layers (pyarrow = geoarrow conversion)
+dev = ["pytest", "duckdb"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mapstyle = ["styles/*.yaml", "style/vendor/*"]
