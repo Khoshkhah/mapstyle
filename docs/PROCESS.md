@@ -62,6 +62,9 @@ The viewer (`render_merge`) is a single self-contained HTML: **MapLibre GL** for
 - **Interactivity**: per-mode filter checkboxes, color-by **OSM class** vs **mode
   combination**, click-to-inspect (name/class/length/modes/edge_id), hover highlight, live
   zoom readout.
+- **Overlays** (toggleable in the panel): **oneway arrows**, **street names**, and the
+  clip/area **boundary** (purple dashed outline, matching duckOSM's viz). Which start ON is set
+  by `render_merge(..., overlays=("arrows", "names"), boundary=<geojson>)`.
 
 ## 5. OSM-Carto fidelity — the cartographic decisions
 
@@ -69,14 +72,14 @@ Each of these was driven by the openstreetmap-carto standard (the default osm.or
 
 | Aspect | What OSM does | What mapstyle does |
 |---|---|---|
-| **Road colors** | per-class palette (secondary yellow, residential white, footway salmon dashed, cycleway blue dashed…) | `roads.py:ROAD_CARTO` — exact carto fills/casings/dashes |
+| **Road colors** | per-class palette (secondary yellow, residential white, footway salmon dashed, cycleway blue dashed…) | per-class `fill` / `casing` (edge) / `dash` in **`roads.colors`** (YAML); `roads.py:_build_carto()` builds the `ROAD_CARTO` palette from it |
 | **Widths** | per-class **pixel width by zoom**, growing as you zoom in | a per-group **width table by zoom** (`styles/osm_carto.yaml`), smoothly interpolated, with per-group growth above the table top (`hi_rate`) |
 | **Casing** | thin darker outline | `casing = fill × casing_ratio` |
 | **Paths** | thin fixed-ish dashed lines | path group stays thin (low growth); dashes via deck `PathStyleExtension` |
 | **Draw order** | `z_order` by class; **links below all roads**; `+10×layer` so **bridges draw over, tunnels under** | `road_z` (links −20) + `10×layer`; rendered in 3 **elevation bands** (tunnel / ground / bridge) as separate deck layer pairs, since deck only guarantees order *between* layers |
 | **Service roads** | `driveway`/`parking_aisle`/`drive-through` narrower than general service/`alley` | `service` subtag splits into `service` vs `service_minor` width groups |
-| **Oneway arrows** | line-placed from ~z16, spaced, travel direction | deck `TextLayer` "▶" per oneway edge at its midpoint, rotated to bearing, z≥16 (approximation — see §7) |
-| **Names** | line-placed text, white halo, by-class zoom | one deduped label per road name, white halo, z≥14 |
+| **Oneway arrows** | line-placed from ~z16, spaced ~constant px, travel direction | deck `IconLayer` of the exact openstreetmap-carto `oneway.svg`, **sampled along** each oneway line, angle corrected for Web Mercator, with a **global grid-dedupe** to ~constant px spacing (also collapses per-mode duplicates — see §7); `min_zoom`/`spacing_px`/`size_px`/`color`/`sample_m` from `arrows.*` in the YAML |
+| **Names** | line-placed text, white halo, by-class zoom | one deduped label per road name (longest piece), white halo, z≥13 |
 
 ### Why a raster basemap can't be width-matched exactly
 A long detour: the OSM **raster** tiles are pre-rendered per integer zoom and *scaled* between
@@ -100,17 +103,35 @@ connected to a roundabout it actually passes over; with `layer` on the edge and 
 in the z-order, it now renders above.
 
 ## 7. Known approximations
-- **Labels/arrows** use deck (point placement at a midpoint), not Mapnik/MapLibre
-  `symbol-placement: line`, so they don't follow curves, repeat along long roads, or do
-  collision detection. A faithful version would render them as MapLibre symbol layers
-  (needs a glyphs source and an interleaved overlay).
+- **Oneway arrows** are sampled *along* each line and repeat at ~constant screen spacing (a
+  **global grid-dedupe** keeps one arrow per ~`spacing_px` cell across all roads/modes), with
+  the angle corrected for Web Mercator (north–south is stretched by `1/cos(lat)`). They still
+  aren't true Mapnik `symbol-placement: line` — no per-glyph curve-follow or collision
+  detection.
+- **Names** are one deduped label per road name, placed at the longest piece's midpoint — not
+  line-placed/repeated, no collision detection. A faithful version would use MapLibre symbol
+  layers (needs a glyphs source and an interleaved overlay).
+- **Per-mode edge duplication**: the three `roads_*` tables split the same OSM way at different
+  nodes (e.g. *Riia* is one driving edge but two cycling edges), so `merge_modes` keeps them as
+  separate overlapping edges with different `edge_id`s. Road fills overdraw harmlessly (same
+  style); oneway arrows would duplicate, which the arrow grid-dedupe hides. The real fix is
+  duckOSM's single-`edges`-with-access-flags model (§3).
 - Widths are a transcription of the openstreetmap-carto table, interpolated — close, tunable
   in the YAML, not byte-identical.
 
 ## 8. Configuration
-Tunable cartographic numbers live in **`src/mapstyle/styles/osm_carto.yaml`** (`roads.width` /
-`hi_rate` / `casing_ratio`), loaded by `style.py` and injected into the viewer. Edit and
-re-render — no code change. Colors (road palette, landuse, combo) are next to move there.
+Tunable cartographic numbers live in **`src/mapstyle/styles/osm_carto.yaml`**, loaded by
+`style.py` and injected into the viewer:
+
+- `roads.width` — per-group fill width (px) by zoom; `roads.hi_rate` — growth above the table
+  top; `roads.casing_ratio` — casing width as a multiple of fill.
+- `roads.colors` — per-class `fill` / `casing` (edge) / `dash`; `roads.py` builds the
+  `ROAD_CARTO` palette from this.
+- `arrows.*` — oneway-arrow `min_zoom`, `spacing_px` (on-screen density), `size_px`, `color`,
+  `sample_m` (along-road bake density).
+
+Edit any of these and re-render — no code change. (Landcover / mode-combo colors are still in
+code, next to move.)
 
 ## 9. Run / extend
 ```bash
@@ -127,4 +148,6 @@ duckmap `basemap.*` set and giving it a deck layer in the viewer.
 scaffold → multi-modal merge (`edge_id`) → OSM-class colors → smooth vector widths (after a
 raster-matching dead-end) → per-mode distinct vs OSM coloring → bridge/tunnel & link z-order
 (+ duckOSM `layer/bridge/tunnel`) → service narrow/wide (+ duckOSM `service`) → widths to a
-YAML config → oneway arrows + street-name overlays.
+YAML config → oneway arrows (exact OSM `oneway.svg`, Mercator-correct angle, zoom-responsive
+grid-dedupe) + street-name overlays → Tartu boundary overlay → road colors + arrow settings to
+the YAML config.

@@ -23,11 +23,11 @@ landcover = load_layer(DB, "landcover", "polygon")
 render_basemap([landcover, water, driving], theme="light").save("tartu.html")
 ```
 
-## Merged multi-modal viewer (with names & oneway arrows)
+## Merged multi-modal viewer (names, oneway arrows, boundary)
 
 The main output: merge the three mode networks into one OSM-styled, interactive viewer
-(deck.gl + MapLibre). `overlays=` turns on the **street names** and **oneway arrows** overlays
-(both are also toggleable checkboxes in the viewer panel).
+(deck.gl + MapLibre). `overlays=` turns on the **street names** / **oneway arrows** overlays and
+`boundary=` adds a **city-boundary** outline (all toggleable in the viewer panel).
 
 ```python
 from mapstyle import merge_modes, render_merge
@@ -39,6 +39,10 @@ merged = merge_modes(DB)                               # 1 edge set, with mode f
 render_merge(merged, "render/tartu", basemap="osm", overlays=("names", "arrows"))
 render_merge(merged, "render/tartu", overlays=("arrows",))   # just arrows
 render_merge(merged, "render/tartu")                         # neither (toggle in-viewer)
+
+# + a city-boundary outline (a .geojson path or a shapely geometry)
+render_merge(merged, "render/tartu", overlays=("arrows",),
+             boundary="../duckOSM/data/boundaries/tartu.geojson")
 ```
 
 Then serve and open:
@@ -47,17 +51,20 @@ Then serve and open:
 python render/tartu/serve.py        # -> http://localhost:8080/index.html
 ```
 
-In the viewer's **Overlays** box: tick **street names** (shows at zoom ≥ 13) and/or
-**oneway arrows** (zoom ≥ 15). `basemap=` picks the underlay (`osm` | `positron` | `dark` |
-`satellite` | `none`), also switchable in the panel. Road widths/casing are tunable in
-[`src/mapstyle/styles/osm_carto.yaml`](src/mapstyle/styles/osm_carto.yaml). Full architecture
-and decisions: [`docs/PROCESS.md`](docs/PROCESS.md).
+In the viewer's **Overlays** box: tick **street names** (zoom ≥ 13), **oneway arrows**
+(zoom ≥ 16), and the **city boundary**. `basemap=` picks the underlay (`osm` | `positron` |
+`dark` | `satellite` | `none`), also switchable in the panel. Road **widths, colors, and the
+oneway arrows** are tunable in
+[`src/mapstyle/styles/osm_carto.yaml`](src/mapstyle/styles/osm_carto.yaml) (`roads.width` /
+`roads.colors` / `arrows.*`) — edit and re-render. Full architecture and decisions:
+[`docs/PROCESS.md`](docs/PROCESS.md).
 
 ## Status
 
-Merged multi-modal viewer with OSM-Carto road styling (per-zoom widths from a YAML config,
-casing, dashes, link/bridge/tunnel z-order, narrow/wide service split) + names/arrows overlays.
-Area layers (water/landcover/buildings) are next. See [`docs/PLAN.md`](docs/PLAN.md).
+Merged multi-modal viewer with OSM-Carto road styling — per-zoom widths, colors, and oneway
+arrows all from a YAML config (`roads.width` / `roads.colors` / `arrows.*`), plus casing,
+dashes, link/bridge/tunnel z-order, narrow/wide service split — and names / arrows / city-boundary
+overlays. Area layers (water/landcover/buildings) are next. See [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Install
 
