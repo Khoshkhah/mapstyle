@@ -32,6 +32,45 @@ COMBO_COLOR = {
 }
 
 
+# per road-group offset (metres) baked into each two-way edge so its two directed copies fan into
+# parallel lanes (deck.gl has no render-time line-offset). Small -> lanes coincide when zoomed out,
+# separate as you zoom in. service/paths stay 0 (too thin to split without a gap). Tune here.
+LANE_OFFSET_M = {
+    "major": 1.6, "primary": 1.4, "secondary": 1.2, "tertiary": 1.0,
+    "residential": 0.8, "living_street": 0.8, "pedestrian": 0.8,
+    "service": 0.0, "path": 0.0,
+}
+
+
+def _offset_two_way(gdf):
+    """Fan two-way streets into parallel lanes: bake a small left offset into each two-way edge. The
+    two directed edges have reversed geometry, so offsetting both left puts them on opposite sides.
+    One-way edges (and classes with offset 0) stay centred. Done in a local UTM CRS; a degenerate
+    offset falls back to the centreline."""
+    import geopandas as gpd
+
+    m_crs = gdf.estimate_utm_crs()
+    m = gdf.to_crs(m_crs)
+    out = []
+    for geom, hw, ow in zip(m.geometry, m["highway"], m["oneway"]):
+        d = 0.0 if ow else LANE_OFFSET_M.get(road_group(hw), 0.8)
+        if not d or geom is None or geom.is_empty:
+            out.append(geom)
+            continue
+        try:
+            o = geom.offset_curve(d)
+            if o is not None and not o.is_empty:
+                if o.geom_type == "MultiLineString":
+                    o = max(o.geoms, key=lambda g: g.length)   # keep the longest part -> stay a LineString
+                out.append(o if o.geom_type == "LineString" else geom)
+            else:
+                out.append(geom)
+        except Exception:
+            out.append(geom)
+    m["geometry"] = gpd.GeoSeries(out, index=m.index, crs=m_crs)
+    return m.to_crs("EPSG:4326")
+
+
 def merge_modes(db, modes=("driving", "walking", "cycling")):
     """Return one Layer of distinct edges (by edge_id) with driving/walking/cycling flags."""
     import duckdb
@@ -76,6 +115,7 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
         rec["combo"].append(combo)
         geoms.append(wkt.loads(geom_wkt))
     gdf = gpd.GeoDataFrame(rec, geometry=geoms, crs="EPSG:4326")
+    gdf = _offset_two_way(gdf)   # fan two-way streets into parallel lanes (metre offset; no line-offset in deck.gl)
     return Layer("roads_merged", gdf, "line")
 
 
