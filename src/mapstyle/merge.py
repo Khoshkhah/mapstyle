@@ -476,17 +476,24 @@ function draw(){
   for(const b of [-1, 0, 1]){
     const fc = {type:"FeatureCollection", features:KEEP.filter(f=>band(f)===b)};
     if(!fc.features.length) continue;
+    // grade-specific styling (deck has no line-offset/sort-key; we vary the accessors per band):
+    //  tunnels (b<0): dashed casing + faded fill -> reads as "underground"; bridges (b>0): heavier deck casing.
+    const isTun = b === -1, isBr = b === 1;
+    const casWidth = isBr ? (f=>casW(f)*1.25) : casW;
+    const casDash  = isTun ? (f=>[5,4]) : (f=>[0,0]);
+    const fillColor = isTun ? (f=>{const c=col(f); return [c[0],c[1],c[2],145];}) : col;
     layers.push(
       new deck.GeoJsonLayer({id:"cas"+b, data:fc, stroked:true, filled:false, lineWidthUnits:"pixels",
         lineWidthMinPixels:0.5, visible:S.cmode==="osm",
-        getLineColor:f=>f.properties.cc||[0,0,0,0], getLineWidth:casW,
-        updateTriggers:{getLineWidth:[zt]}}),
+        getLineColor:f=>f.properties.cc||[0,0,0,0], getLineWidth:casWidth,
+        extensions:DASH, dashJustified:true, getDashArray:casDash,
+        updateTriggers:{getLineWidth:[zt,b], getDashArray:[b]}}),
       new deck.GeoJsonLayer({id:"fill"+b, data:fc, stroked:true, filled:false, pickable:true,
         autoHighlight:true, highlightColor:[255,238,0,210], lineWidthUnits:"pixels", lineWidthMinPixels:0.6,
-        getLineColor:col, getLineWidth:fillW,
+        getLineColor:fillColor, getLineWidth:fillW,
         extensions:DASH, dashJustified:true, getDashArray:f=>(S.cmode==="osm"&&f.properties.dash)||[0,0],
         onClick:info=>showInfo(info.object),
-        updateTriggers:{getLineColor:[S.cmode], getLineWidth:[zt], getDashArray:[S.cmode]}}),
+        updateTriggers:{getLineColor:[S.cmode,b], getLineWidth:[zt], getDashArray:[S.cmode]}}),
     );
   }
   const z = map.getZoom();
