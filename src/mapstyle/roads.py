@@ -57,6 +57,23 @@ ROAD_CARTO = _build_carto()
 _FALLBACK = ROAD_CARTO["unclassified"]
 
 
+# Railways share the Shortbread `streets` layer (kind = highway OR railway value) but are NOT
+# highway classes, so they need their own styling. Rail reads as *infrastructure*, not a road:
+# grey, dashed, no coloured fill — approximating openstreetmap-carto. rail gets a dark casing +
+# grey dashed fill (the "crosstie" look); tram/subway are thinner and lighter (subway faded, as
+# it's usually underground).
+RAIL_STYLE = {
+    "rail":         RoadStyle("#707070", 1.6, "#404040", 2.4, dash=(10, 6)),
+    "light_rail":   RoadStyle("#888888", 1.3, None, 0.0, dash=(6, 5)),
+    "tram":         RoadStyle("#777777", 1.0, None, 0.0, dash=(4, 4)),
+    "subway":       RoadStyle("#9a9a9a", 1.0, None, 0.0, dash=(3, 5), opacity=0.65),
+    "narrow_gauge": RoadStyle("#808080", 1.2, "#505050", 1.8, dash=(6, 6)),
+    "funicular":    RoadStyle("#808080", 1.2, None, 0.0, dash=(3, 3)),
+    "monorail":     RoadStyle("#909090", 1.2, None, 0.0, dash=(4, 4)),
+}
+RAIL_KINDS = frozenset(RAIL_STYLE)
+
+
 # OSM draw order: higher = rendered on top (major roads over minor over paths).
 ROAD_Z = {
     "motorway": 9, "trunk": 8, "primary": 7, "secondary": 6, "tertiary": 5,
@@ -64,6 +81,9 @@ ROAD_Z = {
     "living_street": 3, "service": 3, "pedestrian": 2,
     "track": 1, "path": 1, "footway": 1, "cycleway": 1, "bridleway": 1,
     "steps": 1, "corridor": 1, "raceway": 5, "construction": 0,
+    # railways: rail around minor-road level, tram/subway below
+    "rail": 4, "light_rail": 4, "narrow_gauge": 4, "monorail": 3,
+    "tram": 3, "funicular": 3, "subway": 2,
 }
 
 
@@ -106,10 +126,13 @@ def road_group(highway) -> str:
 
 
 def resolve_road(highway, theme="light") -> RoadStyle:
-    """OSM-Carto style for a highway class. `*_link` -> base class, slightly thinner."""
+    """OSM-Carto style for a `streets` kind. Rail kinds (rail/tram/subway/…) get the rail palette;
+    otherwise a highway class, with `*_link` -> base class, slightly thinner."""
     if not highway:
         return _FALLBACK
     h = str(highway).strip().lower()
+    if h in RAIL_KINDS:                       # railway values live in the same streets layer
+        return RAIL_STYLE[h]
     is_link = h.endswith("_link")
     if is_link:
         h = h[:-5]
