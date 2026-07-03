@@ -110,25 +110,49 @@ def _bake_polygon(layer):
     return {"type": "FeatureCollection", "features": feats}
 
 
+# distinct marker colours per point layer (transit blue, POIs orange, place labels dark)
+_POINT_COLOR = {"public_transport": [30, 110, 180, 230], "pois": [200, 120, 40, 220],
+                "place_labels": [60, 60, 60, 235]}
+
+
+def _bake_point(layer):
+    import shapely.geometry as sg
+    col = _POINT_COLOR.get(layer.name, [90, 90, 90, 220])
+    feats = []
+    for geom, nm in zip(layer.gdf.geometry, layer.gdf["name"]):
+        if geom is None or geom.is_empty:
+            continue
+        feats.append({"type": "Feature", "geometry": sg.mapping(geom),
+                      "properties": {"pc": col, "name": nm}})
+    return {"type": "FeatureCollection", "features": feats}
+
+
 def render_web(layers, out_dir, theme="light", basemap="osm", title="mapstyle — Tartu"):
     out = Path(out_dir)
     (out / "data").mkdir(parents=True, exist_ok=True)
 
-    defs, bbox = [], None
+    defs, xs, ys = [], [], []
     for layer in sorted(layers, key=lambda x: x.z):
-        fc = _bake_line(layer, theme) if layer.kind == "line" else _bake_polygon(layer)
+        fc = (_bake_line(layer, theme) if layer.kind == "line"
+              else _bake_point(layer) if layer.kind == "point"
+              else _bake_polygon(layer))
         (out / "data" / f"{layer.name}.geojson").write_text(json.dumps(fc))
         defs.append({"id": layer.name, "kind": layer.kind})
         if not layer.gdf.empty:
-            minx, miny, maxx, maxy = layer.gdf.total_bounds
-            bbox = [minx, miny, maxx, maxy] if bbox is None else [
-                min(bbox[0], minx), min(bbox[1], miny), max(bbox[2], maxx), max(bbox[3], maxy)]
+            rp = layer.gdf.geometry.representative_point()
+            xs.extend(rp.x.tolist()); ys.extend(rp.y.tolist())
 
-    center = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2] if bbox else [0, 0]
+    # Robust view bounds from feature percentiles (NOT total_bounds): a single long way — e.g. a
+    # river that osmium's complete_ways keeps whole — must not balloon the extent off the city.
+    def _pct(vals, p):
+        s = sorted(vals)
+        return s[min(len(s) - 1, max(0, int(p * (len(s) - 1))))]
+    bounds = ([[_pct(xs, 0.01), _pct(ys, 0.01)], [_pct(xs, 0.99), _pct(ys, 0.99)]]
+              if xs else [[-0.1, -0.1], [0.1, 0.1]])
     default_bm = _BM_ALIAS.get(basemap, basemap if basemap in BASEMAPS else "OSM Standard")
     html = (_TEMPLATE
             .replace("__DEFS__", json.dumps(defs))
-            .replace("__CENTER__", json.dumps(center))
+            .replace("__BOUNDS__", json.dumps(bounds))
             .replace("__BASEMAPS__", json.dumps(BASEMAPS))
             .replace("__DEFAULT_BM__", default_bm)
             .replace("__TITLE__", title))
@@ -152,10 +176,10 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
 </style></head><body>
 <div id="map"></div><div id="panel"><b>Base layer</b><select id="basemap"></select><b>Layers</b></div>
 <script>
-const DEFS = __DEFS__, CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
+const DEFS = __DEFS__, BOUNDS = __BOUNDS__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
 const state = {}; DEFS.forEach(d => state[d.id] = true);
 
-const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:13});
+const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], bounds:BOUNDS, fitBoundsOptions:{padding:24}});
 const overlay = new deck.MapboxOverlay({interleaved:false, layers:[]});
 map.addControl(overlay);
 map.addControl(new maplibregl.NavigationControl());
@@ -167,6 +191,12 @@ function layersFor(d){
   if(d.kind === "polygon"){
     return [new deck.GeoJsonLayer({id:d.id, data:url, visible:state[d.id],
       stroked:false, filled:true, getFillColor:f=>f.properties.fc})];
+  }
+  if(d.kind === "point"){
+    return [new deck.GeoJsonLayer({id:d.id, data:url, visible:state[d.id], pointType:"circle",
+      getFillColor:f=>f.properties.pc, pointRadiusUnits:"pixels", getPointRadius:3.5,
+      pointRadiusMinPixels:2.5, stroked:true, getLineColor:[255,255,255,200],
+      lineWidthMinPixels:0.5, pickable:true})];
   }
   return [
     new deck.GeoJsonLayer({id:d.id+"-cas", data:url, visible:state[d.id], stroked:true, filled:false,

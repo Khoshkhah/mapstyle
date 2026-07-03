@@ -29,11 +29,18 @@ LANDUSE_DEFAULT = "#e8e6df"
 
 
 def polygon_style(layer: str, cls):
-    """Return a Leaflet path style dict (fill + outline) for one polygon feature."""
-    if layer == "water":
+    """Return a Leaflet path style dict (fill + outline) for one polygon feature.
+
+    Layer names are the duckOSM/Shortbread ones (``water_polygons``, ``land``, ``sites``,
+    ``buildings``); ``land``/``sites`` fills key off the feature ``cls`` (kind) value.
+    """
+    if layer in ("water", "water_polygons"):
         return {"fillColor": WATER, "color": WATER, "weight": 0, "fillOpacity": 1.0}
     if layer == "buildings":
         return {"fillColor": BUILDING_FILL, "color": BUILDING_OUTLINE,
                 "weight": 0.4, "fillOpacity": 0.9}
+    if layer == "sites":
+        # amenity areas (parking, university, construction, …) — light neutral fill
+        return {"fillColor": "#f0eee9", "color": "#e0ddd4", "weight": 0.3, "fillOpacity": 0.75}
     fill = LANDUSE.get(cls, LANDUSE_DEFAULT)
     return {"fillColor": fill, "color": fill, "weight": 0, "fillOpacity": 0.85}
