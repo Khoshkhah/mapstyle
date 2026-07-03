@@ -344,30 +344,52 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         f'<span style="color:{COMBO_COLOR[k]}">&#9632;</span> {v}<br>' for k, v in
         [("dwc", "all 3"), ("dc", "drive+cycle"), ("dw", "drive+walk"),
          ("wc", "walk+cycle"), ("d", "drive only"), ("c", "cycle only"), ("w", "walk only")])
-    # feature base layers (water/land/buildings/…) — drawn UNDER the roads, each toggleable.
-    from mapstyle.palettes import polygon_style
+    # feature base layers (water/land/buildings/POIs/…) — drawn UNDER the roads, each toggleable.
+    # ALL styling (fills, line colour/width/dash, point colour/size/icon) comes from the stylesheet's
+    # `features:` block — nothing is hard-coded here. Style a layer by naming it in feature_layers
+    # and adding an entry under features.areas / features.lines / features.points in the YAML.
     import shapely.geometry as _sg
+    fcfg = _style.get("features", {})
+    areas_cfg, lines_cfg, points_cfg = fcfg.get("areas", {}), fcfg.get("lines", {}), fcfg.get("points", {})
     feature_defs = []
     for fl in (feature_layers or []):
         fk = "polygon" if fl.kind in ("polygon", "area") else ("point" if fl.kind == "point" else "line")
         classes = fl.gdf["class"] if "class" in fl.gdf else fl.gdf.get("highway", [None] * len(fl.gdf))
         ff = []
+        fdef = {"id": fl.name, "kind": fk}
         if fk == "polygon":
+            spec = areas_cfg.get(fl.name, {})
+            by_class = "fill" not in spec                       # e.g. landcover: {class: colour, default: …}
+            outline = None if by_class else spec.get("outline")
+            opacity = 0.85 if by_class else spec.get("opacity", 0.85)
             for gm, cls in zip(fl.gdf.geometry, classes):
                 if gm is None or gm.is_empty:
                     continue
-                st = polygon_style(fl.name, cls)
+                fill = spec.get(cls, spec.get("default", "#e8e6df")) if by_class else spec.get("fill", "#e8e6df")
                 ff.append({"type": "Feature", "geometry": _sg.mapping(gm),
-                           "properties": {"fc": _rgb(st["fillColor"]) + [int(st["fillOpacity"] * 255)]}})
-        else:
-            col = _rgb(fl.color) if getattr(fl, "color", None) else [120, 120, 120]
+                           "properties": {"fc": _rgb(fill) + [int(opacity * 255)]}})
+            if outline:
+                fdef["oc"] = _rgb(outline)
+        elif fk == "point":
+            spec = points_cfg.get(fl.name, points_cfg.get("default", {"color": "#808080", "size": 3}))
+            pc = _rgb(spec.get("color", "#808080")) + [225]
+            fdef["sz"] = spec.get("size", 3)
+            fdef["ic"] = spec.get("icon")
             for gm in fl.gdf.geometry:
                 if gm is None or gm.is_empty:
                     continue
-                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": {"c": col, "w": 1.4}})
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": {"pc": pc}})
+        else:
+            spec = lines_cfg.get(fl.name, {})
+            col, w, dash = _rgb(spec.get("color", "#888888")), spec.get("width", 1.4), spec.get("dash")
+            for gm in fl.gdf.geometry:
+                if gm is None or gm.is_empty:
+                    continue
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm),
+                           "properties": {"c": col, "w": w, "dash": dash}})
         (out / "data" / f"feat_{fl.name}.geojson").write_text(
             json.dumps({"type": "FeatureCollection", "features": ff}))
-        feature_defs.append({"id": fl.name, "kind": fk})
+        feature_defs.append(fdef)
     feature_rows = "".join(
         f'<label><input type="checkbox" class="featchk" data-id="{d["id"]}" checked> {d["id"]}</label>'
         for d in feature_defs)
@@ -452,10 +474,21 @@ function featureLayers(){                                  // base-map feature l
   for(const d of FEATUREDEFS){
     if(!fstate[d.id] || !FEATDATA[d.id]) continue;
     if(d.kind==="polygon")
-      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:false, filled:true, getFillColor:f=>f.properties.fc}));
-    else
+      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:!!d.oc, filled:true,
+        getFillColor:f=>f.properties.fc, getLineColor:d.oc||[0,0,0,0], lineWidthUnits:"pixels", lineWidthMinPixels:0.3}));
+    else if(d.kind==="point"){
+      if(d.ic)                                    // icon (emoji/char from the config)
+        out.push(new deck.TextLayer({id:"f_"+d.id, data:FEATDATA[d.id], dataTransform:x=>x.features||[],
+          getPosition:f=>f.geometry.coordinates, getText:()=>d.ic, getSize:(d.sz||3)*3.6, sizeUnits:"pixels",
+          getColor:[35,35,35], getTextAnchor:"middle", getAlignmentBaseline:"center"}));
+      else                                        // plain coloured dot
+        out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], pointType:"circle",
+          getFillColor:f=>f.properties.pc, pointRadiusUnits:"pixels", getPointRadius:d.sz||3, pointRadiusMinPixels:2,
+          stroked:true, getLineColor:[255,255,255,180], lineWidthMinPixels:0.4}));
+    } else
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:true, filled:false,
-        lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4}));
+        lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4,
+        extensions:DASH, dashJustified:true, getDashArray:f=>f.properties.dash||[0,0]}));
   }
   return out;
 }

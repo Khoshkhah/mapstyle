@@ -84,3 +84,53 @@ names:
   glyph:       0.64      # average glyph width as a fraction of font size (text-width estimate)
   repeat_px:   300       # minimum on-screen gap between repeats of the same name
   sample_m:    80        # spacing of label candidates along each road (bake density)
+
+# ---- FEATURES ------------------------------------------------------------------------------------
+# Base-map feature-layer styling (everything render_merge draws under the roads via feature_layers).
+# All colours / sizes / icons live HERE, not in code — edit and re-render. Keyed by the layer name
+# passed to load_layer. Area fills may key by feature `class`; `default` catches the rest.
+features:
+  areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
+    water:      {fill: "#aad3df", outline: null,      opacity: 1.0}
+    buildings:  {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9}
+    parking:    {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7}
+    landcover:                       # by OSM class (landuse/natural/leisure), else `default`
+      forest: "#add19e"
+      wood: "#add19e"
+      grass: "#cdebb0"
+      grassland: "#cdebb0"
+      meadow: "#cdebb0"
+      park: "#c8facc"
+      garden: "#cfeda5"
+      residential: "#e0dfdf"
+      commercial: "#f2dad9"
+      retail: "#ffd6d1"
+      industrial: "#ebdbe8"
+      railway: "#ebdbe8"
+      farmland: "#eef0d5"
+      farmyard: "#f5dcba"
+      orchard: "#aedfa3"
+      vineyard: "#aedfa3"
+      allotments: "#c9e1bf"
+      cemetery: "#aacbaf"
+      scrub: "#c8d7ab"
+      heath: "#d6d99f"
+      wetland: "#add19e"
+      sand: "#f5e9c6"
+      quarry: "#c5c3c3"
+      brownfield: "#b6b592"
+      recreation_ground: "#dffce2"
+      pitch: "#aae0cb"
+      nature_reserve: "#d5e8d1"
+      golf_course: "#b5e3b5"
+      default: "#e8e6df"
+  lines:                             # line colour + width (px) + optional [on,off] dash
+    waterways:  {color: "#4a90d9", width: 1.6}
+    railways:   {color: "#707070", width: 1.4, dash: [6, 4]}
+  points:                            # point colour + size (px radius) + optional icon (emoji drawn instead of a dot)
+    pois:            {color: "#c87828", size: 3}
+    bus_stops:       {color: "#1e6eb4", size: 5, icon: "🚌"}
+    traffic_signals: {color: "#d64545", size: 5, icon: "🚦"}
+    crossings:       {color: "#5a5a5a", size: 4, icon: "🚸"}
+    parking:         {color: "#4169e1", size: 5, icon: "🅿"}
+    default:         {color: "#808080", size: 3}
