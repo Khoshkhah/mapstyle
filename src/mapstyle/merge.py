@@ -253,8 +253,12 @@ def _load_boundary(src):
 
 
 def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes", overlays=(),
-                 boundary=None):
+                 boundary=None, feature_layers=None):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
+
+    feature_layers: optional list of mapstyle ``Layer`` (water/land/buildings/…) drawn UNDER the
+    roads as separate, toggleable base-map layers — so the same viewer keeps the per-zoom road
+    widths + names + arrows AND shows the filterable feature layers.
 
     overlays: which label overlays start ON (also toggleable in the viewer). Any of
     ``"arrows"`` (oneway direction arrows, shown at zoom >=16) and ``"names"`` (street-name
@@ -340,8 +344,38 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         f'<span style="color:{COMBO_COLOR[k]}">&#9632;</span> {v}<br>' for k, v in
         [("dwc", "all 3"), ("dc", "drive+cycle"), ("dw", "drive+walk"),
          ("wc", "walk+cycle"), ("d", "drive only"), ("c", "cycle only"), ("w", "walk only")])
+    # feature base layers (water/land/buildings/…) — drawn UNDER the roads, each toggleable.
+    from mapstyle.palettes import polygon_style
+    import shapely.geometry as _sg
+    feature_defs = []
+    for fl in (feature_layers or []):
+        fk = "polygon" if fl.kind in ("polygon", "area") else ("point" if fl.kind == "point" else "line")
+        classes = fl.gdf["class"] if "class" in fl.gdf else fl.gdf.get("highway", [None] * len(fl.gdf))
+        ff = []
+        if fk == "polygon":
+            for gm, cls in zip(fl.gdf.geometry, classes):
+                if gm is None or gm.is_empty:
+                    continue
+                st = polygon_style(fl.name, cls)
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm),
+                           "properties": {"fc": _rgb(st["fillColor"]) + [int(st["fillOpacity"] * 255)]}})
+        else:
+            col = _rgb(fl.color) if getattr(fl, "color", None) else [120, 120, 120]
+            for gm in fl.gdf.geometry:
+                if gm is None or gm.is_empty:
+                    continue
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": {"c": col, "w": 1.4}})
+        (out / "data" / f"feat_{fl.name}.geojson").write_text(
+            json.dumps({"type": "FeatureCollection", "features": ff}))
+        feature_defs.append({"id": fl.name, "kind": fk})
+    feature_rows = "".join(
+        f'<label><input type="checkbox" class="featchk" data-id="{d["id"]}" checked> {d["id"]}</label>'
+        for d in feature_defs)
+
     rstyle = _style["roads"]
     html = (_TEMPLATE
+            .replace("__FEATUREDEFS__", json.dumps(feature_defs))
+            .replace("__FEATUREROWS__", feature_rows)
             .replace("__WIDTH__", json.dumps(rstyle["width"]))
             .replace("__HIRATE__", json.dumps(rstyle["hi_rate"]))
             .replace("__CASING__", json.dumps(rstyle["casing_ratio"]))
@@ -403,6 +437,7 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   <b>Overlays</b>
   <label><input type="checkbox" id="arrows" __ARROWSCHK__> oneway arrows (z≥__ARROWMINZ__)</label>
   <label><input type="checkbox" id="names" __NAMESCHK__> street names (by class)</label>
+  <b>Features</b>__FEATUREROWS__
   __BOUNDROW__
   <b>Legend (modes)</b><div id="legend">__LEGEND__</div>
 </div>
@@ -411,6 +446,19 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
 const CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
 const S = {md:true, mw:true, mc:true, cmode:"osm", arrows:__ARROWS__, names:__NAMES__, boundary:__HASBOUND__};
 let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
+const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
+function featureLayers(){                                  // base-map feature layers, UNDER the roads
+  const out=[];
+  for(const d of FEATUREDEFS){
+    if(!fstate[d.id] || !FEATDATA[d.id]) continue;
+    if(d.kind==="polygon")
+      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:false, filled:true, getFillColor:f=>f.properties.fc}));
+    else
+      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:true, filled:false,
+        lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4}));
+  }
+  return out;
+}
 
 const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:13});
 const overlay = new deck.MapboxOverlay({interleaved:false, layers:[]});
@@ -473,6 +521,7 @@ function draw(){
   const col = S.cmode==="modes" ? (f=>f.properties.cb) : (f=>f.properties.c);
   const zt = Math.round(map.getZoom()*5)/5;     // re-evaluate widths per 0.2 zoom step
   const layers = [];
+  layers.push(...featureLayers());              // base-map feature layers first (drawn underneath)
   for(const b of [-1, 0, 1]){
     const fc = {type:"FeatureCollection", features:KEEP.filter(f=>band(f)===b)};
     if(!fc.features.length) continue;
@@ -594,6 +643,7 @@ sel.onchange = e => { map.setStyle(BASEMAPS[e.target.value]); map.once("idle", d
 ["md","mw","mc"].forEach(id => document.getElementById(id).onchange = e => { S[id]=e.target.checked; refilter(); });
 document.querySelectorAll('input[name=cmode]').forEach(r => r.onchange = e => { S.cmode=e.target.value; draw(); });
 ["arrows","names","boundary"].forEach(id => { const el=document.getElementById(id); if(el) el.onchange = e => { S[id]=e.target.checked; draw(); }; });
+document.querySelectorAll('.featchk').forEach(cb => cb.onchange = e => { fstate[e.target.dataset.id]=e.target.checked; draw(); });
 const zoomBox = document.getElementById("zoom");
 function showZoom(){ zoomBox.textContent = "zoom " + map.getZoom().toFixed(2); }
 map.on("move", showZoom); map.on("load", showZoom);
@@ -603,8 +653,10 @@ Promise.all([
   fetch("data/roads_merged.geojson").then(r=>r.json()),
   fetch("data/labels.geojson").then(r=>r.json()),
   fetch("data/arrows.geojson").then(r=>r.json()),
-  fetch("data/boundary.geojson").then(r=>r.ok?r.json():{features:[]}).catch(()=>({features:[]}))
-]).then(([roads, labels, arrows, boundary]) => {
+  fetch("data/boundary.geojson").then(r=>r.ok?r.json():{features:[]}).catch(()=>({features:[]})),
+  ...FEATUREDEFS.map(d=>fetch("data/feat_"+d.id+".geojson").then(r=>r.json()).then(j=>{FEATDATA[d.id]=j; return 0;}))
+]).then((res) => {
+  const [roads, labels, arrows, boundary] = res;
   FEATURES = roads.features; LABELS = labels.features; ARROWS = arrows.features; BOUNDARY = boundary.features||[];
   const go=()=>refilter(); if(map.loaded()) go(); else map.on("load", go);
 });
