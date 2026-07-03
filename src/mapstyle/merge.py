@@ -79,9 +79,10 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
 
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
+    # Per-mode overlays read the duckOSM routing edges directly (highway -> class, geometry -> geom).
     union = " UNION ALL ".join(
-        f"SELECT edge_id, class, geom, name, length_m, layer, bridge, tunnel, service, oneway, '{m}' AS mode "
-        f"FROM basemap.roads_{m}" for m in modes)
+        f"SELECT edge_id, highway AS class, geometry AS geom, name, length_m, layer, bridge, tunnel, service, oneway, '{m}' AS mode "
+        f"FROM {m}.edges" for m in modes)
     rows = con.execute(f"""
         SELECT edge_id,
                any_value(class)             AS class,

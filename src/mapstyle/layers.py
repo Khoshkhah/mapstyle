@@ -3,11 +3,12 @@
 from dataclasses import dataclass
 from typing import Any
 
-# default bottom -> top draw order by layer name
+# default bottom -> top draw order by layer name (duckOSM features.* / Shortbread names).
+# streets merges roads + rail (Shortbread); per-mode routing overlays keep their own ids.
 Z_ORDER = {
-    "landcover": 10, "water": 20, "waterways": 25, "buildings": 30,
-    "roads": 50, "roads_driving": 50, "roads_walking": 51, "roads_cycling": 52,
-    "railways": 60, "places": 90, "pois": 91,
+    "land": 10, "water_polygons": 20, "water_lines": 25, "sites": 28, "buildings": 30,
+    "streets": 50, "roads_driving": 50, "roads_walking": 51, "roads_cycling": 52,
+    "place_labels": 90, "pois": 91, "public_transport": 92,
 }
 
 

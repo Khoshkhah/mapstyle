@@ -8,19 +8,22 @@ lines + place/POI points), composed onto one interactive map.
 backends). `mapstyle` **reuses that styler** for the road layers and adds **polygon** (fill +
 outline) and **point** (marker) stylers, plus **multi-layer composition** (`render_basemap`).
 
-It pairs with [`duckOSM`](../duckOSM) / [`duckmap`](../duckmap): duckmap produces the
-`basemap.*` data layers; mapstyle renders them.
+It reads a [`duckOSM`](../duckOSM) `.duckdb` directly: duckOSM extracts the OSM base map into a
+`features.*` schema (Shortbread vector-tile layers — `streets`, `water_polygons`, `land`,
+`buildings`, `pois`, …) alongside the routing graphs, and mapstyle renders those. No separate
+build step — point it at the same db (`options.build_features` on the duckOSM side).
 
 ```python
 from mapstyle import load_layer, render_basemap
 
-driving = load_layer("../duckmap/data/db/tartu_basemap.duckdb", "roads_driving", "line")
-render_basemap([driving], theme="light").save("driving.html")
+DB = "../duckOSM/data/db/tartu.duckdb"       # a duckOSM db built with options.build_features
 
-# build up layer by layer
-water     = load_layer(DB, "water", "polygon")
-landcover = load_layer(DB, "landcover", "polygon")
-render_basemap([landcover, water, driving], theme="light").save("tartu.html")
+# build up layer by layer (Shortbread layer names, bottom -> top)
+land      = load_layer(DB, "land", "polygon")
+water     = load_layer(DB, "water_polygons", "polygon")
+buildings = load_layer(DB, "buildings", "polygon")
+streets   = load_layer(DB, "streets", "line")          # roads + rail merged (Shortbread)
+render_basemap([land, water, buildings, streets], theme="light").save("tartu.html")
 ```
 
 ## Merged multi-modal viewer (names, oneway arrows, boundary)
@@ -32,7 +35,7 @@ The main output: merge the three mode networks into one OSM-styled, interactive 
 ```python
 from mapstyle import merge_modes, render_merge
 
-DB = "../duckmap/data/db/tartu_basemap.duckdb"        # a duckmap basemap db
+DB = "../duckOSM/data/db/tartu.duckdb"                 # a duckOSM db (reads <mode>.edges directly)
 merged = merge_modes(DB)                               # 1 edge set, with mode flags
 
 # choose what starts ON: "names", "arrows", both, or none

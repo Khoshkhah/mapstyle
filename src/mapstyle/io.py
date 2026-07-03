@@ -1,15 +1,16 @@
-"""Load duckmap basemap.* layers into GeoDataFrames (the input mapstyle styles)."""
+"""Load duckOSM features.* layers into GeoDataFrames (the input mapstyle styles)."""
 
 from mapstyle.layers import Layer
 
 
 def load_layer(db: str, table: str, kind: str = "line", name: str | None = None,
                simplify: float | None = 2e-5) -> Layer:
-    """Read basemap.<table> from a duckmap .duckdb into a styled Layer.
+    """Read features.<table> from a duckOSM .duckdb into a styled Layer.
 
-    Roads get a `highway` column (= the layer's `class`) so roadstyle can style them.
+    Reads the Shortbread ``kind`` column and exposes it as roadstyle's ``highway`` (plus a
+    ``class`` alias) so the line styler and the polygon/point palettes work unchanged.
     ``simplify`` (degrees; ~2e-5 ≈ 2 m) thins vertices for a much lighter render — set None
-    to keep full precision. duckmap is a no-merge build (every OSM node), so this helps a lot.
+    to keep full precision.
     """
     import duckdb
     import geopandas as gpd
@@ -18,8 +19,8 @@ def load_layer(db: str, table: str, kind: str = "line", name: str | None = None,
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
     rows = con.execute(f"""
-        SELECT class, name, ST_AsText(geom) AS w
-        FROM basemap.{table} WHERE geom IS NOT NULL
+        SELECT kind, name, ST_AsText(geom) AS w
+        FROM features.{table} WHERE geom IS NOT NULL
     """).fetchall()
     con.close()
 
