@@ -22,7 +22,7 @@ from mapstyle import merge_modes, render_merge
 from mapstyle.layers import Layer
 
 DB = sys.argv[1] if len(sys.argv) > 1 else "../duckOSM/data/db/tartu.duckdb"
-OUT = sys.argv[2] if len(sys.argv) > 2 else "render/tartu"
+OUT = sys.argv[2] if len(sys.argv) > 2 else "render/debug_visualization"
 
 RAIL = "('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')"
 

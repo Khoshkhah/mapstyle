@@ -7,7 +7,7 @@ mapstyle turns loaded OSM layers into interactive maps. There are **3 render ent
 
 | Function | File | Output | Status |
 |---|---|---|---|
-| **`render_merge`** | `merge.py` | The merged multi-modal viewer — MapLibre GL + deck.gl. Per-zoom road widths, casing, street names, oneway arrows, driving/walking/cycling filters, **base-map feature layers** (`feature_layers=`), and **SVG category icons**. | **Main viewer — use this.** |
+| **`render_merge`** | `merge.py` | The **"Debug Visualization"** — a MapLibre GL + deck.gl inspection viewer (mode filters, zoom readout, click-to-inspect edge_id/lanes/width, colour-by-mode). Per-zoom road widths, casing, street names, oneway arrows, **base-map feature layers** (`feature_layers=`), **SVG category icons**. | **Dev/debug viewer in use — NOT a product render.** |
 | **`render_web`** | `render_web.py` | Self-contained MapLibre + deck.gl viewer with per-layer toggles. Simpler; road styling is fixed-width (no per-zoom curve). | Fallback / simpler web export. |
 | **`render_basemap`** | `render.py` | Composes loaded `Layer`s onto one map, dispatching to a backend (`folium` or `lonboard`). | Older per-layer compositor. |
 
@@ -22,12 +22,15 @@ mapstyle turns loaded OSM layers into interactive maps. There are **3 render ent
 > names/arrows" renderer. It's gone — `render_merge` + `feature_layers` now does everything it did,
 > reusing render_merge's proven name/arrow placement instead of a from-scratch copy.
 
-## `render_merge` — the one to use
+## `render_merge` — the Debug Visualization
 
-It started as the merged road viewer and now renders a complete, filterable map:
+A **development / inspection** viewer (titled "Debug Visualization" in the side panel), **not a
+product render**. It renders a complete, filterable map with debug affordances (mode checkboxes, live
+zoom readout, click a road to see its edge_id / lanes / physical width):
 
-- **Roads** — per-zoom widths + casing from `styles/osm_carto.yaml` (`roads.width` / `hi_rate` /
-  `casing_ratio`), coloured by OSM class or mode combination, with link/bridge/tunnel z-order.
+- **Roads** — physical, config-fixed widths (`styles/osm_carto.yaml` → `roads.width_model`, see
+  [width-model.md](width-model.md)) + casing, coloured by OSM class or mode combination, with
+  link/bridge/tunnel z-order.
 - **Overlays** — street-name labels (fitted per road, collision-placed) and oneway arrows (z≥16).
 - **Feature layers** (`feature_layers=[...]`) — water / land / buildings / rail drawn *under* the
   roads, and **point categories** (parking, traffic signals, bus / bicycle / train stations,

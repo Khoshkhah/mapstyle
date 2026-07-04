@@ -292,7 +292,7 @@ def _load_boundary(src):
     return {"type": "FeatureCollection", "features": feats} if feats else None
 
 
-def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes", overlays=(),
+def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", overlays=(),
                  boundary=None, feature_layers=None, zoom=13, center=None):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
 
@@ -526,6 +526,7 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
 <div id="map"></div>
 <div id="zoom">zoom —</div>
 <div id="panel">
+  <b style="font-size:15px;border-bottom:1px solid #ddd;padding-bottom:5px;margin:0 0 8px">Debug Visualization</b>
   <b>Base layer</b><select id="basemap"></select>
   <b>Color by</b>
   <label><input type="radio" name="cmode" value="osm" checked> OSM class</label>
