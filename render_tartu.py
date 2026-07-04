@@ -43,7 +43,9 @@ def load(table, name, kind, where=None, centroid=False, bearing=False):
         d["bearing"] = [r[1] for r in rows]
     gdf = gpd.GeoDataFrame(d, geometry=[wkt.loads(r[-1]) for r in rows], crs="EPSG:4326")
     if len(gdf) and kind != "point":
-        gdf["geometry"] = gdf.geometry.simplify(2e-5, preserve_topology=False)
+        # preserve_topology=True: simplify vertices but NEVER collapse a small polygon to empty
+        # (preserve_topology=False was dropping ~170 tiny landcover/garden patches from the map).
+        gdf["geometry"] = gdf.geometry.simplify(2e-5, preserve_topology=True)
     return Layer(name, gdf, kind)
 
 
