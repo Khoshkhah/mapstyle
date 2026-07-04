@@ -190,6 +190,32 @@ features:
       greenfield: "#f1eee8"          # undeveloped land (very light)
       beach: "#fff1ba"               # natural=beach (sandy)
       default: "#e8e6df"
+  # OSM-Carto landcover TEXTURES (deck.gl FillStyleExtension) — class -> pattern tile (patterns.py:
+  # trees/graves/waves/dots/sand/hatch/rows). Drawn as DARKER symbols over the solid fill, like OSM
+  # (forest = green + tree dots, cemetery = graves, wetland = waves). Omit a class for no pattern.
+  landcover_pattern:
+    forest: trees
+    wood: trees
+    orchard: rows
+    vineyard: rows
+    cemetery: graves
+    wetland: waves
+    scrub: dots
+    heath: dots
+    beach: sand
+    sand: sand
+    quarry: hatch
+    brownfield: hatch
+  # OSM-Carto landcover BORDERS — class -> outline colour (leisure/amenity areas that have an edge).
+  landcover_outline:
+    park: "#a9c9a9"
+    garden: "#a9c9a9"
+    pitch: "#8bad8b"
+    playground: "#a9c9a9"
+    allotments: "#a9c9a9"
+    recreation_ground: "#a9c9a9"
+    cemetery: "#aacbaf"
+    nature_reserve: "#77a075"
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:    {color: "#4a90d9", width: 1.6}
     railways:     {color: "#707070", width: 1.4, dash: [6, 4]}

@@ -176,6 +176,11 @@ def _rgb(h):
     return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
 
 
+def _darker(rgb, f=0.6):
+    """A darker shade of an [r,g,b] colour — used for landcover pattern symbols over the fill."""
+    return [int(c * f) for c in rgb]
+
+
 def _layer_int(v):
     """OSM `layer` tag (string, e.g. '1', '-1') -> int; default 0."""
     try:
@@ -415,14 +420,23 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             outline = None if by_class else spec.get("outline")
             opacity = 0.85 if by_class else spec.get("opacity", 0.85)
             fdef["mz"] = spec.get("min_zoom", 0)                 # hide this area layer below this zoom
+            pat_map = fcfg.get(f"{fl.name}_pattern") or {}       # per-class OSM texture (patterns.py tile)
+            out_map = fcfg.get(f"{fl.name}_outline") or {}       # per-class OSM border colour
             for gm, cls in zip(fl.gdf.geometry, classes):
                 if gm is None or gm.is_empty:
                     continue
                 fill = spec.get(cls, spec.get("default", "#e8e6df")) if by_class else spec.get("fill", "#e8e6df")
-                ff.append({"type": "Feature", "geometry": _sg.mapping(gm),
-                           "properties": {"fc": _rgb(fill) + [int(opacity * 255)]}})
+                props = {"fc": _rgb(fill) + [int(opacity * 255)]}
+                if cls in out_map:                               # OSM border on this class
+                    props["oc"] = _rgb(out_map[cls]) + [235]
+                if cls in pat_map:                               # OSM texture: darker symbols over the fill
+                    props["pat"] = pat_map[cls]
+                    props["pc"] = _darker(_rgb(fill)) + [210]
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": props})
             if outline:
-                fdef["oc"] = _rgb(outline)
+                fdef["oc"] = _rgb(outline)                       # layer-wide outline (non-by_class layers)
+            if pat_map:
+                fdef["pat"] = True                               # has textures -> viewer adds a pattern overlay
         elif fk == "point":
             spec = points_cfg.get(fl.name, points_cfg.get("default", {"color": "#808080", "size": 3}))
             pc = _rgb(spec.get("color", "#808080")) + [225]
@@ -464,8 +478,18 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
                 shutil.copy(svg, out / "data" / "icons" / d["ic"])
     icfg = fcfg.get("icon", {})            # icon size-by-zoom curve (interpolated like roads.width)
 
+    # landcover TEXTURE atlas (only if some polygon layer configured patterns) — served as data/pattern_atlas.png
+    pat_atlas_url, pat_map_json = "", "{}"
+    if any(d.get("pat") for d in feature_defs):
+        from mapstyle.patterns import build_pattern_atlas
+        png, pmap = build_pattern_atlas()
+        (out / "data" / "pattern_atlas.png").write_bytes(png)
+        pat_atlas_url, pat_map_json = "data/pattern_atlas.png", json.dumps(pmap)
+
     rstyle = _style["roads"]
     html = (_TEMPLATE
+            .replace("__PATTERNATLAS__", pat_atlas_url)
+            .replace("__PATTERNMAP__", pat_map_json)
             .replace("__FEATUREDEFS__", json.dumps(feature_defs))
             .replace("__FEATUREROWS__", feature_rows)
             .replace("__CASING__", json.dumps(rstyle["casing_ratio"]))
@@ -549,15 +573,27 @@ const S = {md:true, mw:true, mc:true, cmode:"osm", arrows:__ARROWS__, names:__NA
 let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
 const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
 const ICONSIZE = __ICONSIZE__, ICONHI = __ICONHI__, ICONOP = __ICONOP__;   // icon px-size by zoom (interp like roads.width)
+const PATTERN_ATLAS = "__PATTERNATLAS__", PATTERN_MAP = __PATTERNMAP__;    // landcover texture atlas (patterns.py) + name->box
 function featureLayers(which){                             // "bg"=polygons/lines (under roads), "fg"=points/icons (on top)
   const out=[];
   for(const d of FEATUREDEFS){
     if(!fstate[d.id] || !FEATDATA[d.id]) continue;
     const isPt = d.kind==="point";
     if((which==="bg") === isPt) continue;                 // bg skips points; fg keeps only points
-    if(d.kind==="polygon")
-      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible: map.getZoom() >= (d.mz||0), stroked:!!d.oc, filled:true,
-        getFillColor:f=>f.properties.fc, getLineColor:d.oc||[0,0,0,0], lineWidthUnits:"pixels", lineWidthMinPixels:0.3}));
+    if(d.kind==="polygon"){
+      const vis = map.getZoom() >= (d.mz||0);
+      // solid fill + per-feature OSM border (f.properties.oc); layer-wide d.oc for non-by-class layers
+      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, stroked:true, filled:true,
+        getFillColor:f=>f.properties.fc, getLineColor:f=>f.properties.oc || d.oc || [0,0,0,0],
+        lineWidthUnits:"pixels", getLineWidth:0.8, lineWidthMinPixels:0.4}));
+      // OSM texture overlay: darker symbols (f.properties.pc) masked by the atlas pattern, over the fill
+      if(d.pat && deck.FillStyleExtension)
+        out.push(new deck.GeoJsonLayer({id:"fp_"+d.id, data:FEATDATA[d.id], visible:vis, stroked:false, filled:true,
+          getFillColor:f=>f.properties.pc || [0,0,0,0],
+          extensions:[new deck.FillStyleExtension({pattern:true})],
+          fillPatternAtlas:PATTERN_ATLAS, fillPatternMapping:PATTERN_MAP, fillPatternEnabled:true,
+          getFillPattern:f=>f.properties.pat || "trees", getFillPatternScale:0.5, getFillPatternOffset:[0,0]}));
+    }
     else if(d.kind==="point"){
       const vis = map.getZoom() >= (d.mz||14);    // categories appear only when zoomed in (declutter)
       if(d.ic)                                     // SVG icon (mask -> tinted by the config colour); px-size by zoom
