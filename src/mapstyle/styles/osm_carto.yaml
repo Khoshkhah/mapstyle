@@ -40,6 +40,22 @@ roads:
     pedestrian: 1.21
     path: 1.0
 
+  # classes hidden below this zoom (declutter minor roads / paths when zoomed out); absent = always shown
+  min_zoom:
+    living_street: 15
+    service:       15
+    pedestrian:    15
+    footway:       15
+    path:          15
+    steps:         15
+    cycleway:      15
+    bridleway:     15
+    track:         15
+    construction:  15
+    corridor:      15
+    raceway:       15
+    busway:        15
+
   # road colours (openstreetmap-carto), by highway class.
   #   fill   = the road colour
   #   casing = the road EDGE (outline) colour — null for path-like classes (drawn dashed, no edge)
@@ -85,6 +101,7 @@ names:
   repeat_px:   300       # minimum on-screen gap between repeats of the same name
   sample_m:    80        # spacing of label candidates along each road (bake density)
   # color:     "#8a8a8a" # label colour; when unset it follows the oneway arrows' colour (arrows.color)
+  halo:        0         # white halo/shadow width (px) behind each name; 0 = no shadow
 
 # ---- FEATURES ------------------------------------------------------------------------------------
 # Base-map feature-layer styling (everything render_merge draws under the roads via feature_layers).
@@ -93,9 +110,9 @@ names:
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
-    buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9}
-    parking:     {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7}
-    bus_station: {fill: "#d6e4f0", outline: "#9db8d2", opacity: 0.85}  # bus terminal footprint (light blue, matches the bus icon)
+    buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9,  min_zoom: 15}
+    parking:     {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7,  min_zoom: 15}
+    bus_station: {fill: "#d6e4f0", outline: "#9db8d2", opacity: 0.85, min_zoom: 15}  # bus terminal footprint (light blue, matches the bus icon)
     platform:    {fill: "#bbbbbb", outline: "#969696", opacity: 0.9}   # transit platform (osm-carto grey)
     landcover:                       # by OSM class (landuse/natural/leisure), else `default`
       forest: "#add19e"
@@ -128,14 +145,14 @@ features:
       golf_course: "#b5e3b5"
       default: "#e8e6df"
   lines:                             # line colour + width (px) + optional [on,off] dash
-    waterways:  {color: "#4a90d9", width: 1.6}
-    railways:   {color: "#707070", width: 1.4, dash: [6, 4]}
+    waterways:    {color: "#4a90d9", width: 1.6}
+    railways:     {color: "#707070", width: 1.4, dash: [6, 4]}
   points:                            # per-category: colour (tints the SVG), size (MULTIPLIER on the icon curve), icon (SVG file in mapstyle/icons/), min_zoom
     train_stations:  {color: "#8b008b", size: 1.4,  icon: "train.svg", min_zoom: 12}
-    parking_p:       {color: "#2b6cb0", size: 1.0,  icon: "parking.svg", min_zoom: 15}  # "P" sign at the parking polygon's centroid (the polygon itself is styled under features.areas.parking)
-    bus_stations:    {color: "#1e6eb4", size: 1.0,  icon: "bus.svg", min_zoom: 14}
-    bicycle:         {color: "#2e8b57", size: 0.9,  icon: "bicycle.svg", min_zoom: 15}
-    traffic_signals: {color: "#d64545", size: 0.9,  icon: "traffic_light.svg", min_zoom: 15}
+    parking_p:       {color: "#2b6cb0", size: 1.0,  icon: "parking_p.svg", min_zoom: 16}  # bare blue "P" letter (no box) at the parking polygon's centroid (the polygon itself is styled under features.areas.parking)
+    bus_stations:    {color: "#1e6eb4", size: 1.0,  icon: "bus.svg", min_zoom: 16}
+    bicycle:         {color: "#2e8b57", size: 0.9,  icon: "bicycle.svg", min_zoom: 16}
+    traffic_signals: {color: "#d64545", size: 0.9,  icon: "traffic_light.svg", min_zoom: 16}
     crossings:       {color: "#5a5a5a", size: 0.85, icon: "crossing.svg", min_zoom: 16}
     default:         {color: "#808080", size: 1.0,  min_zoom: 14}
   icon:                              # icon pixel size BY ZOOM — interpolated like roads.width; a category's `size` scales it

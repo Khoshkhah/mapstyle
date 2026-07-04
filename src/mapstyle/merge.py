@@ -283,6 +283,7 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     a_sample = astyle.get("sample_m", _ARROW_STEP_M)   # along-road bake step (metres)
     nstyle = _style.get("names", {})
     n_sample = nstyle.get("sample_m", 80)              # label-candidate spacing along each road
+    rmz = {str(k).strip().lower(): v for k, v in ((_style.get("roads") or {}).get("min_zoom") or {}).items()}
 
     out = Path(out_dir); (out / "data").mkdir(parents=True, exist_ok=True)
     feats = []
@@ -290,10 +291,11 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     _SVC_MINOR = ("driveway", "parking_aisle", "drive-through", "drive_through")
     label_feats = []   # name-label candidates: one per named piece (the viewer fits + places them)
     arrow_feats = []   # oneway arrow markers, sampled along the lines (OSM-style)
-    for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, combo, d, w, c in zip(
+    con_flags = gdf["is_construction"] if "is_construction" in gdf else [False] * len(gdf)
+    for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, combo, d, w, c, iscon in zip(
             gdf.geometry, gdf.edge_id, gdf.highway, gdf.name, gdf.length_m,
             gdf.layer, gdf.bridge, gdf.tunnel, gdf.service, gdf.oneway, gdf.combo,
-            gdf.driving, gdf.walking, gdf.cycling):
+            gdf.driving, gdf.walking, gdf.cycling, con_flags):
         if geom is None or geom.is_empty:
             continue
         s = resolve_road(hw)
@@ -301,6 +303,9 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         is_bridge = bool(brg) and str(brg).strip().lower() not in ("", "no")
         is_tunnel = bool(tun) and str(tun).strip().lower() not in ("", "no")
         casing = "#34343a" if is_bridge else s.casing   # bridges get a dark casing (OSM)
+        fill, dash = s.fill, s.dash
+        if iscon:                                        # highway=construction: grey road, but keep
+            fill, casing, dash = "#bdbdbd", "#8f8f8f", None   # its FUTURE class's width/shape (hw)
         g = road_group(hw)
         if g == "service" and str(svc).strip().lower() in _SVC_MINOR:
             g = "service_minor"                          # driveways/parking aisles -> narrower
@@ -315,10 +320,10 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
                 arrow_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": pos},
                                     "properties": {"ang": ang, "seq": seq, "g": g}})
         feats.append({"type": "Feature", "geometry": sg.mapping(geom), "properties": {
-            "c": _rgb(s.fill),
+            "c": _rgb(fill),
             "cc": _rgb(casing) if casing else None,
-            "dash": list(s.dash) if s.dash else None,
-            "cb": _rgb(COMBO_COLOR.get(combo, "#999999")),
+            "dash": list(dash) if dash else None,
+            "cb": _rgb("#bdbdbd") if iscon else _rgb(COMBO_COLOR.get(combo, "#999999")),
             "md": bool(d), "mw": bool(w), "mc": bool(c),
             "eid": str(eid), "hw": hw, "nm": nm,
             "len": round(length_m) if length_m else None,
@@ -326,6 +331,7 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             "z": road_z(hw) + 10 * layer, "g": g,
             "lk": bool(hw) and str(hw).strip().lower().endswith("_link"),
             "br": is_bridge, "tn": is_tunnel, "lv": layer, "ow": bool(ow),
+            "mz": rmz.get(str(hw).strip().lower(), 0),   # class hidden below this zoom (roads.min_zoom)
         }})
     # OSM draw order: low rank first (back) -> major roads last (front)
     feats.sort(key=lambda f: f["properties"]["z"])
@@ -371,6 +377,7 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             by_class = "fill" not in spec                       # e.g. landcover: {class: colour, default: …}
             outline = None if by_class else spec.get("outline")
             opacity = 0.85 if by_class else spec.get("opacity", 0.85)
+            fdef["mz"] = spec.get("min_zoom", 0)                 # hide this area layer below this zoom
             for gm, cls in zip(fl.gdf.geometry, classes):
                 if gm is None or gm.is_empty:
                     continue
@@ -439,6 +446,7 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             # street-name label colour: default to the arrow colour (names read as the same subtle
             # grey as the oneway arrows), overridable via names.color.
             .replace("__NAMECOLOR__", str(_rgb(nstyle.get("color", astyle.get("color", "#8a8a8a")))))
+            .replace("__NAMEHALO__", str(nstyle.get("halo", 0)))   # white text halo width (px); 0 = none
             .replace("__ARROWS__", "true" if "arrows" in overlays else "false")
             .replace("__NAMES__", "true" if "names" in overlays else "false")
             .replace("__ARROWSCHK__", "checked" if "arrows" in overlays else "")
@@ -510,7 +518,7 @@ function featureLayers(which){                             // "bg"=polygons/line
     const isPt = d.kind==="point";
     if((which==="bg") === isPt) continue;                 // bg skips points; fg keeps only points
     if(d.kind==="polygon")
-      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:!!d.oc, filled:true,
+      out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible: map.getZoom() >= (d.mz||0), stroked:!!d.oc, filled:true,
         getFillColor:f=>f.properties.fc, getLineColor:d.oc||[0,0,0,0], lineWidthUnits:"pixels", lineWidthMinPixels:0.3}));
     else if(d.kind==="point"){
       const vis = map.getZoom() >= (d.mz||14);    // categories appear only when zoomed in (declutter)
@@ -597,7 +605,7 @@ function draw(){
   const layers = [];
   layers.push(...featureLayers("bg"));          // area/line feature layers first (drawn underneath the roads)
   for(const b of [-1, 0, 1]){
-    const fc = {type:"FeatureCollection", features:KEEP.filter(f=>band(f)===b)};
+    const fc = {type:"FeatureCollection", features:KEEP.filter(f=>band(f)===b && map.getZoom() >= (f.properties.mz||0))};
     if(!fc.features.length) continue;
     // grade-specific styling (deck has no line-offset/sort-key; we vary the accessors per band):
     //  tunnels (b<0): dashed casing + faded fill -> reads as "underground"; bridges (b>0): heavier deck casing.
@@ -695,7 +703,7 @@ function draw(){
     layers.push(new deck.TextLayer({id:"names", data: nameFit, characterSet:"auto",
       getPosition: f => f.geometry.coordinates, getText: f => f.properties.nm, getAngle: f => f.properties.na,
       sizeUnits:"pixels", getSize: f => f.__fs, getColor:__NAMECOLOR__, billboard:true,
-      fontSettings:{sdf:true}, outlineWidth: 3, outlineColor:[255,255,255],
+      fontSettings:{sdf:true}, outlineWidth: __NAMEHALO__, outlineColor:[255,255,255],
       getTextAnchor:"middle", getAlignmentBaseline:"center",
       updateTriggers:{getSize:[zt]}}));
   }

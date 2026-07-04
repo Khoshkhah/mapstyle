@@ -15,6 +15,7 @@ import sys
 
 import duckdb
 import geopandas as gpd
+import pandas as pd
 import shapely.wkt as wkt
 
 from mapstyle import merge_modes, render_merge
@@ -45,7 +46,40 @@ def load(table, name, kind, where=None, centroid=False, bearing=False):
     return Layer(name, gdf, kind)
 
 
+def add_construction(merged):
+    """Inject `highway=construction` ways into the roads layer so they render as REAL roads
+    (per-zoom width + casing), sized/shaped by their future class (`construction=<class>` tag) but
+    drawn grey. They're excluded from the routing network, so they come from features.streets."""
+    con = duckdb.connect(DB, read_only=True)
+    con.execute("INSTALL spatial; LOAD spatial;")
+    rows = con.execute("""
+        SELECT osm_id, COALESCE(map_extract(tags, 'construction')[1], 'residential') AS future,
+               name, ST_AsText(geom)
+        FROM features.streets WHERE kind = 'construction' AND geom IS NOT NULL
+    """).fetchall()
+    con.close()
+    if not rows:
+        return
+    cols = ["edge_id", "highway", "name", "length_m", "layer", "bridge", "tunnel", "service",
+            "oneway", "driving", "walking", "cycling", "combo", "is_construction"]
+    rec = {c: [] for c in cols}
+    geoms = []
+    for osm_id, future, name, wkt_s in rows:
+        vals = [int(osm_id), future, name, None, 0, False, False, None,
+                False, True, True, True, "dwc", True]   # md/mw/mc True so it survives the mode filter
+        for c, v in zip(cols, vals):
+            rec[c].append(v)
+        geoms.append(wkt.loads(wkt_s))
+    extra = gpd.GeoDataFrame(rec, geometry=geoms, crs="EPSG:4326")
+    extra["length_m"] = extra.to_crs(extra.estimate_utm_crs()).length.round()   # for name-label fit
+    g = merged.gdf
+    if "is_construction" not in g:
+        g["is_construction"] = False
+    merged.gdf = gpd.GeoDataFrame(pd.concat([g, extra], ignore_index=True), crs="EPSG:4326")
+
+
 merged = merge_modes(DB)                                    # roads: names / arrows / per-zoom widths
+add_construction(merged)                                    # + highway=construction as grey real roads
 feats = [
     load("land",            "landcover",       "polygon"),
     load("water_polygons",  "water",           "polygon"),    # incl. the Emajõgi river (smart clip)
