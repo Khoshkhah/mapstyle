@@ -72,16 +72,14 @@ def _offset_two_way(gdf):
 
 
 def merge_modes(db, modes=("driving", "walking", "cycling")):
-    """Return one Layer of roads — ONE line per OSM way — with driving/walking/cycling flags.
+    """Return one Layer of distinct edges (by edge_id) with driving/walking/cycling flags.
 
-    Combined by ``osm_id``, NOT ``edge_id``. duckOSM's per-mode graphs segment (and hash) the same
-    road differently — a mode-excluded way joining a road mid-segment makes walking/cycling keep a
-    junction node that driving simplifies away, so one physical direction gets different edge_ids
-    across modes; and a car-oneway street walkable both ways has two walking edges for the one road.
-    Grouping by ``osm_id`` reunites all of that into one line per way, its driving/walking/cycling
-    flags OR'd and ``oneway`` = the vehicular oneway (its arrow still shows direction). Geometry is
-    the complete way line from ``features.streets`` (so it doesn't matter how any mode split it).
-    ``highway``/``geometry`` alias to the ``class``/``geom`` the styling code expects.
+    Reads the per-mode routing graphs straight from a duckOSM db (``<mode>.edges``) — the single
+    source of truth. duckOSM edges are DIRECTED: a two-way segment keeps BOTH its forward and
+    reverse rows (different edge_ids on purpose), and ``_offset_two_way`` fans that pair into two
+    parallel lanes — the both-directions look. A one-way street has only its single directed edge
+    (stays centred). ``highway``/``geometry`` are aliased to the ``class``/``geom`` the styling
+    code expects.
     """
     import duckdb
     import geopandas as gpd
@@ -89,46 +87,26 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
 
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
-    # Only the modes actually present (a build may have driving alone, or any subset).
-    present = {r[0] for r in con.execute(
-        "SELECT schema_name FROM duckdb_tables() WHERE table_name = 'edges'").fetchall()}
-    modes = [m for m in modes if m in present]
-    if not modes:
-        con.close()
-        return Layer("roads_merged", gpd.GeoDataFrame(
-            {k: [] for k in ("edge_id", "highway", "name", "length_m", "layer", "bridge", "tunnel",
-                             "service", "oneway", "driving", "walking", "cycling", "combo")},
-            geometry=[], crs="EPSG:4326"), "line")
-    has_streets = con.execute("SELECT COUNT(*) FROM duckdb_tables() "
-                              "WHERE schema_name = 'features' AND table_name = 'streets'").fetchone()[0] > 0
     union = " UNION ALL ".join(
-        f"SELECT osm_id, highway, name, layer, bridge, tunnel, service, oneway, geometry AS geom, "
-        f"'{m}' AS mode FROM {m}.edges" for m in modes)
-    # Geometry: prefer the complete way line from features.streets; else merge the way's own
-    # segments (clean for a single mode — the only source lacking features is a driving-only build).
-    # LEFT JOIN + COALESCE means a way missing from features.streets is never dropped.
-    merged_geom = "ST_LineMerge(ST_Collect(list(g.geom)))"
-    if has_streets:
-        join, geom = "LEFT JOIN features.streets s USING (osm_id)", \
-            f"ST_AsText(COALESCE(any_value(s.geom), {merged_geom}))"
-    else:
-        join, geom = "", f"ST_AsText({merged_geom})"
+        f"SELECT edge_id, highway AS class, geometry AS geom, name, length_m, "
+        f"layer, bridge, tunnel, service, oneway, '{m}' AS mode "
+        f"FROM {m}.edges" for m in modes)
     rows = con.execute(f"""
-        WITH g AS ({union})
-        SELECT g.osm_id,
-               any_value(g.highway)          AS class,
-               {geom}                         AS wkt,
-               any_value(g.name)             AS name,
-               any_value(g.layer)            AS layer,
-               any_value(g.bridge)           AS bridge,
-               any_value(g.tunnel)           AS tunnel,
-               any_value(g.service)          AS service,
-               bool_or(g.oneway)             AS oneway,
-               bool_or(g.mode = 'driving')   AS d,
-               bool_or(g.mode = 'walking')   AS w,
-               bool_or(g.mode = 'cycling')   AS c
-        FROM g {join}
-        GROUP BY g.osm_id
+        SELECT edge_id,
+               any_value(class)             AS class,
+               ST_AsText(any_value(geom))   AS wkt,
+               any_value(name)              AS name,
+               max(length_m)                AS length_m,
+               any_value(layer)             AS layer,
+               any_value(bridge)            AS bridge,
+               any_value(tunnel)            AS tunnel,
+               any_value(service)           AS service,
+               bool_or(oneway)              AS oneway,
+               bool_or(mode = 'driving')    AS d,
+               bool_or(mode = 'walking')    AS w,
+               bool_or(mode = 'cycling')    AS c
+        FROM ({union})
+        GROUP BY edge_id
     """).fetchall()
     con.close()
 
@@ -136,23 +114,17 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
            "layer": [], "bridge": [], "tunnel": [], "service": [], "oneway": [],
            "driving": [], "walking": [], "cycling": [], "combo": []}
     geoms = []
-    for osm_id, cls, geom_wkt, nm, lyr, brg, tun, svc, ow, is_d, is_w, is_c in rows:
-        if not geom_wkt:
-            continue
+    for eid, cls, geom_wkt, nm, length_m, lyr, brg, tun, svc, ow, is_d, is_w, is_c in rows:
         combo = "".join(k for k, v in (("d", is_d), ("w", is_w), ("c", is_c)) if v)
-        rec["edge_id"].append(osm_id); rec["highway"].append(cls)   # id is now the OSM way id
-        rec["name"].append(nm); rec["length_m"].append(None)
+        rec["edge_id"].append(eid); rec["highway"].append(cls)
+        rec["name"].append(nm); rec["length_m"].append(length_m)
         rec["layer"].append(lyr); rec["bridge"].append(brg); rec["tunnel"].append(tun)
         rec["service"].append(svc); rec["oneway"].append(bool(ow))
         rec["driving"].append(bool(is_d)); rec["walking"].append(bool(is_w)); rec["cycling"].append(bool(is_c))
         rec["combo"].append(combo)
-        geom = wkt.loads(geom_wkt)
-        if geom.geom_type == "MultiLineString":                 # rare: way missing from streets ->
-            geom = max(geom.geoms, key=lambda p: p.length)      # segment-merge left gaps; keep longest
-        geoms.append(geom)
+        geoms.append(wkt.loads(geom_wkt))
     gdf = gpd.GeoDataFrame(rec, geometry=geoms, crs="EPSG:4326")
-    if len(gdf):
-        gdf["length_m"] = gdf.to_crs(gdf.estimate_utm_crs()).length.round()   # true way length (for name fit)
+    gdf = _offset_two_way(gdf)   # fan two-way streets into parallel lanes (metre offset; no line-offset in deck.gl)
     return Layer("roads_merged", gdf, "line")
 
 
