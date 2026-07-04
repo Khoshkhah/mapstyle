@@ -12,9 +12,9 @@ roads:
     # physical metres per lane, by class (class = importance; a trunk lane reads wider than a service lane)
     lane_m:
       default:       3.0
-      major:         3.5
-      trunk:         3.5
-      primary:       3.25
+      major:         3.0
+      trunk:         3.0
+      primary:       3.0
       secondary:     3.0
       tertiary:      3.0
       residential:   2.75

@@ -96,7 +96,7 @@ works at any latitude without re-tuning.
 ```yaml
   width_model:
     lane_m:            # physical metres per lane, by class
-      major: 3.5   trunk: 3.5   primary: 3.25   secondary: 3.0   tertiary: 3.0
+      major: 3.0   trunk: 3.0   primary: 3.0   secondary: 3.0   tertiary: 3.0
       residential: 2.75   living_street: 2.75   service: 2.75   service_minor: 2.5
       pedestrian: 2.5   path: 1.5   default: 3.0
     lanes:             # lanes PER DIRECTION of a TWO-WAY road (0.5 = single-track)
