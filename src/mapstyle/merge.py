@@ -72,7 +72,15 @@ def _offset_two_way(gdf):
 
 
 def merge_modes(db, modes=("driving", "walking", "cycling")):
-    """Return one Layer of distinct edges (by edge_id) with driving/walking/cycling flags."""
+    """Return one Layer of distinct edges (by edge_id) with driving/walking/cycling flags.
+
+    Reads the per-mode routing graphs straight from a duckOSM db (``<mode>.edges``) — the single
+    source of truth. duckOSM edges are DIRECTED: a two-way segment keeps BOTH its forward and
+    reverse rows (different edge_ids on purpose), and ``_offset_two_way`` fans that pair into two
+    parallel lanes — the both-directions look. A one-way street has only its single directed edge
+    (stays centred). ``highway``/``geometry`` are aliased to the ``class``/``geom`` the styling
+    code expects.
+    """
     import duckdb
     import geopandas as gpd
     import shapely.wkt as wkt
@@ -80,8 +88,9 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
     union = " UNION ALL ".join(
-        f"SELECT edge_id, class, geom, name, length_m, layer, bridge, tunnel, service, oneway, '{m}' AS mode "
-        f"FROM basemap.roads_{m}" for m in modes)
+        f"SELECT edge_id, highway AS class, geometry AS geom, name, length_m, "
+        f"layer, bridge, tunnel, service, oneway, '{m}' AS mode "
+        f"FROM {m}.edges" for m in modes)
     rows = con.execute(f"""
         SELECT edge_id,
                any_value(class)             AS class,

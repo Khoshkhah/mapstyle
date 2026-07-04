@@ -129,7 +129,7 @@ features:
     railways:   {color: "#707070", width: 1.4, dash: [6, 4]}
   points:                            # per-category: colour (tints the SVG), size (MULTIPLIER on the icon curve), icon (SVG file in mapstyle/icons/), min_zoom
     train_stations:  {color: "#8b008b", size: 1.4,  icon: "train.svg", min_zoom: 12}
-    parking:         {color: "#2b6cb0", size: 1.0,  icon: "parking.svg", min_zoom: 14}
+    parking_p:       {color: "#2b6cb0", size: 1.0,  icon: "parking.svg", min_zoom: 15}  # "P" sign at the parking polygon's centroid (the polygon itself is styled under features.areas.parking)
     bus_stations:    {color: "#1e6eb4", size: 1.0,  icon: "bus.svg", min_zoom: 14}
     bicycle:         {color: "#2e8b57", size: 0.9,  icon: "bicycle.svg", min_zoom: 15}
     traffic_signals: {color: "#d64545", size: 0.9,  icon: "traffic_light.svg", min_zoom: 15}

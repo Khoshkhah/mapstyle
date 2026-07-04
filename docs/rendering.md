@@ -63,10 +63,19 @@ re-render, no code:
 Icons are monochrome SVG *masks*, so each category's config `color` tints it. Crossings carry a
 `bearing` (the road direction) and are rotated so the marking lies across the road.
 
-## Inputs
+## Inputs — one duckOSM db, nothing else
 
-`render_merge` reads roads via `merge_modes(db)` and takes feature `Layer`s from `load_layer(...)`.
-Today those come from a **duckmap** basemap db, except the **river polygon**, which needs a
-**duckOSM** `smart`-clip features db (duckmap's water lacks it). The clean long-term target is a
-single duckOSM db built with `options.build_features` holding routing + `features.*` — then
-everything comes from one place.
+Everything comes from a **single duckOSM db** built with `options.build_features: true` (no duckmap):
+
+- **Roads** — `merge_modes(db)` reads the per-mode routing graphs `driving.edges` / `walking.edges`
+  / `cycling.edges` directly. These are *directed* (a two-way segment keeps both its forward and
+  reverse rows); `_offset_two_way` fans that pair into two parallel lanes. `highway`/`geometry` are
+  aliased to the `class`/`geom` the styling expects.
+- **Base map** — the feature `Layer`s are read from the `features.*` schema (Shortbread `kind`):
+  `water_polygons` (incl. the river — needs the `smart` clip that `build_features` auto-enables),
+  `water_lines`, `land`, `buildings`, `streets` (rail), `sites` (parking polygons), `public_transport`
+  (bus/train), `pois` (bicycle), and duckOSM's `traffic` extension (`traffic_signals` + `crossing`,
+  the latter carrying a road `bearing` so the marking is oriented).
+
+`render_tartu.py` is the end-to-end driver: point it at `duckOSM/data/db/tartu.duckdb` and it
+loads roads + every feature layer from that one file.
