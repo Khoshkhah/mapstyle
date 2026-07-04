@@ -184,6 +184,11 @@ features:
       pitch: "#aae0cb"
       nature_reserve: "#d5e8d1"
       golf_course: "#b5e3b5"
+      playground: "#dffce2"          # leisure=playground — GREEN in OSM (was falling to grey default)
+      village_green: "#cdebb0"       # grass green
+      garages: "#dfddce"             # landuse=garages (muted)
+      greenfield: "#f1eee8"          # undeveloped land (very light)
+      beach: "#fff1ba"               # natural=beach (sandy)
       default: "#e8e6df"
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:    {color: "#4a90d9", width: 1.6}
