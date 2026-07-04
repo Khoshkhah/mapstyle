@@ -127,10 +127,16 @@ features:
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:  {color: "#4a90d9", width: 1.6}
     railways:   {color: "#707070", width: 1.4, dash: [6, 4]}
-  points:                            # point colour + size (px radius) + optional icon (emoji drawn instead of a dot)
-    pois:            {color: "#c87828", size: 3}
-    bus_stops:       {color: "#1e6eb4", size: 5, icon: "🚌"}
-    traffic_signals: {color: "#d64545", size: 5, icon: "🚦"}
-    crossings:       {color: "#5a5a5a", size: 4, icon: "🚸"}
-    parking:         {color: "#4169e1", size: 5, icon: "🅿"}
-    default:         {color: "#808080", size: 3}
+  points:                            # per-category: colour (tints the SVG), size (MULTIPLIER on the icon curve), icon (SVG file in mapstyle/icons/), min_zoom
+    train_stations:  {color: "#8b008b", size: 1.4,  icon: "train.svg", min_zoom: 12}
+    parking:         {color: "#2b6cb0", size: 1.0,  icon: "parking.svg", min_zoom: 14}
+    bus_stations:    {color: "#1e6eb4", size: 1.0,  icon: "bus.svg", min_zoom: 14}
+    bicycle:         {color: "#2e8b57", size: 0.9,  icon: "bicycle.svg", min_zoom: 15}
+    traffic_signals: {color: "#d64545", size: 0.9,  icon: "traffic_light.svg", min_zoom: 15}
+    crossings:       {color: "#5a5a5a", size: 0.85, icon: "crossing.svg", min_zoom: 16}
+    default:         {color: "#808080", size: 1.0,  min_zoom: 14}
+  icon:                              # icon pixel size BY ZOOM — interpolated like roads.width; a category's `size` scales it
+    size:    {12: 5, 14: 9, 16: 14, 18: 22, 20: 32}
+    hi_rate: 1.5                      # growth per zoom above the top anchor (like roads.hi_rate)
+    opacity: 0.8                      # icon opacity (lighter <1)
+    color:   "#8a8a8a"               # icon tint (matters for monochrome emoji; native colour in most browsers)

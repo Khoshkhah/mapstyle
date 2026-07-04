@@ -253,7 +253,7 @@ def _load_boundary(src):
 
 
 def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes", overlays=(),
-                 boundary=None, feature_layers=None):
+                 boundary=None, feature_layers=None, zoom=13, center=None):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
 
     feature_layers: optional list of mapstyle ``Layer`` (water/land/buildings/…) drawn UNDER the
@@ -338,7 +338,7 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     has_bound = bnd is not None
 
     minx, miny, maxx, maxy = gdf.total_bounds
-    center = [(minx + maxx) / 2, (miny + maxy) / 2]
+    center = center or [(minx + maxx) / 2, (miny + maxy) / 2]
     default_bm = _BM_ALIAS.get(basemap, basemap if basemap in BASEMAPS else "OSM Standard")
     legend = "".join(
         f'<span style="color:{COMBO_COLOR[k]}">&#9632;</span> {v}<br>' for k, v in
@@ -373,12 +373,18 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         elif fk == "point":
             spec = points_cfg.get(fl.name, points_cfg.get("default", {"color": "#808080", "size": 3}))
             pc = _rgb(spec.get("color", "#808080")) + [225]
-            fdef["sz"] = spec.get("size", 3)
+            fdef["sz"] = spec.get("size", 1)
             fdef["ic"] = spec.get("icon")
-            for gm in fl.gdf.geometry:
+            fdef["mz"] = spec.get("min_zoom", 14)
+            fdef["col"] = _rgb(spec.get("color", "#808080"))   # tints the SVG (mask)
+            bearings = fl.gdf["bearing"] if "bearing" in fl.gdf else [None] * len(fl.gdf)
+            for gm, br in zip(fl.gdf.geometry, bearings):
                 if gm is None or gm.is_empty:
                     continue
-                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": {"pc": pc}})
+                props = {"pc": pc}
+                if br is not None and br == br:      # bearing present (not None/NaN) -> orient the icon
+                    props["ang"] = round(float(br), 1)
+                ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": props})
         else:
             spec = lines_cfg.get(fl.name, {})
             col, w, dash = _rgb(spec.get("color", "#888888")), spec.get("width", 1.4), spec.get("dash")
@@ -393,6 +399,17 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     feature_rows = "".join(
         f'<label><input type="checkbox" class="featchk" data-id="{d["id"]}" checked> {d["id"]}</label>'
         for d in feature_defs)
+
+    # copy the SVG icon files referenced by any point layer into the render dir (served as data/icons/)
+    icons_src = Path(__file__).parent / "icons"
+    if any(d.get("ic") for d in feature_defs):
+        import shutil
+        (out / "data" / "icons").mkdir(parents=True, exist_ok=True)
+        for d in feature_defs:
+            svg = icons_src / (d.get("ic") or "")
+            if d.get("ic") and svg.exists():
+                shutil.copy(svg, out / "data" / "icons" / d["ic"])
+    icfg = fcfg.get("icon", {})            # icon size-by-zoom curve (interpolated like roads.width)
 
     rstyle = _style["roads"]
     html = (_TEMPLATE
@@ -417,6 +434,10 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             .replace("__HASBOUND__", "true" if has_bound else "false")
             .replace("__BOUNDROW__", _BOUND_ROW if has_bound else "")
             .replace("__CENTER__", json.dumps(center))
+            .replace("__ZOOM__", str(zoom))
+            .replace("__ICONSIZE__", json.dumps(icfg.get("size", {14: 9, 16: 14})))
+            .replace("__ICONHI__", str(icfg.get("hi_rate", 1.5)))
+            .replace("__ICONOP__", str(icfg.get("opacity", 0.8)))
             .replace("__BASEMAPS__", json.dumps(BASEMAPS))
             .replace("__DEFAULT_BM__", default_bm)
             .replace("__LEGEND__", legend)
@@ -469,22 +490,30 @@ const CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__
 const S = {md:true, mw:true, mc:true, cmode:"osm", arrows:__ARROWS__, names:__NAMES__, boundary:__HASBOUND__};
 let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
 const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
-function featureLayers(){                                  // base-map feature layers, UNDER the roads
+const ICONSIZE = __ICONSIZE__, ICONHI = __ICONHI__, ICONOP = __ICONOP__;   // icon px-size by zoom (interp like roads.width)
+function featureLayers(which){                             // "bg"=polygons/lines (under roads), "fg"=points/icons (on top)
   const out=[];
   for(const d of FEATUREDEFS){
     if(!fstate[d.id] || !FEATDATA[d.id]) continue;
+    const isPt = d.kind==="point";
+    if((which==="bg") === isPt) continue;                 // bg skips points; fg keeps only points
     if(d.kind==="polygon")
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:!!d.oc, filled:true,
         getFillColor:f=>f.properties.fc, getLineColor:d.oc||[0,0,0,0], lineWidthUnits:"pixels", lineWidthMinPixels:0.3}));
     else if(d.kind==="point"){
-      if(d.ic)                                    // icon (emoji/char from the config)
-        out.push(new deck.TextLayer({id:"f_"+d.id, data:FEATDATA[d.id], dataTransform:x=>x.features||[],
-          getPosition:f=>f.geometry.coordinates, getText:()=>d.ic, getSize:(d.sz||3)*3.6, sizeUnits:"pixels",
-          getColor:[35,35,35], getTextAnchor:"middle", getAlignmentBaseline:"center"}));
-      else                                        // plain coloured dot
-        out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], pointType:"circle",
-          getFillColor:f=>f.properties.pc, pointRadiusUnits:"pixels", getPointRadius:d.sz||3, pointRadiusMinPixels:2,
-          stroked:true, getLineColor:[255,255,255,180], lineWidthMinPixels:0.4}));
+      const vis = map.getZoom() >= (d.mz||14);    // categories appear only when zoomed in (declutter)
+      if(d.ic)                                     // SVG icon (mask -> tinted by the config colour); px-size by zoom
+        out.push(new deck.IconLayer({id:"f_"+d.id, data:FEATDATA[d.id], dataTransform:x=>x.features||[],
+          visible:vis, opacity:ICONOP,
+          getIcon:()=>({url:"data/icons/"+d.ic, width:48, height:48, mask:true}),
+          getPosition:f=>f.geometry.coordinates, getColor:d.col,
+          getAngle:f=>-(f.properties.ang||0),         // orient to the road (bearing); 0 for icons without one
+          getSize:interp(ICONSIZE, map.getZoom(), ICONHI)*(d.sz||1), sizeUnits:"pixels"}));
+      else                                         // plain coloured dot (also zoom-scaled)
+        out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, pointType:"circle",
+          getFillColor:f=>f.properties.pc, pointRadiusUnits:"meters", getPointRadius:(d.sz||3)*4,
+          pointRadiusMinPixels:2, pointRadiusMaxPixels:14, stroked:true, getLineColor:[255,255,255,180],
+          lineWidthMinPixels:0.4}));
     } else
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:true, filled:false,
         lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4,
@@ -493,7 +522,7 @@ function featureLayers(){                                  // base-map feature l
   return out;
 }
 
-const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:13});
+const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:__ZOOM__});
 const overlay = new deck.MapboxOverlay({interleaved:false, layers:[]});
 map.addControl(overlay); map.addControl(new maplibregl.NavigationControl());
 const DASH = deck.PathStyleExtension ? [new deck.PathStyleExtension({dash:true})] : [];
@@ -554,7 +583,7 @@ function draw(){
   const col = S.cmode==="modes" ? (f=>f.properties.cb) : (f=>f.properties.c);
   const zt = Math.round(map.getZoom()*5)/5;     // re-evaluate widths per 0.2 zoom step
   const layers = [];
-  layers.push(...featureLayers());              // base-map feature layers first (drawn underneath)
+  layers.push(...featureLayers("bg"));          // area/line feature layers first (drawn underneath the roads)
   for(const b of [-1, 0, 1]){
     const fc = {type:"FeatureCollection", features:KEEP.filter(f=>band(f)===b)};
     if(!fc.features.length) continue;
@@ -663,6 +692,7 @@ function draw(){
       stroked:true, filled:false, lineWidthUnits:"pixels", getLineWidth:2.5, lineWidthMinPixels:2.5,
       getLineColor:[106,13,173,235], extensions:DASH, dashJustified:true, getDashArray:[6,4]}));
   }
+  layers.push(...featureLayers("fg"));          // point/icon feature layers LAST — always on top
   overlay.setProps({layers});
 }
 function refilter(){
