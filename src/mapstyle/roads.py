@@ -25,8 +25,8 @@ class RoadStyle:
 
 
 # per-class base (fill, casing) line-widths for the legacy line backend (render_basemap). The
-# MAIN merged viewer takes its widths from styles/*.yaml (roads.width, by group); these feed
-# only the older per-layer backend. COLOURS (fill/casing/dash) come from the stylesheet's
+# MAIN merged viewer computes PHYSICAL widths from lanes (styles/*.yaml roads.width_model — see
+# docs/width-model.md); these feed only the older per-layer backend. COLOURS (fill/casing/dash) come from the stylesheet's
 # roads.colors block — edit there, not here.
 _BASE_W = {
     "motorway": (6.0, 8.0), "trunk": (5.2, 7.2), "primary": (4.4, 6.2),

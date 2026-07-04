@@ -32,28 +32,46 @@ COMBO_COLOR = {
 }
 
 
-# per road-group offset (metres) baked into each two-way edge so its two directed copies fan into
-# parallel lanes (deck.gl has no render-time line-offset). Small -> lanes coincide when zoomed out,
-# separate as you zoom in. service/paths stay 0 (too thin to split without a gap). Tune here.
-LANE_OFFSET_M = {
-    "major": 1.6, "primary": 1.4, "secondary": 1.2, "tertiary": 1.0,
-    "residential": 0.8, "living_street": 0.8, "pedestrian": 0.8,
-    "service": 0.0, "path": 0.0,
-}
+# service roads whose `service=*` subtag makes them the narrower `service_minor` width group
+_SVC_MINOR = ("driveway", "parking_aisle", "drive-through", "drive_through")
+
+
+def _group_of(hw, svc=None):
+    """road_group(hw), but split driveways/parking-aisles off to the narrower `service_minor`."""
+    g = road_group(hw)
+    if g == "service" and str(svc).strip().lower() in _SVC_MINOR:
+        g = "service_minor"
+    return g
+
+
+def _base_m(hw, svc, oneway, wm):
+    """Physical base width (metres) of a road/direction = lanes x lane_m[class] — BOTH from config
+    (``roads.width_model``), NOT from OSM lane tags (too noisy). A ONE-WAY road uses ``lanes_oneway``
+    (total lanes of the carriageway); a TWO-WAY road uses ``lanes`` (lanes per direction; 0.5 =
+    single-track). So a secondary renders wider one-way (dual carriageway) than one two-way direction.
+    See docs/width-model.md."""
+    g = _group_of(hw, svc)
+    lane_m = wm.get("lane_m") or {}
+    tbl = (wm.get("lanes_oneway") if oneway else wm.get("lanes")) or {}
+    lm = lane_m.get(g, lane_m.get("default", 3.0))
+    n = tbl.get(g, tbl.get("default", 1))
+    return n * lm
 
 
 def _offset_two_way(gdf):
-    """Fan two-way streets into parallel lanes: bake a small left offset into each two-way edge. The
-    two directed edges have reversed geometry, so offsetting both left puts them on opposite sides.
-    One-way edges (and classes with offset 0) stay centred. Done in a local UTM CRS; a degenerate
-    offset falls back to the centreline."""
+    """Offset each two-way edge sideways by its OWN baked per-direction offset (``gdf['off']`` metres,
+    = base_width/2) so the two directions sit edge-to-edge beside the centreline; one-way edges
+    (``off``=0) stay centred. Purely GLOBAL / per-class (physical width model) — no junction
+    awareness. Done in a local UTM CRS; a degenerate offset falls back to the centreline."""
     import geopandas as gpd
 
+    if "off" not in gdf:
+        return gdf
     m_crs = gdf.estimate_utm_crs()
     m = gdf.to_crs(m_crs)
     out = []
-    for geom, hw, ow in zip(m.geometry, m["highway"], m["oneway"]):
-        d = 0.0 if ow else LANE_OFFSET_M.get(road_group(hw), 0.8)
+    for geom, d in zip(m.geometry, m["off"]):
+        d = float(d) if d == d else 0.0                        # NaN-safe
         if not d or geom is None or geom.is_empty:
             out.append(geom)
             continue
@@ -88,9 +106,10 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
     union = " UNION ALL ".join(
-        f"SELECT edge_id, highway AS class, geometry AS geom, name, length_m, "
-        f"layer, bridge, tunnel, service, oneway, '{m}' AS mode "
-        f"FROM {m}.edges" for m in modes)
+        f"SELECT e.edge_id, e.highway AS class, e.geometry AS geom, e.name, e.length_m, "
+        f"e.layer, e.bridge, e.tunnel, e.service, e.oneway, "
+        f"TRY_CAST(w.tags['lanes'] AS INTEGER) AS lanes, "   # raw OSM TOTAL lanes tag (info only; width is class-fixed)
+        f"'{m}' AS mode FROM {m}.edges e LEFT JOIN {m}.ways w ON e.osm_id = w.osm_id" for m in modes)
     rows = con.execute(f"""
         SELECT edge_id,
                any_value(class)             AS class,
@@ -102,6 +121,7 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
                any_value(tunnel)            AS tunnel,
                any_value(service)           AS service,
                bool_or(oneway)              AS oneway,
+               any_value(lanes)             AS lanes,
                bool_or(mode = 'driving')    AS d,
                bool_or(mode = 'walking')    AS w,
                bool_or(mode = 'cycling')    AS c
@@ -111,20 +131,31 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
     con.close()
 
     rec = {"edge_id": [], "highway": [], "name": [], "length_m": [],
-           "layer": [], "bridge": [], "tunnel": [], "service": [], "oneway": [],
+           "layer": [], "bridge": [], "tunnel": [], "service": [], "oneway": [], "lanes": [],
            "driving": [], "walking": [], "cycling": [], "combo": []}
     geoms = []
-    for eid, cls, geom_wkt, nm, length_m, lyr, brg, tun, svc, ow, is_d, is_w, is_c in rows:
+    for eid, cls, geom_wkt, nm, length_m, lyr, brg, tun, svc, ow, lns, is_d, is_w, is_c in rows:
         combo = "".join(k for k, v in (("d", is_d), ("w", is_w), ("c", is_c)) if v)
         rec["edge_id"].append(eid); rec["highway"].append(cls)
         rec["name"].append(nm); rec["length_m"].append(length_m)
         rec["layer"].append(lyr); rec["bridge"].append(brg); rec["tunnel"].append(tun)
-        rec["service"].append(svc); rec["oneway"].append(bool(ow))
+        rec["service"].append(svc); rec["oneway"].append(bool(ow)); rec["lanes"].append(lns)
         rec["driving"].append(bool(is_d)); rec["walking"].append(bool(is_w)); rec["cycling"].append(bool(is_c))
         rec["combo"].append(combo)
         geoms.append(wkt.loads(geom_wkt))
     gdf = gpd.GeoDataFrame(rec, geometry=geoms, crs="EPSG:4326")
-    gdf = _offset_two_way(gdf)   # fan two-way streets into parallel lanes (metre offset; no line-offset in deck.gl)
+    # PHYSICAL width model (see docs/width-model.md): each DIRECTED edge's base width (metres) =
+    # its lane count x lane_m[class]. A two-way road = its two directed edges, each offset sideways
+    # by base/2 (baked here, in metres) so they sit edge-to-edge; one-way roads stay centred. Paths /
+    # footways (`path` group) are drawn as a single dashed line, never split. The render width is then
+    # base_m x (1/mpp) x zoom_boost(zoom) — computed per-zoom in the viewer, sharing this base_m.
+    wm = (load_style().get("roads") or {}).get("width_model") or {}
+    gdf["bm"] = [_base_m(hw, svc, ow, wm)
+                 for hw, svc, ow in zip(gdf["highway"], gdf["service"], gdf["oneway"])]
+    gdf["lane"] = [(not bool(ow)) and road_group(hw) != "path"
+                   for hw, ow in zip(gdf["highway"], gdf["oneway"])]
+    gdf["off"] = [bm / 2.0 if ln else 0.0 for bm, ln in zip(gdf["bm"], gdf["lane"])]
+    gdf = _offset_two_way(gdf)             # offset each two-way direction by its own base/2 (metres)
     return Layer("roads_merged", gdf, "line")
 
 
@@ -285,19 +316,23 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     n_sample = nstyle.get("sample_m", 80)              # label-candidate spacing along each road
     rmz = {str(k).strip().lower(): v for k, v in ((_style.get("roads") or {}).get("min_zoom") or {}).items()}
 
+    wm = (_style.get("roads") or {}).get("width_model") or {}   # physical width model (lane_m / …)
     out = Path(out_dir); (out / "data").mkdir(parents=True, exist_ok=True)
     feats = []
     gdf = layer.gdf
-    _SVC_MINOR = ("driveway", "parking_aisle", "drive-through", "drive_through")
     label_feats = []   # name-label candidates: one per named piece (the viewer fits + places them)
     arrow_feats = []   # oneway arrow markers, sampled along the lines (OSM-style)
     con_flags = gdf["is_construction"] if "is_construction" in gdf else [False] * len(gdf)
-    for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, combo, d, w, c, iscon in zip(
+    lane_flags = gdf["lane"] if "lane" in gdf else [False] * len(gdf)
+    bm_vals = gdf["bm"] if "bm" in gdf else [None] * len(gdf)
+    for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, lns, combo, d, w, c, iscon, lane, bmv in zip(
             gdf.geometry, gdf.edge_id, gdf.highway, gdf.name, gdf.length_m,
-            gdf.layer, gdf.bridge, gdf.tunnel, gdf.service, gdf.oneway, gdf.combo,
-            gdf.driving, gdf.walking, gdf.cycling, con_flags):
+            gdf.layer, gdf.bridge, gdf.tunnel, gdf.service, gdf.oneway, gdf.get("lanes", [None] * len(gdf)),
+            gdf.combo, gdf.driving, gdf.walking, gdf.cycling, con_flags, lane_flags, bm_vals):
         if geom is None or geom.is_empty:
             continue
+        lane = bool(lane) if lane == lane else False   # NaN-safe: rows added later (construction) lack it
+        bm = float(bmv) if bmv == bmv and bmv is not None else _base_m(hw, svc, ow, wm)   # construction: derive
         s = resolve_road(hw)
         layer = _layer_int(lyr)
         is_bridge = bool(brg) and str(brg).strip().lower() not in ("", "no")
@@ -306,19 +341,18 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
         fill, dash = s.fill, s.dash
         if iscon:                                        # highway=construction: grey road, but keep
             fill, casing, dash = "#bdbdbd", "#8f8f8f", None   # its FUTURE class's width/shape (hw)
-        g = road_group(hw)
-        if g == "service" and str(svc).strip().lower() in _SVC_MINOR:
-            g = "service_minor"                          # driveways/parking aisles -> narrower
+        g = _group_of(hw, svc)                            # width group (+ driveway/aisle -> service_minor)
         if nm and g in NAME_GROUPS:                       # name-label candidates ALONG the piece
             pr = road_z(hw)
+            full_bm = round(bm * (2 if lane else 1), 2)   # painted road width (both directions if two-way)
             for pos, na, fit_m in _label_candidates(geom, n_sample):
                 if fit_m >= 20:                           # skip points without room for any name
                     label_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": pos},
-                        "properties": {"nm": nm, "na": na, "len": round(fit_m), "pr": pr, "g": g}})
+                        "properties": {"nm": nm, "na": na, "len": round(fit_m), "pr": pr, "g": g, "bm": full_bm}})
         if ow:                                            # oneway -> arrows along the line
             for pos, ang, seq in _arrow_points(geom, a_sample):
                 arrow_feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": pos},
-                                    "properties": {"ang": ang, "seq": seq, "g": g}})
+                                    "properties": {"ang": ang, "seq": seq, "g": g, "bm": round(bm, 2)}})
         feats.append({"type": "Feature", "geometry": sg.mapping(geom), "properties": {
             "c": _rgb(fill),
             "cc": _rgb(casing) if casing else None,
@@ -330,6 +364,9 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             # draw order: class rank + 10*layer (bridges up, tunnels down) — osm2pgsql z_order
             "z": road_z(hw) + 10 * layer, "g": g,
             "lk": bool(hw) and str(hw).strip().lower().endswith("_link"),
+            "ln": bool(lane),   # two-way direction -> width x lane_overlap so the pair overlaps (no seam)
+            "lanes": int(lns) if lns == lns and lns is not None else None,   # OSM lane tag (info only; width is class-fixed)
+            "bm": round(bm, 2),   # physical base width of THIS direction (metres); width_px = bm/mpp*zoom_boost
             "br": is_bridge, "tn": is_tunnel, "lv": layer, "ow": bool(ow),
             "mz": rmz.get(str(hw).strip().lower(), 0),   # class hidden below this zoom (roads.min_zoom)
         }})
@@ -431,9 +468,9 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
     html = (_TEMPLATE
             .replace("__FEATUREDEFS__", json.dumps(feature_defs))
             .replace("__FEATUREROWS__", feature_rows)
-            .replace("__WIDTH__", json.dumps(rstyle["width"]))
-            .replace("__HIRATE__", json.dumps(rstyle["hi_rate"]))
             .replace("__CASING__", json.dumps(rstyle["casing_ratio"]))
+            .replace("__ZOOMBOOST__", json.dumps(wm.get("zoom_boost") or {"18": 1.0}))
+            .replace("__LANEOVERLAP__", str(wm.get("lane_overlap", 1.15)))
             .replace("__ARROWMINZ__", str(astyle.get("min_zoom", 16)))
             .replace("__ARROWSPACING__", str(astyle.get("spacing_px", 150)))
             .replace("__ARROWSIZE__", str(astyle.get("size_px", 7)))
@@ -555,28 +592,34 @@ function makeArrow(){
 }
 const ARROW_ICON = makeArrow();
 
-// openstreetmap-carto fill widths (px) by zoom, per class group; casing = fill + add.
-// road widths/growth/casing come from styles/osm_carto.yaml (injected below)
-const FILL = __WIDTH__;
-const HI_RATE = __HIRATE__;
+// PHYSICAL width model (see docs/width-model.md): width_px = base_metres x (1/mpp) x zoom_boost(zoom).
+// `bm` (base metres of a road/direction) is baked per feature = lanes x lane_m[class]; ONE global
+// zoom_boost curve (legibility multiplier over true physical size, ->1 at high zoom) scales all
+// classes together, so class widths stay in fixed ratio at every zoom. All numbers -> osm_carto.yaml.
 const CASING_RATIO = __CASING__;
-// Smooth openstreetmap-carto VECTOR widths: linear interpolation between the per-zoom anchors,
-// so roads only ever widen as you zoom in (no raster "sawtooth"). This is how a vector OSM
-// style renders. It won't pixel-match the RASTER basemap between integer zooms (the raster
-// scales pre-rendered tiles), so evaluate on the "None" base (or a vector base like Positron).
-function interp(t, z, hiRate){
+const ZOOM_BOOST = __ZOOMBOOST__;       // zoom -> legibility multiplier over physical (interp; ->1.0 high z)
+const LANE_OVERLAP = __LANEOVERLAP__;   // two directions overlap this much at the centre (no seam, no gap)
+function interp(t, z, hiRate){          // linear interp between zoom anchors; past the top grows by hiRate
   const k = Object.keys(t).map(Number).sort((a,b)=>a-b);
   if(z<=k[0]) return t[k[0]];
   const last=k[k.length-1];
-  if(z>=last) return t[last]*Math.pow(hiRate, z-last);   // keep widening past the table top
+  if(z>=last) return t[last]*Math.pow(hiRate, z-last);
   for(let i=0;i<k.length-1;i++) if(z<=k[i+1]){ const f=(z-k[i])/(k[i+1]-k[i]); return t[k[i]]+(t[k[i+1]]-t[k[i]])*f; }
   return t[last];
 }
+// metres-per-pixel at zoom z. MapLibre GL renders with 512px tiles, so its true scale is ONE zoom
+// finer than the classic 256-tile Web-Mercator formula -> divide by 2^(z+1), not 2^z. Getting this
+// wrong draws physical widths at HALF scale while the baked metre-offsets project at TRUE scale, so a
+// gap opens between the two directions of every two-way road. See docs/width-model.md (offset calc).
+function mppAt(z){ return 156543.03 * Math.cos(map.getCenter().lat*Math.PI/180) / Math.pow(2, z + 1); }
+// physical width of a road (metres `bm`) in pixels at zoom z; `isLane` (a two-way direction) adds the
+// slight centre overlap. zoom_boost stays flat (hiRate 1) above its top anchor = true physical scale.
+function widthPx(bm, z, isLane){ return (bm||0) / mppAt(z) * interp(ZOOM_BOOST, z, 1.0) * (isLane ? LANE_OVERLAP : 1); }
 const LINK_W = 0.6;   // ramps (*_link) drawn narrower than the through road, like OSM
 function fillW(f){
-  const g = f.properties.g;
-  const w = interp(FILL[g]||FILL.residential, map.getZoom(), HI_RATE[g]||1.55);
-  return f.properties.lk ? w*LINK_W : w;
+  let w = widthPx(f.properties.bm, map.getZoom(), f.properties.ln);
+  if(f.properties.lk) w *= LINK_W;   // ramps narrower
+  return w;
 }
 // casing as a ratio of fill (so the outline scales with the road, incl. overzoom)
 function casW(f){ return f.properties.cc ? fillW(f) * (CASING_RATIO[f.properties.g]||1.3) : 0; }
@@ -588,6 +631,8 @@ function showInfo(o){
   const p = o.properties;
   i.style.display = "block";
   i.innerHTML = `<b>${p.nm||"(unnamed)"}</b><br>class: ${p.hw}<br>length: ${p.len==null?"?":p.len+" m"}`
+    + `<br>width: ${p.bm==null?"?":p.bm+" m/dir"} (class-fixed)${p.ow?" · one-way":""}`
+    + `<br><span style="color:#888;font-size:11px">OSM lanes: ${p.lanes==null?"untagged":p.lanes+" total"} (not used)</span>`
     + `<br>modes: ${modesStr(p)||"—"}<br><span style="color:#888;font-size:11px">edge_id ${p.eid}</span>`;
 }
 
@@ -636,7 +681,7 @@ function draw(){
   // smaller of the two fits; 0 => doesn't fit yet at this zoom -> hidden.
   const fontFor = f => {
     const lenFont = 0.9 * (f.properties.len / mpp) / (f.properties.nm.length * GLYPH);   // along length
-    const wpx = interp(FILL[f.properties.g]||FILL.residential, z, HI_RATE[f.properties.g]||1.55);
+    const wpx = widthPx(f.properties.bm, z, false);   // painted road width (bm = both directions if two-way)
     const fs = Math.min(lenFont, wpx * WK);                                               // across width
     return fs >= MINF ? Math.min(fs, MAXF) : 0;
   };
@@ -675,7 +720,7 @@ function draw(){
   if(S.arrows && z >= __ARROWMINZ__){   // oneway arrows: must fit the road WIDTH (hidden/scaled on thin
     const tM = __ARROWSPACING__ * mpp;                   // roads), grid-deduped to ~spacing_px, off names
     const AMIN = Math.min(3.5, __ARROWSIZE__);           // hide arrows where the road is thinner than this (px)
-    const awid = f => interp(FILL[f.properties.g]||FILL.service, z, HI_RATE[f.properties.g]||1.55);
+    const awid = f => widthPx(f.properties.bm, z, false);   // physical width of the (one-way) road
     const seen = new Set();                              // keep one arrow per tM grid cell (global)
     let data = ARROWS.filter(f => {
       if(awid(f) < AMIN) return false;                   // road too thin to carry an arrow at this zoom
