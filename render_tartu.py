@@ -46,6 +46,11 @@ def load(table, name, kind, where=None, centroid=False, bearing=False):
         # preserve_topology=True: simplify vertices but NEVER collapse a small polygon to empty
         # (preserve_topology=False was dropping ~170 tiny landcover/garden patches from the map).
         gdf["geometry"] = gdf.geometry.simplify(2e-5, preserve_topology=True)
+    if len(gdf) > 1 and kind == "polygon":
+        # draw LARGEST first (bottom): a big landuse=residential polygon must sit UNDER the smaller,
+        # more-specific landcover nested in it (parks/grass/forest), else it paints over and hides them.
+        gdf = (gdf.assign(_a=gdf.geometry.area).sort_values("_a", ascending=False)
+                  .drop(columns="_a").reset_index(drop=True))
     return Layer(name, gdf, kind)
 
 
