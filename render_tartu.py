@@ -20,11 +20,10 @@ import shapely.wkt as wkt
 
 from mapstyle import merge_modes, render_merge
 from mapstyle.layers import Layer
+from mapstyle.style import load_style
 
 DB = sys.argv[1] if len(sys.argv) > 1 else "../duckOSM/data/db/tartu.duckdb"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "render/debug_visualization"
-
-RAIL = "('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')"
 
 
 def load(table, name, kind, where=None, centroid=False, bearing=False):
@@ -78,23 +77,22 @@ def add_construction(merged):
     merged.gdf = gpd.GeoDataFrame(pd.concat([g, extra], ignore_index=True), crs="EPSG:4326")
 
 
+def feature_layers():
+    """Build the feature Layers listed under `features.layers` in the stylesheet, in draw order,
+    skipping any with `show: false`. WHICH features appear is now config-driven — edit
+    src/mapstyle/styles/osm_carto.yaml (features.layers), not this script."""
+    specs = (load_style().get("features") or {}).get("layers") or []
+    out = []
+    for s in specs:
+        if not s.get("show", True):
+            continue
+        out.append(load(s["table"], s["name"], s["kind"], where=s.get("where"),
+                        centroid=s.get("centroid", False), bearing=s.get("bearing", False)))
+    return out
+
+
 merged = merge_modes(DB)                                    # roads: names / arrows / per-zoom widths
 add_construction(merged)                                    # + highway=construction as grey real roads
-feats = [
-    load("land",            "landcover",       "polygon"),
-    load("water_polygons",  "water",           "polygon"),    # incl. the Emajõgi river (smart clip)
-    load("water_lines",     "waterways",       "line"),
-    load("buildings",       "buildings",       "polygon"),
-    load("streets",         "railways",        "line",    where=f"kind IN {RAIL}"),
-    load("sites",           "parking",         "polygon", where="kind = 'parking'"),         # parking AREA
-    load("sites",           "parking_p",       "point",   where="kind = 'parking'", centroid=True),  # P sign
-    load("sites",           "bus_station",     "polygon", where="kind = 'bus_station'"),      # bus terminal footprint
-    load("sites",           "platform",        "polygon", where="kind = 'platform'"),         # transit platform footprints
-    load("traffic",         "traffic_signals", "point",   where="kind = 'traffic_signals'"),
-    load("traffic",         "crossings",       "point",   where="kind = 'crossing'", bearing=True),
-    load("public_transport", "bus_stations",   "point",   where="kind = 'bus_stop'"),
-    load("public_transport", "train_stations", "point",   where="kind IN ('station','halt')"),
-    load("pois",            "bicycle",         "point",   where="kind = 'bicycle_rental'"),
-]
+feats = feature_layers()                                    # base-map layers — config-driven (features.layers)
 render_merge(merged, OUT, basemap="none", overlays=("names", "arrows"), feature_layers=feats)
 print(f"rendered -> {OUT}/index.html   (serve: python {OUT}/serve.py)")

@@ -56,6 +56,9 @@ icons + oriented crossings) — a good copy-paste starting point.
 All feature-layer look lives in `src/mapstyle/styles/osm_carto.yaml` → `features:` — edit and
 re-render, no code:
 
+- `features.layers` — **which** feature layers load + show, in draw order (`table` / `kind` / optional
+  `where` / `centroid` / `bearing`, and a `show` flag). `render_tartu.py` builds the layers from this
+  list — set `show: false` to drop one (no code edit). Styling for each is keyed by `name` below.
 - `features.areas` — polygon fills (per layer, or per `class` for `landcover`) + outline + opacity.
 - `features.lines` — line colour / width / dash.
 - `features.points` — per category: `color` (tints the SVG), `size` (multiplier), `icon` (an SVG
