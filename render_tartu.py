@@ -12,18 +12,20 @@ Usage:
 Then: python <out_dir>/serve.py 8080   ->  http://localhost:8080/index.html
 """
 import sys
+from pathlib import Path
 
 import duckdb
 import geopandas as gpd
 import pandas as pd
 import shapely.wkt as wkt
+import yaml
 
 from mapstyle import merge_modes, render_merge
 from mapstyle.layers import Layer
-from mapstyle.style import load_style
 
 DB = sys.argv[1] if len(sys.argv) > 1 else "../duckOSM/data/db/tartu.duckdb"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "render/debug_visualization"
+LAYERS = Path(__file__).parent / "layers.yaml"   # WHICH feature layers to show (config, separate from style)
 
 
 def load(table, name, kind, where=None, centroid=False, bearing=False):
@@ -78,10 +80,10 @@ def add_construction(merged):
 
 
 def feature_layers():
-    """Build the feature Layers listed under `features.layers` in the stylesheet, in draw order,
-    skipping any with `show: false`. WHICH features appear is now config-driven — edit
-    src/mapstyle/styles/osm_carto.yaml (features.layers), not this script."""
-    specs = (load_style().get("features") or {}).get("layers") or []
+    """Build the feature Layers listed in layers.yaml, in draw order, skipping any with `show: false`.
+    WHICH features appear is config-driven — edit layers.yaml (separate from the visual style), not
+    this script."""
+    specs = (yaml.safe_load(LAYERS.read_text()) or {}).get("layers") or []
     out = []
     for s in specs:
         if not s.get("show", True):

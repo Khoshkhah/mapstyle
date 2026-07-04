@@ -149,28 +149,6 @@ names:
 # All colours / sizes / icons live HERE, not in code — edit and re-render. Keyed by the layer name
 # passed to load_layer. Area fills may key by feature `class`; `default` catches the rest.
 features:
-  # WHICH feature layers to load + show on the map, in DRAW ORDER (first = bottom). Set show: false to
-  # drop a layer entirely (it also disappears from the debug viewer's Features checkboxes). `table` =
-  # the duckOSM features.<table> to read; `kind` = polygon|line|point; `where` = optional SQL filter;
-  # `centroid: true` = use the polygon centroid (a point from an area, e.g. the parking "P"); `bearing:
-  # true` = carry the road bearing (oriented crossings). STYLING for each `name` is under
-  # features.areas / lines / points below.
-  layers:
-    - {name: landcover,       table: land,             kind: polygon, show: true}
-    - {name: water,           table: water_polygons,   kind: polygon, show: true}   # incl. the river (smart clip)
-    - {name: waterways,       table: water_lines,      kind: line,    show: true}
-    - {name: buildings,       table: buildings,        kind: polygon, show: true}
-    - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')"}
-    - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'"}
-    - {name: parking_p,       table: sites,            kind: point,   show: true, where: "kind = 'parking'", centroid: true}   # blue "P"
-    - {name: bus_station,     table: sites,            kind: polygon, show: true, where: "kind = 'bus_station'"}
-    - {name: platform,        table: sites,            kind: polygon, show: true, where: "kind = 'platform'"}
-    - {name: traffic_signals, table: traffic,          kind: point,   show: true, where: "kind = 'traffic_signals'"}
-    - {name: crossings,       table: traffic,          kind: point,   show: true, where: "kind = 'crossing'", bearing: true}
-    - {name: bus_stations,    table: public_transport, kind: point,   show: true, where: "kind = 'bus_stop'"}
-    - {name: train_stations,  table: public_transport, kind: point,   show: true, where: "kind IN ('station','halt')"}
-    - {name: bicycle,         table: pois,             kind: point,   show: true, where: "kind = 'bicycle_rental'"}
-
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
     buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9,  min_zoom: 15}

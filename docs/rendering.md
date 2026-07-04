@@ -35,8 +35,11 @@ zoom readout, click a road to see its edge_id / lanes / physical width):
 - **Feature layers** (`feature_layers=[...]`) — water / land / buildings / rail drawn *under* the
   roads, and **point categories** (parking, traffic signals, bus / bicycle / train stations,
   crossings) drawn *on top* as **SVG icons** from `src/mapstyle/icons/`.
-- Everything about the features is **config-driven** in `styles/osm_carto.yaml` under `features:`
-  (see below) — colours, sizes, icons, per-zoom sizing, per-category `min_zoom`.
+- **Which** layers load + show is config-driven in **`layers.yaml`** (draw order, per-layer `show`
+  flag, `table`/`kind`/`where`/`centroid`/`bearing`) — `render_tartu.py` reads it; set `show: false`
+  to drop one, no code edit. Kept separate from the *look*.
+- The features' **look** is config-driven in `styles/osm_carto.yaml` under `features:` (see below) —
+  colours, sizes, icons, per-zoom sizing, per-category `min_zoom`.
 
 ```python
 from mapstyle import merge_modes, render_merge, load_layer
@@ -56,9 +59,6 @@ icons + oriented crossings) — a good copy-paste starting point.
 All feature-layer look lives in `src/mapstyle/styles/osm_carto.yaml` → `features:` — edit and
 re-render, no code:
 
-- `features.layers` — **which** feature layers load + show, in draw order (`table` / `kind` / optional
-  `where` / `centroid` / `bearing`, and a `show` flag). `render_tartu.py` builds the layers from this
-  list — set `show: false` to drop one (no code edit). Styling for each is keyed by `name` below.
 - `features.areas` — polygon fills (per layer, or per `class` for `landcover`) + outline + opacity.
 - `features.lines` — line colour / width / dash.
 - `features.points` — per category: `color` (tints the SVG), `size` (multiplier), `icon` (an SVG
