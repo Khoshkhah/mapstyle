@@ -84,6 +84,7 @@ names:
   glyph:       0.64      # average glyph width as a fraction of font size (text-width estimate)
   repeat_px:   300       # minimum on-screen gap between repeats of the same name
   sample_m:    80        # spacing of label candidates along each road (bake density)
+  # color:     "#8a8a8a" # label colour; when unset it follows the oneway arrows' colour (arrows.color)
 
 # ---- FEATURES ------------------------------------------------------------------------------------
 # Base-map feature-layer styling (everything render_merge draws under the roads via feature_layers).
@@ -91,9 +92,11 @@ names:
 # passed to load_layer. Area fills may key by feature `class`; `default` catches the rest.
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
-    water:      {fill: "#aad3df", outline: null,      opacity: 1.0}
-    buildings:  {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9}
-    parking:    {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7}
+    water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
+    buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9}
+    parking:     {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7}
+    bus_station: {fill: "#d6e4f0", outline: "#9db8d2", opacity: 0.85}  # bus terminal footprint (light blue, matches the bus icon)
+    platform:    {fill: "#bbbbbb", outline: "#969696", opacity: 0.9}   # transit platform (osm-carto grey)
     landcover:                       # by OSM class (landuse/natural/leisure), else `default`
       forest: "#add19e"
       wood: "#add19e"

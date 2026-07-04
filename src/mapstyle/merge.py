@@ -436,6 +436,9 @@ def render_merge(layer, out_dir, basemap="osm", title="mapstyle — merged modes
             .replace("__NAMEWK__", str(nstyle.get("width_ratio", 1.25)))
             .replace("__NAMEGLYPH__", str(nstyle.get("glyph", 0.64)))
             .replace("__NAMEREPEAT__", str(nstyle.get("repeat_px", 300)))
+            # street-name label colour: default to the arrow colour (names read as the same subtle
+            # grey as the oneway arrows), overridable via names.color.
+            .replace("__NAMECOLOR__", str(_rgb(nstyle.get("color", astyle.get("color", "#8a8a8a")))))
             .replace("__ARROWS__", "true" if "arrows" in overlays else "false")
             .replace("__NAMES__", "true" if "names" in overlays else "false")
             .replace("__ARROWSCHK__", "checked" if "arrows" in overlays else "")
@@ -531,7 +534,7 @@ function featureLayers(which){                             // "bg"=polygons/line
   return out;
 }
 
-const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:__ZOOM__});
+const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:__ZOOM__, hash:true});
 const overlay = new deck.MapboxOverlay({interleaved:false, layers:[]});
 map.addControl(overlay); map.addControl(new maplibregl.NavigationControl());
 const DASH = deck.PathStyleExtension ? [new deck.PathStyleExtension({dash:true})] : [];
@@ -691,7 +694,7 @@ function draw(){
   if(nameFit.length){           // road-name labels (white halo), each sized to fill its road
     layers.push(new deck.TextLayer({id:"names", data: nameFit, characterSet:"auto",
       getPosition: f => f.geometry.coordinates, getText: f => f.properties.nm, getAngle: f => f.properties.na,
-      sizeUnits:"pixels", getSize: f => f.__fs, getColor:[30,30,30], billboard:true,
+      sizeUnits:"pixels", getSize: f => f.__fs, getColor:__NAMECOLOR__, billboard:true,
       fontSettings:{sdf:true}, outlineWidth: 3, outlineColor:[255,255,255],
       getTextAnchor:"middle", getAlignmentBaseline:"center",
       updateTriggers:{getSize:[zt]}}));

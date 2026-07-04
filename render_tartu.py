@@ -54,6 +54,8 @@ feats = [
     load("streets",         "railways",        "line",    where=f"kind IN {RAIL}"),
     load("sites",           "parking",         "polygon", where="kind = 'parking'"),         # parking AREA
     load("sites",           "parking_p",       "point",   where="kind = 'parking'", centroid=True),  # P sign
+    load("sites",           "bus_station",     "polygon", where="kind = 'bus_station'"),      # bus terminal footprint
+    load("sites",           "platform",        "polygon", where="kind = 'platform'"),         # transit platform footprints
     load("traffic",         "traffic_signals", "point",   where="kind = 'traffic_signals'"),
     load("traffic",         "crossings",       "point",   where="kind = 'crossing'", bearing=True),
     load("public_transport", "bus_stations",   "point",   where="kind = 'bus_stop'"),
