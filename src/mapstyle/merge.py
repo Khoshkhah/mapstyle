@@ -517,6 +517,9 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
     # Interactive panel rows (colour-by / mode + feature toggles / overlays / legend). In the lean BASE
     # viewer (interactive=False) these are omitted — only the base-layer selector remains.
     panel_rows = "" if not interactive else """
+  <b>Find edge_id</b>
+  <input id="findedge" type="text" placeholder="paste edge_id + Enter" autocomplete="off"
+         style="width:100%;box-sizing:border-box;font:12px monospace;padding:3px 5px">
   <b>Color by</b>
   <label><input type="radio" name="cmode" value="osm" checked> OSM class</label>
   <label><input type="radio" name="cmode" value="modes"> mode combination</label>
@@ -591,6 +594,7 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             .replace("__ROUTEMULT__", str(rcfg.get("width_mult", 1.25)))
             .replace("__ROUTEHALOPX__", str(rcfg.get("halo_px", 3)))
             .replace("__ROUTEMINPX__", str(rcfg.get("min_px", 3.5)))
+            .replace("__ROUTEACCESSPX__", str(rcfg.get("access_px", 2.5)))
             .replace("__TITLE__", title))
     index = out / "index.html"
     index.write_text(html)
@@ -648,8 +652,9 @@ let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
 let ROUTE = {features:[]};              // optional shortest-path overlay (data/route.geojson), drawn on top
 let BM_BY_EID = {};                     // edge_id -> baked base metres, so the route reuses the ROAD width per zoom
 let GEOM_BY_EID = {};                   // edge_id -> the base map's DIRECTIONAL (offset) geometry, for the route
+let FOUND = null;                       // road feature located via the "Find edge_id" box (highlighted on top)
 const ROUTE_MODES=__ROUTEMODES__, ROUTE_HALO=__ROUTEHALO__, ROUTE_MULT=__ROUTEMULT__,
-      ROUTE_HALOPX=__ROUTEHALOPX__, ROUTE_MINPX=__ROUTEMINPX__;
+      ROUTE_HALOPX=__ROUTEHALOPX__, ROUTE_MINPX=__ROUTEMINPX__, ROUTE_ACCESSPX=__ROUTEACCESSPX__;
 const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
 const ICONSIZE = __ICONSIZE__, ICONHI = __ICONHI__, ICONOP = __ICONOP__;   // icon px-size by zoom (interp like roads.width)
 const PATTERN_ATLAS = "__PATTERNATLAS__", PATTERN_MAP = __PATTERNMAP__;    // landcover texture atlas (patterns.py) + name->box
@@ -761,14 +766,13 @@ function showInfo(o){
     const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
     const rows = Object.keys(tg).sort().map(k =>
       `<tr><td style="color:#888;padding-right:8px;vertical-align:top">${esc(k)}</td><td>${esc(tg[k])}</td></tr>`).join("");
-    const meta = [f.mode && ("mode: " + esc(f.mode)),
-                  f.speed_kmh != null && (f.speed_kmh + " km/h"),
-                  f.len_m != null && (Math.round(f.len_m) + " m")].filter(Boolean).join(" · ");
+    const extra = [f.speed_kmh != null && (f.speed_kmh + " km/h"),
+                   f.len_m != null && (Math.round(f.len_m) + " m")].filter(Boolean).join(" · ");
     i.innerHTML = `<b>${f.name ? esc(f.name) : "(unnamed)"}</b>`
+      + (f.mode ? `<br>mode: <b>${esc(f.mode)}</b>${extra ? " · " + extra : ""}` : "")
       + `<br><span style="color:#888;font-size:11px">${esc(f.layer)} · ${esc(f.class||"?")}</span>`
       + (f.edge_id != null ? `<br><span style="color:#888;font-size:11px">edge_id ${f.edge_id}</span>` : "")
       + (f.osm_id != null ? `<br><span style="color:#888;font-size:11px">osm_id ${f.osm_id}</span>` : "")
-      + (meta ? `<br><span style="color:#888;font-size:11px">${meta}</span>` : "")
       + (rows ? `<table style="margin-top:5px;font-size:11px;border-collapse:collapse">${rows}</table>` : "");
     return;
   }
@@ -908,21 +912,28 @@ function draw(){
     // so the highlight sits on the road at every zoom instead of a fixed pixel width. Colour + dash come
     // from the leg's mode (walk/cycle/drive/access). Geometry is the base map's DIRECTIONAL edge (below).
     const rmode = f => ROUTE_MODES[f.properties.mode] || ROUTE_MODES.driving || {color:[46,110,235,255]};
-    const rw = f => Math.max(ROUTE_MINPX, widthPx(BM_BY_EID[f.properties.eid] || 3, map.getZoom(), false) * ROUTE_MULT);
+    // off-network access legs are a thin FIXED line (they're not a road); everything else = road width per zoom.
+    const rw = f => f.properties.mode==="access" ? ROUTE_ACCESSPX
+                    : Math.max(ROUTE_MINPX, widthPx(BM_BY_EID[f.properties.eid] || 3, map.getZoom(), false) * ROUTE_MULT);
+    const rhalo = f => rw(f) + (f.properties.mode==="access" ? 1.5 : 2*ROUTE_HALOPX);
     layers.push(
       new deck.GeoJsonLayer({id:"route-halo", data:ROUTE, stroked:true, filled:false, lineWidthUnits:"pixels",
-        getLineWidth:f=>rw(f)+2*ROUTE_HALOPX, lineWidthMinPixels:ROUTE_MINPX+2*ROUTE_HALOPX, getLineColor:ROUTE_HALO,
+        getLineWidth:rhalo, lineWidthMinPixels:ROUTE_ACCESSPX+1.5, getLineColor:ROUTE_HALO,
         lineCapRounded:true, lineJointRounded:true, updateTriggers:{getLineWidth:[zt]}}),
       new deck.GeoJsonLayer({id:"route", data:ROUTE, stroked:true, filled:false,
         pickable:true, autoHighlight:true, highlightColor:[255,215,0,255], lineWidthUnits:"pixels",
         getLineWidth:rw, lineWidthMinPixels:ROUTE_MINPX, getLineColor:f=>rmode(f).color,
-        extensions:DASH, dashJustified:true, getDashArray:f=>rmode(f).dash||[0,0],
         lineCapRounded:true, lineJointRounded:true, onClick:info=>showInfo(info.object),
         updateTriggers:{getLineWidth:[zt]}}));
     const ends = [ROUTE.start && {p:ROUTE.start,c:[46,160,67]}, ROUTE.end && {p:ROUTE.end,c:[229,57,53]}].filter(Boolean);
     if(ends.length) layers.push(new deck.ScatterplotLayer({id:"route-ends", data:ends,
       getPosition:d=>d.p, getFillColor:d=>d.c, getRadius:7, radiusUnits:"pixels",
       stroked:true, getLineColor:[255,255,255,255], lineWidthMinPixels:2}));
+  }
+  if(FOUND){   // the edge located via "Find edge_id" — magenta highlight ON TOP (ignores min_zoom)
+    layers.push(new deck.GeoJsonLayer({id:"found", data:{type:"FeatureCollection", features:[FOUND]},
+      stroked:true, filled:false, lineWidthUnits:"pixels", getLineWidth:6, lineWidthMinPixels:6,
+      getLineColor:[255,0,200,255], lineCapRounded:true, lineJointRounded:true}));
   }
   overlay.setProps({layers});
 }
@@ -953,6 +964,18 @@ if(blCtrl){
   document.addEventListener("click", e => { if(!blCtrl.contains(e.target)) blCtrl.classList.remove("open"); });
 }
 if(INTERACTIVE){   // panel toggles only exist in the debug viewer; the base viewer keeps just the selector
+  const fe = document.getElementById("findedge");   // locate an edge by its edge_id (paste + Enter)
+  if(fe) fe.addEventListener("change", () => {
+    const id = fe.value.trim();
+    const f = id && FEATURES.find(x => x.properties.eid === id);
+    if(!f){ FOUND = null; fe.style.background = id ? "#ffe0e0" : ""; draw(); return; }
+    fe.style.background = ""; FOUND = f; showInfo(f);
+    const cs = f.geometry.coordinates.flat(Infinity);
+    const xs = cs.filter((_,i)=>i%2===0), ys = cs.filter((_,i)=>i%2===1);
+    map.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]],
+                  {padding:140, maxZoom:19, duration:700});
+    map.once("moveend", draw); draw();
+  });
   ["md","mw","mc"].forEach(id => document.getElementById(id).onchange = e => { S[id]=e.target.checked; refilter(); });
   document.querySelectorAll('input[name=cmode]').forEach(r => r.onchange = e => { S.cmode=e.target.value; draw(); });
   ["arrows","names","boundary"].forEach(id => { const el=document.getElementById(id); if(el) el.onchange = e => { S[id]=e.target.checked; draw(); }; });

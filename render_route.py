@@ -61,12 +61,14 @@ def main():
         return
 
     pairs = res["edges"]        # [(mode, edge_id), …] in path order
-    # hydrate each mode's edges once -> geometry + osm attrs + per-edge cost, keyed by (mode, edge_id)
+    # hydrate each mode's edges once -> geometry + osm attrs + tags + per-edge cost, keyed by (mode, edge_id).
+    # Tags come from the per-mode `<mode>.ways` table (its `tags` column is the OSM tag map carried through
+    # by RoadFilter) — the app reads the built mode tables, never `raw.*`.
     by_key = {}
     for mode in set(m for m, _ in pairs):
         eids = [e for m, e in pairs if m == mode]
         rows = con.execute(f"""
-            SELECT e.edge_id, e.osm_id, e.highway, e.name, ROUND(e.length_m, 1), e.cost_s,
+            SELECT e.edge_id, e.osm_id, e.highway, ROUND(e.length_m, 1), e.cost_s,
                    to_json(w.tags), ST_AsGeoJSON(e.geometry)
             FROM {mode}.edges e LEFT JOIN {mode}.ways w ON e.osm_id = w.osm_id
             WHERE e.edge_id IN ({','.join(map(str, eids))})
@@ -96,17 +98,19 @@ def main():
         r = by_key.get((mode, eid))
         if not r:
             continue
-        _, osm_id, hw, name, length_m, cost_s, tags, geo = r
+        _, osm_id, hw, length_m, cost_s, tags_json, geo = r
         length_m = length_m or 0.0
         cost_s = float(cost_s) if cost_s else 0.0
         speed = round(length_m / cost_s * 3.6, 1) if cost_s else None   # km/h
         cum += length_m
         by_mode.setdefault(mode, [0.0, 0.0]); by_mode[mode][0] += length_m; by_mode[mode][1] += cost_s
-        info = {"layer": "route", "edge_id": eid, "osm_id": osm_id, "mode": mode, "class": hw,
-                "name": name or "", "len_m": length_m, "speed_kmh": speed,
-                "tags": json.loads(tags) if tags else {}}
+        tags = json.loads(tags_json) if tags_json else {}             # OSM tags via the mode's ways table
+        # edge_id is a BIGINT content hash > 2^53 — carry it as a STRING (matches roads_merged's `eid`)
+        # so it survives JS number precision AND the GEOM_BY_EID directional-geometry lookup keys.
+        info = {"layer": "route", "edge_id": str(eid), "osm_id": osm_id, "mode": mode, "class": hw,
+                "name": tags.get("name", ""), "len_m": length_m, "speed_kmh": speed, "tags": tags}
         feats.append({"type": "Feature", "geometry": json.loads(geo),
-                      "properties": {"eid": eid, "mode": mode, "seq": seq, "len_m": length_m,
+                      "properties": {"eid": str(eid), "mode": mode, "seq": seq, "len_m": length_m,
                                      "cum_m": round(cum, 1), "speed_kmh": speed, "_i": info}})
     add_access((dx, dy), end)                   # from the network to the clicked end
 
