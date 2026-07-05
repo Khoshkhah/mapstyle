@@ -59,6 +59,28 @@ oneway arrows** are tunable in
 `roads.colors` / `arrows.*`) — edit and re-render. Full architecture and decisions:
 [`docs/PROCESS.md`](docs/PROCESS.md).
 
+### Base map vs debug viewer — `interactive=`
+
+`render_merge` produces two flavours of the **same** baked base map, controlled by `interactive=`:
+
+| `interactive` | viewer | what you get |
+| --- | --- | --- |
+| `False` (default) | **base map** | Lean & fast: the styled base map (roads + features + names/arrows) as a **static, display-only** backdrop. **No picking, no hover, no info panel** — the panel has only the **Base layer** selector. Nothing per-feature is embedded, so it stays light. Use it as a backdrop under your own overlays (e.g. a routing layer). |
+| `True` | **debug viewer** | Everything interactive: **hover-highlight**, **click-to-inspect** (an info panel with each object's `osm_id` / class / name / full OSM tags), per-mode and per-feature **toggles**, colour-by-mode, and the legend. |
+
+```python
+render_merge(merged, "render/basemap")                     # base map (default) — fast static backdrop
+render_merge(merged, "render/debug", interactive=True)     # full inspectable debug viewer
+```
+
+The bundled Tartu driver defaults to the **base map** and takes `--debug` for the inspectable one:
+
+```bash
+python render_tartu.py                 # -> render/basemap (lean base map)
+python render_tartu.py --debug         # -> render/debug_visualization (hover / click / toggles)
+python render/basemap/serve.py         # -> http://localhost:8080/index.html
+```
+
 ## Status
 
 Merged multi-modal viewer with OSM-Carto road styling — per-zoom widths, colors, and oneway

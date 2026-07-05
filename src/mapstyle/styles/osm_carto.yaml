@@ -29,9 +29,9 @@ roads:
     #   one lane shared both ways).
     lanes:
       default:       1
-      major:         2
-      trunk:         2
-      primary:       1.5
+      major:         1
+      trunk:         1
+      primary:       1
       secondary:     1
       tertiary:      1
       residential:   1
@@ -151,6 +151,21 @@ names:
   sample_m:    80        # spacing of label candidates along each road (bake density)
   # color:     "#8a8a8a" # label colour; when unset it follows the oneway arrows' colour (arrows.color)
   halo:        0         # white halo/shadow width (px) behind each name; 0 = no shadow
+
+# shortest-path OVERLAY (data/route.geojson, drawn on top). A route is a HIGHLIGHT of real road edges,
+# so it is sized with the SAME per-zoom physical width model as the roads: each path edge reuses its own
+# baked `bm` (base metres) and the viewer's width_px(bm, zoom) — the highlight tracks the road width at
+# every zoom instead of a fixed pixel width. Only the colours + a couple of multipliers live here.
+route:
+  modes:                 # per-LEG-mode colour (+ optional dash [on,off] px). A trip = access walk ->
+    driving: {color: "#2e6eeb"}                    # (walk|cycle|drive)* -> access walk.
+    cycling: {color: "#16a085"}
+    walking: {color: "#e67e22", dash: [3, 2]}
+    access:  {color: "#e67e22", dash: [1, 3]}      # straight off-network walk (point <-> nearest road)
+  halo:       "#ffffff"  # halo/casing colour under the path (for contrast on any basemap)
+  width_mult: 1.25       # path width = road width (width_px) x this — slightly overshoots the road
+  halo_px:    3          # extra px of halo on EACH side beyond the path
+  min_px:     3.5        # never thinner than this, so the path stays visible when zoomed out
 
 # ---- FEATURES ------------------------------------------------------------------------------------
 # Base-map feature-layer styling (everything render_merge draws under the roads via feature_layers).

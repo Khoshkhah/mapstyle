@@ -8,8 +8,11 @@ No duckmap dependency.
 
 Build the db once with:  (in duckOSM)  python main.py build --config config/tartu.yaml
 Usage:
-    python render_tartu.py [duckosm_db.duckdb] [out_dir]
+    python render_tartu.py [duckosm_db.duckdb] [out_dir]     # lean fast BASE map (default)
+    python render_tartu.py --debug                           # full inspectable viewer (hover/click/info)
 Then: python <out_dir>/serve.py 8080   ->  http://localhost:8080/index.html
+
+Default out_dir: render/basemap (base) or render/debug_visualization (--debug).
 """
 import sys
 from pathlib import Path
@@ -23,8 +26,11 @@ import yaml
 from mapstyle import merge_modes, render_merge
 from mapstyle.layers import Layer
 
-DB = sys.argv[1] if len(sys.argv) > 1 else "../duckOSM/data/db/tartu.duckdb"
-OUT = sys.argv[2] if len(sys.argv) > 2 else "render/debug_visualization"
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+DEBUG = "--debug" in sys.argv    # --debug = full inspectable viewer (hover/click/info + toggles);
+                                 # default = lean fast BASE map (base-layer selector only, no picking)
+DB = _args[0] if len(_args) > 0 else "../duckOSM/data/db/tartu.duckdb"
+OUT = _args[1] if len(_args) > 1 else ("render/debug_visualization" if DEBUG else "render/basemap")
 LAYERS = Path(__file__).parent / "layers.yaml"   # WHICH feature layers to show (config, separate from style)
 
 
@@ -124,5 +130,6 @@ def feature_layers():
 merged = merge_modes(DB)                                    # roads: names / arrows / per-zoom widths
 add_construction(merged)                                    # + highway=construction as grey real roads
 feats = feature_layers()                                    # base-map layers — config-driven (features.layers)
-render_merge(merged, OUT, basemap="none", overlays=("names", "arrows"), feature_layers=feats)
-print(f"rendered -> {OUT}/index.html   (serve: python {OUT}/serve.py)")
+render_merge(merged, OUT, basemap="none", overlays=("names", "arrows"), feature_layers=feats,
+             interactive=DEBUG, title=("Debug Visualization" if DEBUG else "Map"))
+print(f"rendered {'debug' if DEBUG else 'base'} map -> {OUT}/index.html   (serve: python {OUT}/serve.py)")

@@ -108,12 +108,13 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
     con = duckdb.connect(db, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
     union = " UNION ALL ".join(
-        f"SELECT e.edge_id, e.highway AS class, e.geometry AS geom, e.name, e.length_m, "
+        f"SELECT e.edge_id, e.osm_id, e.highway AS class, e.geometry AS geom, e.name, e.length_m, "
         f"e.layer, e.bridge, e.tunnel, e.service, e.oneway, "
         f"TRY_CAST(w.tags['lanes'] AS INTEGER) AS lanes, "   # raw OSM TOTAL lanes tag (info only; width is class-fixed)
         f"'{m}' AS mode FROM {m}.edges e LEFT JOIN {m}.ways w ON e.osm_id = w.osm_id" for m in modes)
     rows = con.execute(f"""
         SELECT edge_id,
+               any_value(osm_id)            AS osm_id,
                any_value(class)             AS class,
                ST_AsText(any_value(geom))   AS wkt,
                any_value(name)              AS name,
@@ -132,13 +133,13 @@ def merge_modes(db, modes=("driving", "walking", "cycling")):
     """).fetchall()
     con.close()
 
-    rec = {"edge_id": [], "highway": [], "name": [], "length_m": [],
+    rec = {"edge_id": [], "osm_id": [], "highway": [], "name": [], "length_m": [],
            "layer": [], "bridge": [], "tunnel": [], "service": [], "oneway": [], "lanes": [],
            "driving": [], "walking": [], "cycling": [], "combo": []}
     geoms = []
-    for eid, cls, geom_wkt, nm, length_m, lyr, brg, tun, svc, ow, lns, is_d, is_w, is_c in rows:
+    for eid, osm_id, cls, geom_wkt, nm, length_m, lyr, brg, tun, svc, ow, lns, is_d, is_w, is_c in rows:
         combo = "".join(k for k, v in (("d", is_d), ("w", is_w), ("c", is_c)) if v)
-        rec["edge_id"].append(eid); rec["highway"].append(cls)
+        rec["edge_id"].append(eid); rec["osm_id"].append(osm_id); rec["highway"].append(cls)
         rec["name"].append(nm); rec["length_m"].append(length_m)
         rec["layer"].append(lyr); rec["bridge"].append(brg); rec["tunnel"].append(tun)
         rec["service"].append(svc); rec["oneway"].append(bool(ow)); rec["lanes"].append(lns)
@@ -300,8 +301,14 @@ def _load_boundary(src):
 
 
 def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", overlays=(),
-                 boundary=None, feature_layers=None, zoom=13, center=None):
+                 boundary=None, feature_layers=None, zoom=13, center=None, interactive=True):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
+
+    interactive: when True (default) the full DEBUG viewer — hover-highlight, click-to-inspect
+    (info panel), per-mode / per-feature toggles, colour-by-mode, legend. When False, a lean fast
+    BASE viewer — the same baked base map (roads + features + names/arrows), but NO picking / hover /
+    info and NO panel controls except the base-layer selector. Use False as a light backdrop for
+    overlays (e.g. a routing layer drawn on top).
 
     feature_layers: optional list of mapstyle ``Layer`` (water/land/buildings/…) drawn UNDER the
     roads as separate, toggleable base-map layers — so the same viewer keeps the per-zoom road
@@ -332,8 +339,8 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
     con_flags = gdf["is_construction"] if "is_construction" in gdf else [False] * len(gdf)
     lane_flags = gdf["lane"] if "lane" in gdf else [False] * len(gdf)
     bm_vals = gdf["bm"] if "bm" in gdf else [None] * len(gdf)
-    for geom, eid, hw, nm, length_m, lyr, brg, tun, svc, ow, lns, combo, d, w, c, iscon, lane, bmv in zip(
-            gdf.geometry, gdf.edge_id, gdf.highway, gdf.name, gdf.length_m,
+    for geom, eid, oid, hw, nm, length_m, lyr, brg, tun, svc, ow, lns, combo, d, w, c, iscon, lane, bmv in zip(
+            gdf.geometry, gdf.edge_id, gdf.get("osm_id", [None] * len(gdf)), gdf.highway, gdf.name, gdf.length_m,
             gdf.layer, gdf.bridge, gdf.tunnel, gdf.service, gdf.oneway, gdf.get("lanes", [None] * len(gdf)),
             gdf.combo, gdf.driving, gdf.walking, gdf.cycling, con_flags, lane_flags, bm_vals):
         if geom is None or geom.is_empty:
@@ -366,7 +373,7 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             "dash": list(dash) if dash else None,
             "cb": _rgb("#bdbdbd") if iscon else _rgb(COMBO_COLOR.get(combo, "#999999")),
             "md": bool(d), "mw": bool(w), "mc": bool(c),
-            "eid": str(eid), "hw": hw, "nm": nm,
+            "eid": str(eid), "oid": int(oid) if oid == oid and oid is not None else None, "hw": hw, "nm": nm,
             "len": round(length_m) if length_m else None,
             # draw order: class rank + 10*layer (bridges up, tunnels down) — osm2pgsql z_order
             "z": road_z(hw) + 10 * layer, "g": g,
@@ -504,7 +511,47 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
         pat_atlas_url, pat_map_json = "data/pattern_atlas.png", json.dumps(pmap)
 
     rstyle = _style["roads"]
+    rcfg = _style.get("route") or {}   # shortest-path overlay colours + per-zoom width multipliers
+    rmodes = {m: {"color": _rgb(v.get("color", "#2e6eeb")) + [255], "dash": v.get("dash")}
+              for m, v in (rcfg.get("modes") or {}).items()}   # per-leg-mode colour + dash
+    # Interactive panel rows (colour-by / mode + feature toggles / overlays / legend). In the lean BASE
+    # viewer (interactive=False) these are omitted — only the base-layer selector remains.
+    panel_rows = "" if not interactive else """
+  <b>Color by</b>
+  <label><input type="radio" name="cmode" value="osm" checked> OSM class</label>
+  <label><input type="radio" name="cmode" value="modes"> mode combination</label>
+  <b>Show modes</b>
+  <label><input type="checkbox" id="md" checked> driving</label>
+  <label><input type="checkbox" id="mw" checked> walking</label>
+  <label><input type="checkbox" id="mc" checked> cycling</label>
+  <b>Overlays</b>
+  <label><input type="checkbox" id="arrows" __ARROWSCHK__> oneway arrows (z≥__ARROWMINZ__)</label>
+  <label><input type="checkbox" id="names" __NAMESCHK__> street names (by class)</label>
+  <b>Features</b>__FEATUREROWS__
+  __BOUNDROW__
+  <b>Legend (modes)</b><div id="legend">__LEGEND__</div>"""
+    # DEBUG viewer: top-left panel (holds the base-layer <select id="basemap">) + a bottom-right zoom
+    # readout. BASE viewer: neither — instead a compact base-layer icon control in the bottom-right.
+    panel = "" if not interactive else (
+        '<div id="panel">\n'
+        '  <b style="font-size:15px;border-bottom:1px solid #ddd;padding-bottom:5px;margin:0 0 8px">__TITLE__</b>\n'
+        '  <b>Base layer</b><select id="basemap"></select>__PANELROWS__\n'
+        '</div>')
+    zoombox = '<div id="zoom">zoom —</div>' if interactive else ""
+    baselayer_ctrl = "" if interactive else (
+        '<div id="baselayer-ctrl">\n'
+        '  <div id="baselayer-menu"></div>\n'
+        '  <button id="baselayer-btn" title="Base layer">'
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2" '
+        'stroke-linejoin="round" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/>'
+        '<polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></button>\n'
+        '</div>')
     html = (_TEMPLATE
+            .replace("__PANEL__", panel)
+            .replace("__ZOOMBOX__", zoombox)
+            .replace("__BASELAYERCTRL__", baselayer_ctrl)
+            .replace("__PANELROWS__", panel_rows)
+            .replace("__INTERACTIVE__", "true" if interactive else "false")
             .replace("__PATTERNATLAS__", pat_atlas_url)
             .replace("__PATTERNMAP__", pat_map_json)
             .replace("__FEATUREDEFS__", json.dumps(feature_defs))
@@ -539,6 +586,11 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             .replace("__BASEMAPS__", json.dumps(BASEMAPS))
             .replace("__DEFAULT_BM__", default_bm)
             .replace("__LEGEND__", legend)
+            .replace("__ROUTEMODES__", json.dumps(rmodes))
+            .replace("__ROUTEHALO__", json.dumps(_rgb(rcfg.get("halo", "#ffffff")) + [235]))
+            .replace("__ROUTEMULT__", str(rcfg.get("width_mult", 1.25)))
+            .replace("__ROUTEHALOPX__", str(rcfg.get("halo_px", 3)))
+            .replace("__ROUTEMINPX__", str(rcfg.get("min_px", 3.5)))
             .replace("__TITLE__", title))
     index = out / "index.html"
     index.write_text(html)
@@ -563,31 +615,41 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
     max-width:300px;max-height:55vh;overflow-y:auto;display:none}
   #zoom{position:absolute;bottom:14px;right:10px;z-index:2;background:#fff;padding:5px 10px;
     border-radius:6px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  /* base-layer icon control (bottom-right, base viewer) */
+  #baselayer-ctrl{position:absolute;bottom:14px;right:10px;z-index:2;font:13px/1.4 system-ui,sans-serif}
+  #baselayer-btn{width:36px;height:36px;padding:0;border:none;border-radius:6px;background:#fff;
+    box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer;font-size:19px;line-height:36px;color:#444}
+  #baselayer-btn:hover{background:#f4f4f4}
+  #baselayer-menu{display:none;position:absolute;bottom:44px;right:0;background:#fff;border-radius:6px;
+    box-shadow:0 1px 4px rgba(0,0,0,.3);padding:4px;min-width:140px}
+  #baselayer-ctrl.open #baselayer-menu{display:block}
+  #baselayer-menu .bl{display:block;padding:6px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;color:#333}
+  #baselayer-menu .bl:hover{background:#f0f0f0}
+  #baselayer-menu .bl.active{font-weight:bold;background:#eaf0ff;color:#1a56b0}
+  /* route summary (distance / time / speed / per-mode) */
+  #route-summary{position:absolute;top:10px;left:10px;z-index:3;background:#fff;padding:8px 12px;
+    border-radius:6px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3);
+    min-width:180px;max-width:230px;display:none}
+  #route-summary b{display:block;margin-bottom:4px}
+  #route-summary .rm{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
+  #route-summary .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
 </style></head><body>
 <div id="map"></div>
-<div id="zoom">zoom —</div>
-<div id="panel">
-  <b style="font-size:15px;border-bottom:1px solid #ddd;padding-bottom:5px;margin:0 0 8px">Debug Visualization</b>
-  <b>Base layer</b><select id="basemap"></select>
-  <b>Color by</b>
-  <label><input type="radio" name="cmode" value="osm" checked> OSM class</label>
-  <label><input type="radio" name="cmode" value="modes"> mode combination</label>
-  <b>Show modes</b>
-  <label><input type="checkbox" id="md" checked> driving</label>
-  <label><input type="checkbox" id="mw" checked> walking</label>
-  <label><input type="checkbox" id="mc" checked> cycling</label>
-  <b>Overlays</b>
-  <label><input type="checkbox" id="arrows" __ARROWSCHK__> oneway arrows (z≥__ARROWMINZ__)</label>
-  <label><input type="checkbox" id="names" __NAMESCHK__> street names (by class)</label>
-  <b>Features</b>__FEATUREROWS__
-  __BOUNDROW__
-  <b>Legend (modes)</b><div id="legend">__LEGEND__</div>
-</div>
+__ZOOMBOX__
+__PANEL__
 <div id="info"></div>
+<div id="route-summary"></div>
+__BASELAYERCTRL__
 <script>
 const CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
+const INTERACTIVE = __INTERACTIVE__;   // false = lean BASE viewer: no picking/hover/info, base-layer selector only
 const S = {md:true, mw:true, mc:true, cmode:"osm", arrows:__ARROWS__, names:__NAMES__, boundary:__HASBOUND__};
 let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
+let ROUTE = {features:[]};              // optional shortest-path overlay (data/route.geojson), drawn on top
+let BM_BY_EID = {};                     // edge_id -> baked base metres, so the route reuses the ROAD width per zoom
+let GEOM_BY_EID = {};                   // edge_id -> the base map's DIRECTIONAL (offset) geometry, for the route
+const ROUTE_MODES=__ROUTEMODES__, ROUTE_HALO=__ROUTEHALO__, ROUTE_MULT=__ROUTEMULT__,
+      ROUTE_HALOPX=__ROUTEHALOPX__, ROUTE_MINPX=__ROUTEMINPX__;
 const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
 const ICONSIZE = __ICONSIZE__, ICONHI = __ICONHI__, ICONOP = __ICONOP__;   // icon px-size by zoom (interp like roads.width)
 const PATTERN_ATLAS = "__PATTERNATLAS__", PATTERN_MAP = __PATTERNMAP__;    // landcover texture atlas (patterns.py) + name->box
@@ -602,7 +664,7 @@ function featureLayers(which){                             // "bg"=polygons/line
       // solid fill + per-feature OSM border (f.properties.oc); layer-wide d.oc for non-by-class layers.
       // pickable + autoHighlight so hovering any area highlights it (like roads) and a click shows info.
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, stroked:true, filled:true,
-        pickable:true, autoHighlight:true, highlightColor:[255,238,0,140],
+        pickable:INTERACTIVE, autoHighlight:INTERACTIVE, highlightColor:[255,238,0,140],
         getFillColor:f=>f.properties.fc, getLineColor:f=>f.properties.oc || d.oc || [0,0,0,0],
         lineWidthUnits:"pixels", getLineWidth:0.8, lineWidthMinPixels:0.4,
         onClick:info=>showInfo(info.object)}));
@@ -618,7 +680,7 @@ function featureLayers(which){                             // "bg"=polygons/line
       const vis = map.getZoom() >= (d.mz||14);    // categories appear only when zoomed in (declutter)
       if(d.ic)                                     // SVG icon (mask -> tinted by the config colour); px-size by zoom
         out.push(new deck.IconLayer({id:"f_"+d.id, data:FEATDATA[d.id], dataTransform:x=>x.features||[],
-          visible:vis, opacity:ICONOP, pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
+          visible:vis, opacity:ICONOP, pickable:INTERACTIVE, autoHighlight:INTERACTIVE, highlightColor:[255,238,0,200],
           getIcon:()=>({url:"data/icons/"+d.ic, width:48, height:48, mask:true}),
           getPosition:f=>f.geometry.coordinates, getColor:d.col,
           getAngle:f=>-(f.properties.ang||0),         // orient to the road (bearing); 0 for icons without one
@@ -626,13 +688,13 @@ function featureLayers(which){                             // "bg"=polygons/line
           onClick:info=>showInfo(info.object)}));
       else                                         // plain coloured dot (also zoom-scaled)
         out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, pointType:"circle",
-          pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
+          pickable:INTERACTIVE, autoHighlight:INTERACTIVE, highlightColor:[255,238,0,200],
           getFillColor:f=>f.properties.pc, pointRadiusUnits:"meters", getPointRadius:(d.sz||3)*4,
           pointRadiusMinPixels:2, pointRadiusMaxPixels:14, stroked:true, getLineColor:[255,255,255,180],
           lineWidthMinPixels:0.4, onClick:info=>showInfo(info.object)}));
     } else
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:true, filled:false,
-        pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
+        pickable:INTERACTIVE, autoHighlight:INTERACTIVE, highlightColor:[255,238,0,200],
         lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4,
         extensions:DASH, dashJustified:true, getDashArray:f=>f.properties.dash||[0,0],
         onClick:info=>showInfo(info.object)}));
@@ -642,7 +704,8 @@ function featureLayers(which){                             // "bg"=polygons/line
 
 const map = new maplibregl.Map({container:"map", style:BASEMAPS[DEFAULT_BM], center:CENTER, zoom:__ZOOM__, hash:true});
 const overlay = new deck.MapboxOverlay({interleaved:false, layers:[]});
-map.addControl(overlay); map.addControl(new maplibregl.NavigationControl());
+map.addControl(overlay);
+if(INTERACTIVE) map.addControl(new maplibregl.NavigationControl());   // base viewer: no zoom +/- control
 const DASH = deck.PathStyleExtension ? [new deck.PathStyleExtension({dash:true})] : [];
 
 // the exact openstreetmap-carto oneway.svg arrow (12x5, thin shaft + head), filled dark.
@@ -698,16 +761,24 @@ function showInfo(o){
     const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
     const rows = Object.keys(tg).sort().map(k =>
       `<tr><td style="color:#888;padding-right:8px;vertical-align:top">${esc(k)}</td><td>${esc(tg[k])}</td></tr>`).join("");
+    const meta = [f.mode && ("mode: " + esc(f.mode)),
+                  f.speed_kmh != null && (f.speed_kmh + " km/h"),
+                  f.len_m != null && (Math.round(f.len_m) + " m")].filter(Boolean).join(" · ");
     i.innerHTML = `<b>${f.name ? esc(f.name) : "(unnamed)"}</b>`
       + `<br><span style="color:#888;font-size:11px">${esc(f.layer)} · ${esc(f.class||"?")}</span>`
-      + `<br><span style="color:#888;font-size:11px">osm_id ${f.osm_id}</span>`
+      + (f.edge_id != null ? `<br><span style="color:#888;font-size:11px">edge_id ${f.edge_id}</span>` : "")
+      + (f.osm_id != null ? `<br><span style="color:#888;font-size:11px">osm_id ${f.osm_id}</span>` : "")
+      + (meta ? `<br><span style="color:#888;font-size:11px">${meta}</span>` : "")
       + (rows ? `<table style="margin-top:5px;font-size:11px;border-collapse:collapse">${rows}</table>` : "");
     return;
   }
-  i.innerHTML = `<b>${p.nm||"(unnamed)"}</b><br>class: ${p.hw}<br>length: ${p.len==null?"?":p.len+" m"}`
-    + `<br>width: ${p.bm==null?"?":p.bm+" m/dir"} (class-fixed)${p.ow?" · one-way":""}`
+  i.innerHTML = `<b>${p.nm||"(unnamed)"}</b><br>class: ${p.hw}<br>oneway: ${p.ow?"yes":"no"}`
+    + `<br>length: ${p.len==null?"?":p.len+" m"}`
+    + `<br>width: ${p.bm==null?"?":p.bm+" m/dir"} (class-fixed)`
     + `<br><span style="color:#888;font-size:11px">OSM lanes: ${p.lanes==null?"untagged":p.lanes+" total"} (not used)</span>`
-    + `<br>modes: ${modesStr(p)||"—"}<br><span style="color:#888;font-size:11px">edge_id ${p.eid}</span>`;
+    + `<br>modes: ${modesStr(p)||"—"}`
+    + `<br><span style="color:#888;font-size:11px">osm_id ${p.oid==null?"—":p.oid}</span>`
+    + `<br><span style="color:#888;font-size:11px">edge_id ${p.eid}</span>`;
 }
 
 // elevation band: tunnels/below = -1, ground = 0, bridges/above = +1. deck draws LAYERS in
@@ -738,8 +809,8 @@ function draw(){
         getLineColor:f=>f.properties.cc||[0,0,0,0], getLineWidth:casWidth,
         extensions:DASH, dashJustified:true, getDashArray:casDash,
         updateTriggers:{getLineWidth:[zt,b], getDashArray:[b]}}),
-      new deck.GeoJsonLayer({id:"fill"+b, data:fc, stroked:true, filled:false, pickable:true,
-        autoHighlight:true, highlightColor:[255,238,0,210], lineWidthUnits:"pixels", lineWidthMinPixels:0.6,
+      new deck.GeoJsonLayer({id:"fill"+b, data:fc, stroked:true, filled:false, pickable:INTERACTIVE,
+        autoHighlight:INTERACTIVE, highlightColor:[255,238,0,210], lineWidthUnits:"pixels", lineWidthMinPixels:0.6,
         getLineColor:fillColor, getLineWidth:fillW,
         extensions:DASH, dashJustified:true, getDashArray:f=>(S.cmode==="osm"&&f.properties.dash)||[0,0],
         onClick:info=>showInfo(info.object),
@@ -832,6 +903,27 @@ function draw(){
       getLineColor:[106,13,173,235], extensions:DASH, dashJustified:true, getDashArray:[6,4]}));
   }
   layers.push(...featureLayers("fg"));          // point/icon feature layers LAST — always on top
+  if(ROUTE.features && ROUTE.features.length){  // shortest-path overlay — ON TOP of everything, clickable
+    // each path edge reuses ITS road's per-zoom width: width_px(bm, zoom) x ROUTE_MULT (floored at MINPX),
+    // so the highlight sits on the road at every zoom instead of a fixed pixel width. Colour + dash come
+    // from the leg's mode (walk/cycle/drive/access). Geometry is the base map's DIRECTIONAL edge (below).
+    const rmode = f => ROUTE_MODES[f.properties.mode] || ROUTE_MODES.driving || {color:[46,110,235,255]};
+    const rw = f => Math.max(ROUTE_MINPX, widthPx(BM_BY_EID[f.properties.eid] || 3, map.getZoom(), false) * ROUTE_MULT);
+    layers.push(
+      new deck.GeoJsonLayer({id:"route-halo", data:ROUTE, stroked:true, filled:false, lineWidthUnits:"pixels",
+        getLineWidth:f=>rw(f)+2*ROUTE_HALOPX, lineWidthMinPixels:ROUTE_MINPX+2*ROUTE_HALOPX, getLineColor:ROUTE_HALO,
+        lineCapRounded:true, lineJointRounded:true, updateTriggers:{getLineWidth:[zt]}}),
+      new deck.GeoJsonLayer({id:"route", data:ROUTE, stroked:true, filled:false,
+        pickable:true, autoHighlight:true, highlightColor:[255,215,0,255], lineWidthUnits:"pixels",
+        getLineWidth:rw, lineWidthMinPixels:ROUTE_MINPX, getLineColor:f=>rmode(f).color,
+        extensions:DASH, dashJustified:true, getDashArray:f=>rmode(f).dash||[0,0],
+        lineCapRounded:true, lineJointRounded:true, onClick:info=>showInfo(info.object),
+        updateTriggers:{getLineWidth:[zt]}}));
+    const ends = [ROUTE.start && {p:ROUTE.start,c:[46,160,67]}, ROUTE.end && {p:ROUTE.end,c:[229,57,53]}].filter(Boolean);
+    if(ends.length) layers.push(new deck.ScatterplotLayer({id:"route-ends", data:ends,
+      getPosition:d=>d.p, getFillColor:d=>d.c, getRadius:7, radiusUnits:"pixels",
+      stroked:true, getLineColor:[255,255,255,255], lineWidthMinPixels:2}));
+  }
   overlay.setProps({layers});
 }
 function refilter(){
@@ -839,29 +931,75 @@ function refilter(){
   draw();
 }
 
+// DEBUG viewer: the base-layer <select> lives in the top-left panel.
 const sel = document.getElementById("basemap");
-Object.keys(BASEMAPS).forEach(k=>{const o=document.createElement("option");o.value=k;o.text=k;if(k===DEFAULT_BM)o.selected=true;sel.appendChild(o);});
-sel.onchange = e => { map.setStyle(BASEMAPS[e.target.value]); map.once("idle", draw); };
-["md","mw","mc"].forEach(id => document.getElementById(id).onchange = e => { S[id]=e.target.checked; refilter(); });
-document.querySelectorAll('input[name=cmode]').forEach(r => r.onchange = e => { S.cmode=e.target.value; draw(); });
-["arrows","names","boundary"].forEach(id => { const el=document.getElementById(id); if(el) el.onchange = e => { S[id]=e.target.checked; draw(); }; });
-document.querySelectorAll('.featchk').forEach(cb => cb.onchange = e => { fstate[e.target.dataset.id]=e.target.checked; draw(); });
-const zoomBox = document.getElementById("zoom");
-function showZoom(){ zoomBox.textContent = "zoom " + map.getZoom().toFixed(2); }
+if(sel){
+  Object.keys(BASEMAPS).forEach(k=>{const o=document.createElement("option");o.value=k;o.text=k;if(k===DEFAULT_BM)o.selected=true;sel.appendChild(o);});
+  sel.onchange = e => { map.setStyle(BASEMAPS[e.target.value]); map.once("idle", draw); };
+}
+// BASE viewer: compact base-layer icon control in the bottom-right (a click-to-open menu of base layers).
+const blCtrl = document.getElementById("baselayer-ctrl");
+if(blCtrl){
+  const blMenu = document.getElementById("baselayer-menu"), blBtn = document.getElementById("baselayer-btn");
+  let curBM = DEFAULT_BM;
+  Object.keys(BASEMAPS).forEach(k=>{
+    const row = document.createElement("div"); row.className = "bl" + (k===curBM ? " active" : ""); row.textContent = k;
+    row.onclick = () => { curBM = k; map.setStyle(BASEMAPS[k]); map.once("idle", draw);
+      blMenu.querySelectorAll(".bl").forEach(r => r.classList.toggle("active", r.textContent===k));
+      blCtrl.classList.remove("open"); };
+    blMenu.appendChild(row);
+  });
+  blBtn.onclick = (e) => { e.stopPropagation(); blCtrl.classList.toggle("open"); };
+  document.addEventListener("click", e => { if(!blCtrl.contains(e.target)) blCtrl.classList.remove("open"); });
+}
+if(INTERACTIVE){   // panel toggles only exist in the debug viewer; the base viewer keeps just the selector
+  ["md","mw","mc"].forEach(id => document.getElementById(id).onchange = e => { S[id]=e.target.checked; refilter(); });
+  document.querySelectorAll('input[name=cmode]').forEach(r => r.onchange = e => { S.cmode=e.target.value; draw(); });
+  ["arrows","names","boundary"].forEach(id => { const el=document.getElementById(id); if(el) el.onchange = e => { S[id]=e.target.checked; draw(); }; });
+  document.querySelectorAll('.featchk').forEach(cb => cb.onchange = e => { fstate[e.target.dataset.id]=e.target.checked; draw(); });
+}
+const zoomBox = document.getElementById("zoom");   // base viewer has no zoom readout
+function showZoom(){ if(zoomBox) zoomBox.textContent = "zoom " + map.getZoom().toFixed(2); }
 map.on("move", showZoom); map.on("load", showZoom);
-// click on empty map (no feature picked this click) dismisses the info panel
+// click on empty map (nothing picked) dismisses the info panel — needed for debug picking AND route clicks
 map.on("click", () => { setTimeout(() => { if(!clickedFeature) showInfo(null); clickedFeature = false; }, 0); });
 let raf=null; map.on("zoom", ()=>{ if(raf) return; raf=requestAnimationFrame(()=>{raf=null; draw();}); });
 
+function renderRouteSummary(){         // door-to-door distance / time / avg speed + per-mode breakdown
+  const el = document.getElementById("route-summary"), s = ROUTE.summary;
+  if(!el || !ROUTE.features || !ROUTE.features.length || !s){ if(el) el.style.display="none"; return; }
+  const km = m => (m/1000).toFixed(2), min = t => Math.round(t/60);
+  let rows = "";
+  for(const [m,v] of Object.entries(s.by_mode||{})){
+    const c = (ROUTE_MODES[m]||{color:[100,100,100]}).color;
+    rows += `<div class="rm"><span><span class="sw" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>${m}</span>`
+          + `<span>${km(v.length_m)} km · ${min(v.time_s)} min</span></div>`;
+  }
+  el.innerHTML = `<b>Route</b>`
+    + `<div class="rm"><span>distance</span><span>${km(s.length_m)} km</span></div>`
+    + `<div class="rm"><span>time</span><span>${min(s.time_s)} min</span></div>`
+    + `<div class="rm"><span>avg speed</span><span>${s.speed_kmh} km/h</span></div>`
+    + (s.transfers ? `<div class="rm"><span>transfers</span><span>${s.transfers}</span></div>` : "")
+    + `<div style="border-top:1px solid #eee;margin:5px 0 2px"></div>` + rows;
+  el.style.display="block";
+}
 Promise.all([
   fetch("data/roads_merged.geojson").then(r=>r.json()),
   fetch("data/labels.geojson").then(r=>r.json()),
   fetch("data/arrows.geojson").then(r=>r.json()),
   fetch("data/boundary.geojson").then(r=>r.ok?r.json():{features:[]}).catch(()=>({features:[]})),
+  fetch("data/route.geojson").then(r=>r.ok?r.json():{features:[]}).catch(()=>({features:[]})),  // optional shortest path
   ...FEATUREDEFS.map(d=>fetch("data/feat_"+d.id+".geojson").then(r=>r.json()).then(j=>{FEATDATA[d.id]=j; return 0;}))
 ]).then((res) => {
-  const [roads, labels, arrows, boundary] = res;
+  const [roads, labels, arrows, boundary, route] = res;
   FEATURES = roads.features; LABELS = labels.features; ARROWS = arrows.features; BOUNDARY = boundary.features||[];
+  ROUTE = route && route.features ? route : {features:[]};
+  BM_BY_EID = {}; GEOM_BY_EID = {};
+  for(const f of roads.features){ BM_BY_EID[f.properties.eid] = f.properties.bm; GEOM_BY_EID[f.properties.eid] = f.geometry; }
+  // draw the route ON the base map's DIRECTIONAL edge: replace each network edge's centreline geometry
+  // with the same offset geometry the base map drew for that edge_id (access legs have no eid -> keep theirs).
+  for(const f of ROUTE.features){ const g = GEOM_BY_EID[f.properties.eid]; if(g) f.geometry = g; }
+  renderRouteSummary();
   const go=()=>refilter(); if(map.loaded()) go(); else map.on("load", go);
 });
 </script></body></html>"""
