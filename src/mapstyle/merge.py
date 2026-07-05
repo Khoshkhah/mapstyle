@@ -301,7 +301,8 @@ def _load_boundary(src):
 
 
 def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", overlays=(),
-                 boundary=None, feature_layers=None, zoom=13, center=None, interactive=True):
+                 boundary=None, feature_layers=None, zoom=13, center=None, interactive=True,
+                 route_panel=False):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
 
     interactive: when True (default) the full DEBUG viewer — hover-highlight, click-to-inspect
@@ -549,10 +550,16 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
         'stroke-linejoin="round" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/>'
         '<polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></button>\n'
         '</div>')
+    # route-guidance side panel (a fixed right column with the turn-by-turn list) — the map insets to fit.
+    sidepanel = ('<div id="sidepanel"><div class="sp-title">Route guidance</div>'
+                 '<div id="guidance" class="sp-body">Plan a route to see turn-by-turn directions.</div>'
+                 '</div>') if route_panel else ""
     html = (_TEMPLATE
             .replace("__PANEL__", panel)
             .replace("__ZOOMBOX__", zoombox)
             .replace("__BASELAYERCTRL__", baselayer_ctrl)
+            .replace("__SIDEPANEL__", sidepanel)
+            .replace("__BODYCLASS__", "has-panel" if route_panel else "")
             .replace("__PANELROWS__", panel_rows)
             .replace("__INTERACTIVE__", "true" if interactive else "false")
             .replace("__PATTERNATLAS__", pat_atlas_url)
@@ -635,19 +642,31 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
     border-radius:6px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3);
     min-width:210px;max-width:290px;display:none}
   #route-summary b{display:block;margin-bottom:4px}
-  #route-summary .rm{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
-  #route-summary .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
-  #route-summary .steps{max-height:42vh;overflow-y:auto;margin-top:5px;border-top:1px solid #eee;padding-top:4px}
-  #route-summary .step{display:flex;gap:7px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:12px;align-items:baseline}
-  #route-summary .step:hover{background:#f0f0f0}
-  #route-summary .step.sel{background:#fff3cd}
-  #route-summary .step .n{color:#aaa;min-width:16px} #route-summary .step .d{color:#888;font-size:11px;margin-left:auto;white-space:nowrap}
-</style></head><body>
+  /* route summary + turn-list rows — used by BOTH the float box (#route-summary) and the side panel (#guidance) */
+  .rm{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
+  .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .steps{margin-top:5px;border-top:1px solid #eee;padding-top:4px}
+  #route-summary .steps{max-height:42vh;overflow-y:auto}    /* the float box scrolls its own list */
+  .step{display:flex;gap:7px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:12px;align-items:baseline}
+  .step:hover{background:#f0f0f0}
+  .step.sel{background:#fff3cd}
+  .step .n{color:#aaa;min-width:16px} .step .d{color:#888;font-size:11px;margin-left:auto;white-space:nowrap}
+  #guidance b{display:block;margin-bottom:3px}
+  /* route-guidance SIDE PANEL (fixed right column; the map insets to make room) */
+  #sidepanel{position:absolute;top:0;right:0;bottom:0;width:340px;z-index:4;background:#fff;
+    box-shadow:-1px 0 6px rgba(0,0,0,.15);display:flex;flex-direction:column;font:13px/1.5 system-ui,sans-serif}
+  #sidepanel .sp-title{padding:12px 16px;font-size:16px;font-weight:bold;border-bottom:1px solid #eee}
+  #sidepanel .sp-body{overflow-y:auto;padding:8px 12px;flex:1}
+  body.has-panel #map{right:340px}                       /* leave room for the panel */
+  body.has-panel #baselayer-ctrl{right:350px}            /* keep the base-layer icon out from under it */
+  body.has-panel #route-summary{display:none!important}  /* guidance lives in the panel, not the float box */
+</style></head><body class="__BODYCLASS__">
 <div id="map"></div>
 __ZOOMBOX__
 __PANEL__
 <div id="info"></div>
 <div id="route-summary"></div>
+__SIDEPANEL__
 __BASELAYERCTRL__
 <script>
 const CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
@@ -1002,8 +1021,14 @@ map.on("click", () => { setTimeout(() => { if(!clickedFeature) showInfo(null); c
 let raf=null; map.on("zoom", ()=>{ if(raf) return; raf=requestAnimationFrame(()=>{raf=null; draw();}); });
 
 function renderRouteSummary(){         // door-to-door distance / time / avg speed + per-mode breakdown
-  const el = document.getElementById("route-summary"), s = ROUTE.summary;
-  if(!el || !ROUTE.features || !ROUTE.features.length || !s){ if(el) el.style.display="none"; return; }
+  const panel = document.getElementById("guidance");   // side-panel container (route_panel mode), if any
+  const el = panel || document.getElementById("route-summary"), s = ROUTE.summary;
+  if(!el) return;
+  if(!ROUTE.features || !ROUTE.features.length || !s){
+    if(panel) panel.innerHTML = "Plan a route to see turn-by-turn directions.";
+    else el.style.display = "none";
+    return;
+  }
   const km = m => (m/1000).toFixed(2), min = t => Math.round(t/60);
   let rows = "";
   for(const [m,v] of Object.entries(s.by_mode||{})){
@@ -1024,7 +1049,7 @@ function renderRouteSummary(){         // door-to-door distance / time / avg spe
     + `<div class="rm"><span>avg speed</span><span>${s.speed_kmh} km/h</span></div>`
     + (s.transfers ? `<div class="rm"><span>transfers</span><span>${s.transfers}</span></div>` : "")
     + `<div style="border-top:1px solid #eee;margin:5px 0 2px"></div>` + rows + turns;
-  el.style.display="block";
+  if(!panel) el.style.display="block";
   el.querySelectorAll('.step').forEach(row => row.onclick = () => selectStep(+row.dataset.i));
 }
 const _esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
