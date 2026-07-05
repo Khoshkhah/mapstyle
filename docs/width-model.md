@@ -37,17 +37,34 @@ width_px    = base_metres × (1 / mpp) × zoom_boost(zoom)
 
 ### One-way vs two-way
 
-A class can be **either** — a secondary is two-way as a street but one-way as a dual-carriageway
-carriageway — so the lane count comes from **two tables**:
+The carriageway is the **same physical width** whether a street is one-way or two-way — a street that
+transitions between the two (e.g. Kalevi: one-way then two-way) must not change width at the join. So
+the lane count is resolved by direction from two tables, kept in the relation **`lanes_oneway = 2 × lanes`**:
 
 - **two-way road** → each of its two directed edges uses **`lanes`** = lanes *per direction*
-  (`0.5` = single-track, one lane shared by both ways), offset **±`base_metres/2`** so the two
-  directions sit edge-to-edge.
-- **one-way road** → its single directed edge uses **`lanes_oneway`** = *total* lanes of the
-  carriageway, drawn centred.
+  (`0.5` = single-track), offset **±`base_metres/2`** so the two directions sit edge-to-edge. Total
+  painted width = `2 × lanes × lane_m`.
+- **one-way road** → its single directed edge uses **`lanes_oneway`** = *total* lanes of the whole
+  carriageway, drawn centred. Total painted width = `lanes_oneway × lane_m`.
 
-So a **secondary** renders **6 m** one-way (2-lane carriageway) vs **3 m/dir** two-way. Paths/footways
-(`path` group) are never split — single dashed line.
+This holds for **single-carriageway streets** that can transition one-way↔two-way (default / secondary /
+tertiary / residential / living_street / service / pedestrian): with `lanes_oneway = 2 × lanes` both
+totals are equal, so the one-way and two-way stretches render the **same width and meet flush** (no step
+at the transition). Example — **tertiary** (`lanes 1`, `lanes_oneway 2`, `lane_m 3`): two-way =
+`2 × 1 × 3 = 6 m`, one-way = `2 × 3 = 6 m`. ✓
+
+**Two exceptions** where `lanes_oneway = lanes` (not `2 ×`):
+
+- **Dual-carriageway arterials** (`major` / `trunk` / `primary`) are **always** mapped as one-way ways —
+  each direction is a *separate* carriageway with a median between them. A one-way `trunk` is therefore
+  one carriageway (its own `lanes`, e.g. 2), **not** the both-directions total (4). There is no two-way
+  version to align against.
+- **The `path` group** (footway / cycleway / steps / track) is never split into an offset pair — it's a
+  single centred dashed line in both directions — so a one-way path is the same width as a two-way path.
+
+> Earlier `lanes_oneway` was hand-set below `2 × lanes` for the street classes (e.g. tertiary = 1),
+> which drew one-way stretches at **half** width and stepped the casing at one-way↔two-way junctions.
+> Fixed by setting the street classes to `2 × lanes`; arterials/paths stay at `lanes`.
 
 ## Two-way offset calculation (and the 512-tile scale gotcha)
 
@@ -102,9 +119,11 @@ works at any latitude without re-tuning.
     lanes:             # lanes PER DIRECTION of a TWO-WAY road (0.5 = single-track)
       major: 2   trunk: 2   primary: 1.5   secondary: 1   tertiary: 1   residential: 1
       living_street: 0.5   service: 0.5   service_minor: 0.5   pedestrian: 0.5   path: 0.5   default: 1
-    lanes_oneway:      # TOTAL lanes of a ONE-WAY road/carriageway (a dual-carriageway arterial ~2)
-      major: 2   trunk: 2   primary: 2   secondary: 2   tertiary: 1   residential: 1
-      living_street: 1   service: 1   service_minor: 1   pedestrian: 1   path: 0.5   default: 1
+    lanes_oneway:      # TOTAL lanes of a ONE-WAY carriageway. Street classes = 2 x lanes (one-way == two-way
+      secondary: 2   tertiary: 2   residential: 2   default: 2   living_street: 1   service: 1
+      service_minor: 1   pedestrian: 1                      # width, flush at transitions).
+      major: 2   trunk: 2   primary: 2   # DUAL carriageways (always one-way): one separate carriageway = lanes, NOT 2x
+      path: 0.5                          # single line: = lanes
     zoom_boost:        # ONE global legibility multiplier over physical, by zoom (interp; ->1.0 high z)
       12: 9.0   14: 4.0   15: 2.6   16: 1.8   17: 1.3   18: 1.1   20: 1.0
     lane_overlap: 1.15 # two directional lanes overlap this much at the centre (no seam, no gap)

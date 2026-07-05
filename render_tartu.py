@@ -29,28 +29,25 @@ LAYERS = Path(__file__).parent / "layers.yaml"   # WHICH feature layers to show 
 
 
 def load(table, name, kind, where=None, centroid=False, bearing=False):
-    """Load one features.<table> layer from the duckOSM db as a styling Layer (Shortbread `kind`)."""
+    """Load one features.<table> layer from the duckOSM db as a styling Layer (Shortbread `kind`).
+    Carries osm_id / name / full tags so the debug viewer can show every object's info on click.
+    Polygon layers are NOT sorted here — feature_layers() sorts once, after any merge_into."""
     g = "ST_Centroid(geom)" if centroid else "geom"
-    cols = "kind" + (", bearing" if bearing else "")
+    cols = "kind, osm_id, COALESCE(map_extract(tags,'name')[1], '') AS nm, to_json(tags) AS tg" \
+           + (", bearing" if bearing else "")
     w = f" AND ({where})" if where else ""
     con = duckdb.connect(DB, read_only=True)
     con.execute("INSTALL spatial; LOAD spatial;")
     rows = con.execute(f"SELECT {cols}, ST_AsText({g}) FROM features.{table} "
                        f"WHERE geom IS NOT NULL{w}").fetchall()
     con.close()
-    d = {"class": [r[0] for r in rows], "highway": [r[0] for r in rows]}
+    d = {"class": [r[0] for r in rows], "highway": [r[0] for r in rows],
+         "osm_id": [r[1] for r in rows], "name": [r[2] for r in rows], "tags": [r[3] for r in rows]}
     if bearing:
-        d["bearing"] = [r[1] for r in rows]
+        d["bearing"] = [r[4] for r in rows]
     gdf = gpd.GeoDataFrame(d, geometry=[wkt.loads(r[-1]) for r in rows], crs="EPSG:4326")
-    if len(gdf) and kind != "point":
-        # preserve_topology=True: simplify vertices but NEVER collapse a small polygon to empty
-        # (preserve_topology=False was dropping ~170 tiny landcover/garden patches from the map).
-        gdf["geometry"] = gdf.geometry.simplify(2e-5, preserve_topology=True)
-    if len(gdf) > 1 and kind == "polygon":
-        # draw LARGEST first (bottom): a big landuse=residential polygon must sit UNDER the smaller,
-        # more-specific landcover nested in it (parks/grass/forest), else it paints over and hides them.
-        gdf = (gdf.assign(_a=gdf.geometry.area).sort_values("_a", ascending=False)
-                  .drop(columns="_a").reset_index(drop=True))
+    # NO simplification: simplifying polygons independently cut corners off features ("missed some
+    # parts") and desynced shared borders between adjacent landcover (gaps/overlaps). Render full-res.
     return Layer(name, gdf, kind)
 
 
@@ -89,14 +86,38 @@ def add_construction(merged):
 def feature_layers():
     """Build the feature Layers listed in layers.yaml, in draw order, skipping any with `show: false`.
     WHICH features appear is config-driven — edit layers.yaml (separate from the visual style), not
-    this script."""
+    this script.
+
+    `merge_into: <name>` appends a layer's features INTO an already-built layer (must appear earlier)
+    instead of adding a separate layer. Institutional site areas (school / university / hospital /
+    sports_centre …) merge into `landcover` so ONE largest-first sort resolves all nesting — e.g. a
+    school's own pitch/grass paints ON TOP of the school, not hidden under it."""
     specs = (yaml.safe_load(LAYERS.read_text()) or {}).get("layers") or []
-    out = []
+    built, order = {}, []
     for s in specs:
         if not s.get("show", True):
             continue
-        out.append(load(s["table"], s["name"], s["kind"], where=s.get("where"),
-                        centroid=s.get("centroid", False), bearing=s.get("bearing", False)))
+        lyr = load(s["table"], s["name"], s["kind"], where=s.get("where"),
+                   centroid=s.get("centroid", False), bearing=s.get("bearing", False))
+        tgt = s.get("merge_into")
+        if tgt and tgt in built:
+            base = built[tgt]
+            base.gdf = gpd.GeoDataFrame(pd.concat([base.gdf, lyr.gdf], ignore_index=True),
+                                        crs="EPSG:4326")
+        else:
+            built[s["name"]] = lyr
+            order.append(s["name"])
+    out = []
+    for nm in order:
+        lyr = built[nm]
+        g = lyr.gdf
+        # draw LARGEST first (bottom): a big landuse=residential / school polygon must sit UNDER the
+        # smaller, more-specific features nested in it (parks/grass/pitch), else it hides them.
+        if len(g) > 1 and lyr.kind == "polygon":
+            g = (g.assign(_a=g.geometry.area).sort_values("_a", ascending=False)
+                   .drop(columns="_a").reset_index(drop=True))
+            lyr = Layer(nm, g, lyr.kind)
+        out.append(lyr)
     return out
 
 

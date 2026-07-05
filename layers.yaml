@@ -11,6 +11,11 @@
 #   bearing   true = carry the road bearing (oriented crossings)
 layers:
   - {name: landcover,       table: land,             kind: polygon, show: true}
+  # institutional / sport GROUNDS (school, university, hospital, sports_centre, prison, kindergarten,
+  # construction, bridge deck) — coloured area fills in OSM-Carto. Merged INTO landcover so the one
+  # largest-first sort nests them correctly (a school's own pitch/grass draws on top of the school).
+  - {name: institutional,   table: sites,            kind: polygon, show: true, merge_into: landcover,
+     where: "kind IN ('school','university','college','kindergarten','hospital','prison','sports_centre','construction','bridge')"}
   - {name: water,           table: water_polygons,   kind: polygon, show: true}   # incl. the river (smart clip)
   - {name: waterways,       table: water_lines,      kind: line,    show: true}
   - {name: buildings,       table: buildings,        kind: polygon, show: true}

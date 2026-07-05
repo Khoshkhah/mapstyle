@@ -45,11 +45,13 @@ def _group_of(hw, svc=None):
 
 
 def _base_m(hw, svc, oneway, wm):
-    """Physical base width (metres) of a road/direction = lanes x lane_m[class] — BOTH from config
-    (``roads.width_model``), NOT from OSM lane tags (too noisy). A ONE-WAY road uses ``lanes_oneway``
-    (total lanes of the carriageway); a TWO-WAY road uses ``lanes`` (lanes per direction; 0.5 =
-    single-track). So a secondary renders wider one-way (dual carriageway) than one two-way direction.
-    See docs/width-model.md."""
+    """Physical base width (metres) of a road/direction = n x lane_m[class] — from config
+    (``roads.width_model``), NOT from OSM lane tags (too noisy). A TWO-WAY road uses ``lanes`` (lanes
+    per direction; drawn as two offset lines), a ONE-WAY road uses ``lanes_oneway`` (TOTAL lanes of the
+    carriageway; one centred line). The carriageway is the same width either way, so the config keeps
+    ``lanes_oneway = 2 x lanes`` and the two render the SAME total width -> flush at one-way<->two-way
+    transitions. (Exception: the ``path`` group is a single line in both, so there ``lanes_oneway =
+    lanes``.) See docs/width-model.md."""
     g = _group_of(hw, svc)
     lane_m = wm.get("lane_m") or {}
     tbl = (wm.get("lanes_oneway") if oneway else wm.get("lanes")) or {}
@@ -409,9 +411,23 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
     fcfg = _style.get("features", {})
     areas_cfg, lines_cfg, points_cfg = fcfg.get("areas", {}), fcfg.get("lines", {}), fcfg.get("points", {})
     feature_defs = []
+    def _info(layer, cls, oid, nm, tg):
+        """Per-feature debug payload (shown in the side panel on click) — layer, class, osm_id, name
+        + the full OSM tag map. Small enough to embed on every feature in this debug viewer."""
+        d = {"layer": layer, "class": cls, "osm_id": oid, "name": nm or ""}
+        if tg:
+            try:
+                d["tags"] = json.loads(tg)
+            except Exception:
+                pass
+        return d
+
     for fl in (feature_layers or []):
         fk = "polygon" if fl.kind in ("polygon", "area") else ("point" if fl.kind == "point" else "line")
         classes = fl.gdf["class"] if "class" in fl.gdf else fl.gdf.get("highway", [None] * len(fl.gdf))
+        oids = list(fl.gdf["osm_id"]) if "osm_id" in fl.gdf else [None] * len(fl.gdf)
+        names = list(fl.gdf["name"]) if "name" in fl.gdf else [""] * len(fl.gdf)
+        tagz = list(fl.gdf["tags"]) if "tags" in fl.gdf else [None] * len(fl.gdf)
         ff = []
         fdef = {"id": fl.name, "kind": fk}
         if fk == "polygon":
@@ -422,11 +438,11 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             fdef["mz"] = spec.get("min_zoom", 0)                 # hide this area layer below this zoom
             pat_map = fcfg.get(f"{fl.name}_pattern") or {}       # per-class OSM texture (patterns.py tile)
             out_map = fcfg.get(f"{fl.name}_outline") or {}       # per-class OSM border colour
-            for gm, cls in zip(fl.gdf.geometry, classes):
+            for gm, cls, oid, nm_, tg in zip(fl.gdf.geometry, classes, oids, names, tagz):
                 if gm is None or gm.is_empty:
                     continue
                 fill = spec.get(cls, spec.get("default", "#e8e6df")) if by_class else spec.get("fill", "#e8e6df")
-                props = {"fc": _rgb(fill) + [int(opacity * 255)]}
+                props = {"fc": _rgb(fill) + [int(opacity * 255)], "_i": _info(fl.name, cls, oid, nm_, tg)}
                 if cls in out_map:                               # OSM border on this class
                     props["oc"] = _rgb(out_map[cls]) + [235]
                 if cls in pat_map:                               # OSM texture: darker symbols over the fill
@@ -445,21 +461,22 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             fdef["mz"] = spec.get("min_zoom", 14)
             fdef["col"] = _rgb(spec.get("color", "#808080"))   # tints the SVG (mask)
             bearings = fl.gdf["bearing"] if "bearing" in fl.gdf else [None] * len(fl.gdf)
-            for gm, br in zip(fl.gdf.geometry, bearings):
+            for gm, br, cls, oid, nm_, tg in zip(fl.gdf.geometry, bearings, classes, oids, names, tagz):
                 if gm is None or gm.is_empty:
                     continue
-                props = {"pc": pc}
+                props = {"pc": pc, "_i": _info(fl.name, cls, oid, nm_, tg)}
                 if br is not None and br == br:      # bearing present (not None/NaN) -> orient the icon
                     props["ang"] = round(float(br), 1)
                 ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": props})
         else:
             spec = lines_cfg.get(fl.name, {})
             col, w, dash = _rgb(spec.get("color", "#888888")), spec.get("width", 1.4), spec.get("dash")
-            for gm in fl.gdf.geometry:
+            for gm, cls, oid, nm_, tg in zip(fl.gdf.geometry, classes, oids, names, tagz):
                 if gm is None or gm.is_empty:
                     continue
                 ff.append({"type": "Feature", "geometry": _sg.mapping(gm),
-                           "properties": {"c": col, "w": w, "dash": dash}})
+                           "properties": {"c": col, "w": w, "dash": dash,
+                                          "_i": _info(fl.name, cls, oid, nm_, tg)}})
         (out / "data" / f"feat_{fl.name}.geojson").write_text(
             json.dumps({"type": "FeatureCollection", "features": ff}))
         feature_defs.append(fdef)
@@ -543,7 +560,7 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   #legend{font-size:12px;color:#444}
   #info{position:absolute;bottom:14px;left:10px;z-index:2;background:#fff;padding:8px 12px;
     border-radius:6px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3);
-    max-width:260px;display:none}
+    max-width:300px;max-height:55vh;overflow-y:auto;display:none}
   #zoom{position:absolute;bottom:14px;right:10px;z-index:2;background:#fff;padding:5px 10px;
     border-radius:6px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 </style></head><body>
@@ -582,10 +599,13 @@ function featureLayers(which){                             // "bg"=polygons/line
     if((which==="bg") === isPt) continue;                 // bg skips points; fg keeps only points
     if(d.kind==="polygon"){
       const vis = map.getZoom() >= (d.mz||0);
-      // solid fill + per-feature OSM border (f.properties.oc); layer-wide d.oc for non-by-class layers
+      // solid fill + per-feature OSM border (f.properties.oc); layer-wide d.oc for non-by-class layers.
+      // pickable + autoHighlight so hovering any area highlights it (like roads) and a click shows info.
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, stroked:true, filled:true,
+        pickable:true, autoHighlight:true, highlightColor:[255,238,0,140],
         getFillColor:f=>f.properties.fc, getLineColor:f=>f.properties.oc || d.oc || [0,0,0,0],
-        lineWidthUnits:"pixels", getLineWidth:0.8, lineWidthMinPixels:0.4}));
+        lineWidthUnits:"pixels", getLineWidth:0.8, lineWidthMinPixels:0.4,
+        onClick:info=>showInfo(info.object)}));
       // OSM texture overlay: darker symbols (f.properties.pc) masked by the atlas pattern, over the fill
       if(d.pat && deck.FillStyleExtension)
         out.push(new deck.GeoJsonLayer({id:"fp_"+d.id, data:FEATDATA[d.id], visible:vis, stroked:false, filled:true,
@@ -598,20 +618,24 @@ function featureLayers(which){                             // "bg"=polygons/line
       const vis = map.getZoom() >= (d.mz||14);    // categories appear only when zoomed in (declutter)
       if(d.ic)                                     // SVG icon (mask -> tinted by the config colour); px-size by zoom
         out.push(new deck.IconLayer({id:"f_"+d.id, data:FEATDATA[d.id], dataTransform:x=>x.features||[],
-          visible:vis, opacity:ICONOP,
+          visible:vis, opacity:ICONOP, pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
           getIcon:()=>({url:"data/icons/"+d.ic, width:48, height:48, mask:true}),
           getPosition:f=>f.geometry.coordinates, getColor:d.col,
           getAngle:f=>-(f.properties.ang||0),         // orient to the road (bearing); 0 for icons without one
-          getSize:interp(ICONSIZE, map.getZoom(), ICONHI)*(d.sz||1), sizeUnits:"pixels"}));
+          getSize:interp(ICONSIZE, map.getZoom(), ICONHI)*(d.sz||1), sizeUnits:"pixels",
+          onClick:info=>showInfo(info.object)}));
       else                                         // plain coloured dot (also zoom-scaled)
         out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], visible:vis, pointType:"circle",
+          pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
           getFillColor:f=>f.properties.pc, pointRadiusUnits:"meters", getPointRadius:(d.sz||3)*4,
           pointRadiusMinPixels:2, pointRadiusMaxPixels:14, stroked:true, getLineColor:[255,255,255,180],
-          lineWidthMinPixels:0.4}));
+          lineWidthMinPixels:0.4, onClick:info=>showInfo(info.object)}));
     } else
       out.push(new deck.GeoJsonLayer({id:"f_"+d.id, data:FEATDATA[d.id], stroked:true, filled:false,
+        pickable:true, autoHighlight:true, highlightColor:[255,238,0,200],
         lineWidthUnits:"pixels", lineWidthMinPixels:0.5, getLineColor:f=>f.properties.c, getLineWidth:f=>f.properties.w||1.4,
-        extensions:DASH, dashJustified:true, getDashArray:f=>f.properties.dash||[0,0]}));
+        extensions:DASH, dashJustified:true, getDashArray:f=>f.properties.dash||[0,0],
+        onClick:info=>showInfo(info.object)}));
   }
   return out;
 }
@@ -662,11 +686,24 @@ function fillW(f){
 function casW(f){ return f.properties.cc ? fillW(f) * (CASING_RATIO[f.properties.g]||1.3) : 0; }
 
 function modesStr(p){ return [p.md&&"driving",p.mw&&"walking",p.mc&&"cycling"].filter(Boolean).join(", "); }
+let clickedFeature = false;                 // set true when a deck layer's onClick fires (feature hit)
 function showInfo(o){
   const i = document.getElementById("info");
+  if(o) clickedFeature = true;
   if(!o){ i.style.display="none"; return; }
   const p = o.properties;
   i.style.display = "block";
+  if(p._i){                        // base-map feature (area / line / point) — generic OSM object inspector
+    const f = p._i, tg = f.tags || {};
+    const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const rows = Object.keys(tg).sort().map(k =>
+      `<tr><td style="color:#888;padding-right:8px;vertical-align:top">${esc(k)}</td><td>${esc(tg[k])}</td></tr>`).join("");
+    i.innerHTML = `<b>${f.name ? esc(f.name) : "(unnamed)"}</b>`
+      + `<br><span style="color:#888;font-size:11px">${esc(f.layer)} · ${esc(f.class||"?")}</span>`
+      + `<br><span style="color:#888;font-size:11px">osm_id ${f.osm_id}</span>`
+      + (rows ? `<table style="margin-top:5px;font-size:11px;border-collapse:collapse">${rows}</table>` : "");
+    return;
+  }
   i.innerHTML = `<b>${p.nm||"(unnamed)"}</b><br>class: ${p.hw}<br>length: ${p.len==null?"?":p.len+" m"}`
     + `<br>width: ${p.bm==null?"?":p.bm+" m/dir"} (class-fixed)${p.ow?" · one-way":""}`
     + `<br><span style="color:#888;font-size:11px">OSM lanes: ${p.lanes==null?"untagged":p.lanes+" total"} (not used)</span>`
@@ -812,6 +849,8 @@ document.querySelectorAll('.featchk').forEach(cb => cb.onchange = e => { fstate[
 const zoomBox = document.getElementById("zoom");
 function showZoom(){ zoomBox.textContent = "zoom " + map.getZoom().toFixed(2); }
 map.on("move", showZoom); map.on("load", showZoom);
+// click on empty map (no feature picked this click) dismisses the info panel
+map.on("click", () => { setTimeout(() => { if(!clickedFeature) showInfo(null); clickedFeature = false; }, 0); });
 let raf=null; map.on("zoom", ()=>{ if(raf) return; raf=requestAnimationFrame(()=>{raf=null; draw();}); });
 
 Promise.all([

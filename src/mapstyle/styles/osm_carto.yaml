@@ -40,21 +40,29 @@ roads:
       service_minor: 0.5
       pedestrian:    0.5
       path:          0.5
-    # `lanes_oneway` = TOTAL lanes of a ONE-WAY road (drawn centred). A dual-carriageway arterial
-    #   carriageway is usually 2; a one-way minor street is 1 (not single-track — it isn't shared).
+    # `lanes_oneway` = TOTAL lanes of a ONE-WAY road (drawn as one CENTRED line). Two cases:
+    #  1. SINGLE-carriageway street that can TRANSITION one-way<->two-way (default / secondary /
+    #     tertiary / residential / living_street / service / pedestrian): the carriageway is the same
+    #     physical width either way, so `lanes_oneway = 2 x lanes` -> one-way = the whole carriageway =
+    #     two-way total, and the two render FLUSH at the transition (no width step).
+    #  2. DUAL-carriageway arterial (major / trunk / primary): a one-way way is ONE separate carriageway
+    #     (median between the two directions), NOT the full road. So `lanes_oneway = lanes` (the
+    #     per-direction count) — a one-way trunk carriageway stays 2 lanes, it does NOT become 4.
+    #  Plus the `path` group (footway/cycleway/steps/track) draws as a single centred line in both
+    #  directions, so there too `lanes_oneway = lanes`.
     lanes_oneway:
-      default:       1
-      major:         2
-      trunk:         2
-      primary:       2
-      secondary:     2
-      tertiary:      1
-      residential:   1
-      living_street: 1
-      service:       1
-      service_minor: 1
-      pedestrian:    1
-      path:          0.5
+      default:       2      # street: = 2 x lanes (1)
+      major:         2      # DUAL carriageway: one-way = one carriageway = lanes (2), NOT 2 x
+      trunk:         2      # DUAL carriageway
+      primary:       2      # DUAL carriageway (one-way primary carriageway ~2 lanes)
+      secondary:     2      # street: = 2 x lanes (1)
+      tertiary:      2      # street: = 2 x lanes (1)  — was 1; caused the width step at one-way<->two-way
+      residential:   2      # street: = 2 x lanes (1)
+      living_street: 1      # street: = 2 x lanes (0.5)
+      service:       1      # street: = 2 x lanes (0.5)
+      service_minor: 1      # street: = 2 x lanes (0.5)
+      pedestrian:    1      # street: = 2 x lanes (0.5)
+      path:          0.5    # single centred line, so one-way = two-way = lanes (0.5)
     # ONE global legibility multiplier OVER true physical size, by zoom (interpolated; flat ->1.0 = true
     # scale at high zoom, lifted at low zoom so thin roads stay visible). NOTE it DECREASES with zoom
     # because the physical (1/mpp) factor already grows 2x/zoom — net width still grows. See the doc.
@@ -182,6 +190,8 @@ features:
       brownfield: "#b6b592"
       recreation_ground: "#dffce2"
       pitch: "#aae0cb"
+      track: "#aae0cb"               # leisure=track — same green as a pitch (OSM-Carto)
+      stadium: "#dffce2"             # leisure=stadium grounds (Tamme staadion) — light green sport area
       nature_reserve: "#d5e8d1"
       golf_course: "#b5e3b5"
       playground: "#dffce2"          # leisure=playground — GREEN in OSM (was falling to grey default)
@@ -189,6 +199,24 @@ features:
       garages: "#dfddce"             # landuse=garages (muted)
       greenfield: "#f1eee8"          # undeveloped land (very light)
       beach: "#fff1ba"               # natural=beach (sandy)
+      # --- leisure / landuse areas OSM-Carto fills that duckOSM used to drop (Gap A) ---
+      dog_park: "#e5f5df"            # leisure=dog_park — park green
+      flowerbed: "#dcefc7"           # landuse=flowerbed — soft green
+      marina: "#b5d0d0"              # leisure=marina — pale water blue
+      ice_rink: "#ddecec"            # leisure=ice_rink — very light blue
+      swimming_area: "#aad3df"       # leisure=swimming_area — water blue
+      religious: "#cecdc9"           # landuse=religious — light grey
+      military: "#f3d8d8"            # landuse=military — pale red (OSM hatches it red)
+      # --- institutional / sport GROUNDS from features.sites (Gap B), OSM-Carto colours ---
+      school: "#ffffe5"              # amenity=school — pale yellow (education)
+      kindergarten: "#ffffe5"        # amenity=kindergarten — same education yellow
+      university: "#ffffe5"          # amenity=university
+      college: "#ffffe5"             # amenity=college
+      hospital: "#ffe5e5"            # amenity=hospital — pale pink
+      sports_centre: "#dffce2"       # leisure=sports_centre — light green (leisure)
+      prison: "#dcdcd0"              # amenity=prison — muted grey-green
+      construction: "#c7c7b4"        # landuse=construction — beige
+      bridge: "#b8b8b8"              # man_made=bridge deck — grey
       default: "#e8e6df"
   # OSM-Carto landcover TEXTURES (deck.gl FillStyleExtension) — class -> pattern tile (patterns.py:
   # trees/graves/waves/dots/sand/hatch/rows). Drawn as DARKER symbols over the solid fill, like OSM
@@ -212,7 +240,15 @@ features:
     pitch: "#8bad8b"
     playground: "#8bad8b"
     track: "#8bad8b"
+    stadium: "#8bad8b"         # leisure=stadium — darker green border, like a pitch
     nature_reserve: "#77a075"
+    garden: "#b3d17d"          # leisure=garden — thin green border (OSM-Carto outlines it)
+    school: "#dcd6ac"          # education grounds — soft yellow border
+    kindergarten: "#dcd6ac"
+    university: "#dcd6ac"
+    college: "#dcd6ac"
+    hospital: "#e6c6c6"        # hospital grounds — soft pink border
+    sports_centre: "#a0d0a8"   # leisure=sports_centre — green border
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:    {color: "#4a90d9", width: 1.6}
     railways:     {color: "#707070", width: 1.4, dash: [6, 4]}
