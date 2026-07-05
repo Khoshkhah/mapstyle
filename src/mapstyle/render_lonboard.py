@@ -48,8 +48,11 @@ def _road_layers(layer, theme):
 def _polygon_layers(layer):
     gdf = layer.gdf
     name = layer.name
-    fills = np.array([_rgb(polygon_style(name, c)["fillColor"])
-                      for c in gdf["class"].tolist()], dtype=np.uint8)
+    if layer.color:                                   # solid override (additive; None = class-palette as before)
+        fills = np.array([_rgb(layer.color)] * len(gdf), dtype=np.uint8)
+    else:
+        fills = np.array([_rgb(polygon_style(name, c)["fillColor"])
+                          for c in gdf["class"].tolist()], dtype=np.uint8)
     stroked = name == "buildings"
     pl = PolygonLayer.from_geopandas(
         gdf, auto_downcast=False, get_fill_color=fills, opacity=0.85,
