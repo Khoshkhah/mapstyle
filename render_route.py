@@ -123,13 +123,23 @@ def main():
                                   for m, v in by_mode.items()},
                       "transfers": len(res.get("transfers", []))},
           "start": list(start), "end": list(end), "features": feats}
+    # turn-by-turn: embed maneuver `steps` (each with the edge_indices it covers) if the route-guidance
+    # library is installed — the viewer renders them as a clickable turn list. Soft dep: skip if absent.
+    n_steps = 0
+    try:
+        from route_guidance import annotate
+        annotate(fc)
+        n_steps = len(fc.get("steps", []))
+    except ImportError:
+        pass
     (out / "data").mkdir(parents=True, exist_ok=True)
     (out / "data" / "route.geojson").write_text(json.dumps(fc))
     con.close()
     s = fc["summary"]
     legs = " + ".join(f"{m} {v['length_m']:.0f}m" for m, v in s["by_mode"].items())
+    steps_note = f", {n_steps} turn-by-turn steps" if n_steps else " (no route-guidance -> no steps)"
     print(f"wrote {out}/data/route.geojson — {s['length_m']:.0f} m, {s['time_s']:.0f} s, "
-          f"{s['speed_kmh']:.0f} km/h  [{legs}]")
+          f"{s['speed_kmh']:.0f} km/h  [{legs}]{steps_note}")
 
 
 if __name__ == "__main__":
