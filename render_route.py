@@ -68,7 +68,7 @@ def main():
     for mode in set(m for m, _ in pairs):
         eids = [e for m, e in pairs if m == mode]
         rows = con.execute(f"""
-            SELECT e.edge_id, e.osm_id, e.highway, ROUND(e.length_m, 1), e.cost_s,
+            SELECT e.edge_id, e.osm_id, e.highway, ROUND(e.length_m, 1), e.cost_s, e.source,
                    to_json(w.tags), ST_AsGeoJSON(e.geometry)
             FROM {mode}.edges e LEFT JOIN {mode}.ways w ON e.osm_id = w.osm_id
             WHERE e.edge_id IN ({','.join(map(str, eids))})
@@ -98,7 +98,7 @@ def main():
         r = by_key.get((mode, eid))
         if not r:
             continue
-        _, osm_id, hw, length_m, cost_s, tags_json, geo = r
+        _, osm_id, hw, length_m, cost_s, src, tags_json, geo = r
         length_m = length_m or 0.0
         cost_s = float(cost_s) if cost_s else 0.0
         speed = round(length_m / cost_s * 3.6, 1) if cost_s else None   # km/h
@@ -111,8 +111,22 @@ def main():
                 "name": tags.get("name", ""), "len_m": length_m, "speed_kmh": speed, "tags": tags}
         feats.append({"type": "Feature", "geometry": json.loads(geo),
                       "properties": {"eid": str(eid), "mode": mode, "seq": seq, "len_m": length_m,
-                                     "cum_m": round(cum, 1), "speed_kmh": speed, "_i": info}})
+                                     "cum_m": round(cum, 1), "speed_kmh": speed, "src": src, "_i": info}})
     add_access((dx, dy), end)                   # from the network to the clicked end
+
+    # junction awareness (for route-guidance): out-degree of each edge's START node — <=2 = through-node
+    # (no real choice, a bend there isn't a "turn"), >=3 = a genuine junction. No new duckOSM export.
+    from duckosm.routing import node_out_degree
+    nodes_by_mode = {}
+    for f in feats:
+        s, m = f["properties"].get("src"), f["properties"].get("mode")
+        if s is not None:
+            nodes_by_mode.setdefault(m, set()).add(s)
+    degs = {m: node_out_degree(con, ns, mode=m) for m, ns in nodes_by_mode.items()}
+    for f in feats:
+        s = f["properties"].pop("src", None)
+        if s is not None:
+            f["properties"]["branches"] = degs.get(f["properties"]["mode"], {}).get(s)
 
     total_len = round(sum(v[0] for v in by_mode.values()), 1)
     total_t = round(sum(v[1] for v in by_mode.values()), 1)
