@@ -681,9 +681,6 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   #planner label{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}
   #pl-clear{font-size:12px;padding:3px 12px;border:1px solid #ccc;border-radius:4px;background:#f7f7f7;cursor:pointer}
   #pl-clear:hover{background:#eee}
-  /* planner start/end markers: a solid opaque dot with a white ring + drop shadow */
-  .pin{width:20px;height:20px;border-radius:50%;border:3px solid #fff;cursor:grab;
-    box-shadow:0 0 0 1px rgba(0,0,0,.45), 0 1px 5px rgba(0,0,0,.5)}
   body.has-panel #map{right:340px}                       /* leave room for the panel */
   body.has-panel #baselayer-ctrl{right:350px}            /* keep the base-layer icon out from under it */
   body.has-panel #route-summary{display:none!important}  /* guidance lives in the panel, not the float box */
@@ -1121,10 +1118,8 @@ Promise.all([
 let mStart=null, mEnd=null;                       // draggable start/end maplibre markers
 const _planModes = () => [...document.querySelectorAll('.modeck:checked')].map(c=>c.value);
 const _guid = () => document.getElementById("guidance");
-function _mkMarker(lngLat, color){   // a bold, opaque dot (white ring + shadow) — reads far better than the pale default pin
-  const el = document.createElement("div");
-  el.className = "pin"; el.style.background = color;
-  return new maplibregl.Marker({element:el, draggable:true})
+function _mkMarker(lngLat, color){   // default maplibre pin, in a dark/saturated colour so it reads on the busy map
+  return new maplibregl.Marker({color, draggable:true})
     .setLngLat(lngLat).addTo(map).on("dragend", planRoute);
 }
 function planRoute(){
