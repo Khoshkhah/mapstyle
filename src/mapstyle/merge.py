@@ -431,7 +431,7 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
                     props["oc"] = _rgb(out_map[cls]) + [235]
                 if cls in pat_map:                               # OSM texture: darker symbols over the fill
                     props["pat"] = pat_map[cls]
-                    props["pc"] = _darker(_rgb(fill)) + [210]
+                    props["pc"] = _darker(_rgb(fill), 0.5) + [160]   # semi-transparent: base fill stays visible
                 ff.append({"type": "Feature", "geometry": _sg.mapping(gm), "properties": props})
             if outline:
                 fdef["oc"] = _rgb(outline)                       # layer-wide outline (non-by_class layers)

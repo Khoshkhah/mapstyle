@@ -206,15 +206,12 @@ features:
     sand: sand
     quarry: hatch
     brownfield: hatch
-  # OSM-Carto landcover BORDERS — class -> outline colour (leisure/amenity areas that have an edge).
+  # OSM-Carto landcover BORDERS — class -> outline colour. Only the classes OSM actually outlines
+  # (sports areas + nature reserve); most landuse/leisure fills have NO border in OSM-Carto.
   landcover_outline:
-    park: "#a9c9a9"
-    garden: "#a9c9a9"
     pitch: "#8bad8b"
-    playground: "#a9c9a9"
-    allotments: "#a9c9a9"
-    recreation_ground: "#a9c9a9"
-    cemetery: "#aacbaf"
+    playground: "#8bad8b"
+    track: "#8bad8b"
     nature_reserve: "#77a075"
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:    {color: "#4a90d9", width: 1.6}
