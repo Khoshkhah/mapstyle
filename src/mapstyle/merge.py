@@ -633,10 +633,15 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   /* route summary (distance / time / speed / per-mode) */
   #route-summary{position:absolute;top:10px;left:10px;z-index:3;background:#fff;padding:8px 12px;
     border-radius:6px;font:13px/1.5 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3);
-    min-width:180px;max-width:230px;display:none}
+    min-width:210px;max-width:290px;display:none}
   #route-summary b{display:block;margin-bottom:4px}
   #route-summary .rm{display:flex;justify-content:space-between;gap:12px;color:#555;font-size:12px}
   #route-summary .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  #route-summary .steps{max-height:42vh;overflow-y:auto;margin-top:5px;border-top:1px solid #eee;padding-top:4px}
+  #route-summary .step{display:flex;gap:7px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:12px;align-items:baseline}
+  #route-summary .step:hover{background:#f0f0f0}
+  #route-summary .step.sel{background:#fff3cd}
+  #route-summary .step .n{color:#aaa;min-width:16px} #route-summary .step .d{color:#888;font-size:11px;margin-left:auto;white-space:nowrap}
 </style></head><body>
 <div id="map"></div>
 __ZOOMBOX__
@@ -653,6 +658,8 @@ let ROUTE = {features:[]};              // optional shortest-path overlay (data/
 let BM_BY_EID = {};                     // edge_id -> baked base metres, so the route reuses the ROAD width per zoom
 let GEOM_BY_EID = {};                   // edge_id -> the base map's DIRECTIONAL (offset) geometry, for the route
 let FOUND = null;                       // road feature located via the "Find edge_id" box (highlighted on top)
+let STEPS = [];                         // turn-by-turn steps (route.geojson.steps, from route-guidance)
+let SELSTEP = null;                     // the currently selected step — its edges are glow-highlighted
 const ROUTE_MODES=__ROUTEMODES__, ROUTE_HALO=__ROUTEHALO__, ROUTE_MULT=__ROUTEMULT__,
       ROUTE_HALOPX=__ROUTEHALOPX__, ROUTE_MINPX=__ROUTEMINPX__, ROUTE_ACCESSPX=__ROUTEACCESSPX__;
 const FEATUREDEFS = __FEATUREDEFS__, FEATDATA = {}, fstate = {}; FEATUREDEFS.forEach(d=>fstate[d.id]=true);
@@ -916,6 +923,12 @@ function draw(){
     const rw = f => f.properties.mode==="access" ? ROUTE_ACCESSPX
                     : Math.max(ROUTE_MINPX, widthPx(BM_BY_EID[f.properties.eid] || 3, map.getZoom(), false) * ROUTE_MULT);
     const rhalo = f => rw(f) + (f.properties.mode==="access" ? 1.5 : 2*ROUTE_HALOPX);
+    if(SELSTEP){   // selected turn-list command: a wide gold glow UNDER the route on that step's edges
+      const sf = (SELSTEP.edge_indices||[]).map(k=>ROUTE.features[k]).filter(Boolean);
+      if(sf.length) layers.push(new deck.GeoJsonLayer({id:"selstep", data:{type:"FeatureCollection", features:sf},
+        stroked:true, filled:false, lineWidthUnits:"pixels", getLineWidth:f=>rhalo(f)+7, lineWidthMinPixels:12,
+        getLineColor:[255,190,0,240], lineCapRounded:true, lineJointRounded:true, updateTriggers:{getLineWidth:[zt]}}));
+    }
     layers.push(
       new deck.GeoJsonLayer({id:"route-halo", data:ROUTE, stroked:true, filled:false, lineWidthUnits:"pixels",
         getLineWidth:rhalo, lineWidthMinPixels:ROUTE_ACCESSPX+1.5, getLineColor:ROUTE_HALO,
@@ -998,13 +1011,33 @@ function renderRouteSummary(){         // door-to-door distance / time / avg spe
     rows += `<div class="rm"><span><span class="sw" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>${m}</span>`
           + `<span>${km(v.length_m)} km · ${min(v.time_s)} min</span></div>`;
   }
+  const dist = m => m < 1000 ? Math.round(m) + " m" : (m/1000).toFixed(1) + " km";
+  let turns = "";
+  if(STEPS.length){   // clickable turn-by-turn list — pick a command to highlight its edges on the map
+    turns = '<div class="steps">' + STEPS.map((st,i) =>
+      `<div class="step" data-i="${i}"><span class="n">${i+1}</span><span>${_esc(st.instruction)}</span>`
+      + (st.type==="arrive" ? "" : `<span class="d">${dist(st.distance_m)}</span>`) + `</div>`).join("") + '</div>';
+  }
   el.innerHTML = `<b>Route</b>`
     + `<div class="rm"><span>distance</span><span>${km(s.length_m)} km</span></div>`
     + `<div class="rm"><span>time</span><span>${min(s.time_s)} min</span></div>`
     + `<div class="rm"><span>avg speed</span><span>${s.speed_kmh} km/h</span></div>`
     + (s.transfers ? `<div class="rm"><span>transfers</span><span>${s.transfers}</span></div>` : "")
-    + `<div style="border-top:1px solid #eee;margin:5px 0 2px"></div>` + rows;
+    + `<div style="border-top:1px solid #eee;margin:5px 0 2px"></div>` + rows + turns;
   el.style.display="block";
+  el.querySelectorAll('.step').forEach(row => row.onclick = () => selectStep(+row.dataset.i));
+}
+const _esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function selectStep(i){   // highlight step i's edges + fly to them
+  SELSTEP = STEPS[i] || null;
+  document.querySelectorAll('#route-summary .step').forEach((r,j)=>r.classList.toggle('sel', j===i));
+  const feats = SELSTEP ? (SELSTEP.edge_indices||[]).map(k=>ROUTE.features[k]).filter(Boolean) : [];
+  if(feats.length){
+    const xs=[], ys=[]; feats.forEach(f=>f.geometry.coordinates.forEach(c=>{xs.push(c[0]);ys.push(c[1]);}));
+    map.fitBounds([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]], {padding:90, maxZoom:18, duration:600});
+    map.once("moveend", draw);
+  }
+  draw();
 }
 Promise.all([
   fetch("data/roads_merged.geojson").then(r=>r.json()),
@@ -1022,6 +1055,7 @@ Promise.all([
   // draw the route ON the base map's DIRECTIONAL edge: replace each network edge's centreline geometry
   // with the same offset geometry the base map drew for that edge_id (access legs have no eid -> keep theirs).
   for(const f of ROUTE.features){ const g = GEOM_BY_EID[f.properties.eid]; if(g) f.geometry = g; }
+  STEPS = (route && route.steps) || []; SELSTEP = null;
   renderRouteSummary();
   const go=()=>refilter(); if(map.loaded()) go(); else map.on("load", go);
 });
