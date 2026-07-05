@@ -78,8 +78,15 @@ The bundled Tartu driver defaults to the **base map** and takes `--debug` for th
 ```bash
 python render_tartu.py                 # -> render/basemap (lean base map)
 python render_tartu.py --debug         # -> render/debug_visualization (hover / click / toggles)
+python render_tartu.py --guidance      # -> render/guidance (base map + turn-by-turn side panel)
+python render_tartu.py --plan          # -> render/planner (INTERACTIVE: click endpoints, pick modes)
 python render/basemap/serve.py         # -> http://localhost:8080/index.html
 ```
+
+The `--plan` planner is served with a live routing backend (it fetches `/api/route` on each click) —
+run it via the sibling **route-viewer** project: `route-viewer --serve --build-base`. `render_merge`'s
+`plan=True` adds the mode checkboxes + click-to-place markers; `route_panel=True` alone gives the
+static guidance side panel (turn list from a pre-written `data/route.geojson`).
 
 ## Status
 

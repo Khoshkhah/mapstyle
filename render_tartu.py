@@ -28,11 +28,14 @@ from mapstyle.layers import Layer
 
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
 DEBUG = "--debug" in sys.argv        # --debug   = full inspectable viewer (hover/click/info + toggles)
-GUIDANCE = "--guidance" in sys.argv  # --guidance = base map + a route-guidance SIDE PANEL (turn-by-turn)
+PLAN = "--plan" in sys.argv          # --plan    = interactive route PLANNER (click endpoints, pick modes,
+                                     #             fetch /api/route — serve with `route-viewer --serve`)
+GUIDANCE = "--guidance" in sys.argv or PLAN   # --guidance = base map + route-guidance SIDE PANEL (turn-by-turn)
                                      # default    = lean fast BASE map (base-layer selector only)
 DB = _args[0] if len(_args) > 0 else "../duckOSM/data/db/tartu.duckdb"
 OUT = _args[1] if len(_args) > 1 else (
-    "render/guidance" if GUIDANCE else "render/debug_visualization" if DEBUG else "render/basemap")
+    "render/planner" if PLAN else "render/guidance" if GUIDANCE else
+    "render/debug_visualization" if DEBUG else "render/basemap")
 LAYERS = Path(__file__).parent / "layers.yaml"   # WHICH feature layers to show (config, separate from style)
 
 
@@ -133,7 +136,8 @@ merged = merge_modes(DB)                                    # roads: names / arr
 add_construction(merged)                                    # + highway=construction as grey real roads
 feats = feature_layers()                                    # base-map layers — config-driven (features.layers)
 render_merge(merged, OUT, basemap="none", overlays=("names", "arrows"), feature_layers=feats,
-             interactive=DEBUG, route_panel=GUIDANCE,
-             title=("Debug Visualization" if DEBUG else "Route guidance" if GUIDANCE else "Map"))
-_kind = "guidance" if GUIDANCE else "debug" if DEBUG else "base"
+             interactive=DEBUG, route_panel=GUIDANCE, plan=PLAN,
+             title=("Debug Visualization" if DEBUG else "Route planner" if PLAN
+                    else "Route guidance" if GUIDANCE else "Map"))
+_kind = "planner" if PLAN else "guidance" if GUIDANCE else "debug" if DEBUG else "base"
 print(f"rendered {_kind} map -> {OUT}/index.html   (serve: python {OUT}/serve.py)")

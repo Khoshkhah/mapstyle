@@ -302,8 +302,12 @@ def _load_boundary(src):
 
 def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", overlays=(),
                  boundary=None, feature_layers=None, zoom=13, center=None, interactive=True,
-                 route_panel=False):
+                 route_panel=False, plan=False):
     """Write a viewer for the merged set: OSM/Modes coloring + per-mode filter + base selector.
+
+    plan: when True (implies route_panel), the interactive ROUTE PLANNER — click the map to drop a
+    start then an end marker (draggable), tick Walk/Cycle/Drive to choose the allowed modes, and the
+    page fetches ``/api/route`` (served by route-viewer's backend) and draws the route + turn-by-turn.
 
     interactive: when True (default) the full DEBUG viewer — hover-highlight, click-to-inspect
     (info panel), per-mode / per-feature toggles, colour-by-mode, legend. When False, a lean fast
@@ -550,9 +554,22 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
         'stroke-linejoin="round" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/>'
         '<polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></button>\n'
         '</div>')
+    route_panel = route_panel or plan   # the planner needs the side panel to host its controls + guidance
     # route-guidance side panel (a fixed right column with the turn-by-turn list) — the map insets to fit.
-    sidepanel = ('<div id="sidepanel"><div class="sp-title">Route guidance</div>'
-                 '<div id="guidance" class="sp-body">Plan a route to see turn-by-turn directions.</div>'
+    # In plan mode it also carries the mode picker + "click the map to route" controls at the top.
+    planner_ctrl = ("""<div id="planner">
+    <div class="pl-modes">
+      <label><input type="checkbox" class="modeck" value="walking" checked> Walk</label>
+      <label><input type="checkbox" class="modeck" value="cycling" checked> Cycle</label>
+      <label><input type="checkbox" class="modeck" value="driving" checked> Drive</label>
+    </div>
+    <button id="pl-clear" type="button">Clear</button>
+  </div>""" if plan else "")
+    sp_title = "Route planner" if plan else "Route guidance"
+    sp_hint = ("Click the map to set the <b>start</b>, then the <b>end</b>."
+               if plan else "Plan a route to see turn-by-turn directions.")
+    sidepanel = (f'<div id="sidepanel"><div class="sp-title">{sp_title}</div>{planner_ctrl}'
+                 f'<div id="guidance" class="sp-body">{sp_hint}</div>'
                  '</div>') if route_panel else ""
     html = (_TEMPLATE
             .replace("__PANEL__", panel)
@@ -562,6 +579,7 @@ def render_merge(layer, out_dir, basemap="osm", title="Debug Visualization", ove
             .replace("__BODYCLASS__", "has-panel" if route_panel else "")
             .replace("__PANELROWS__", panel_rows)
             .replace("__INTERACTIVE__", "true" if interactive else "false")
+            .replace("__PLAN__", "true" if plan else "false")
             .replace("__PATTERNATLAS__", pat_atlas_url)
             .replace("__PATTERNMAP__", pat_map_json)
             .replace("__FEATUREDEFS__", json.dumps(feature_defs))
@@ -657,6 +675,12 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
     box-shadow:-1px 0 6px rgba(0,0,0,.15);display:flex;flex-direction:column;font:13px/1.5 system-ui,sans-serif}
   #sidepanel .sp-title{padding:12px 16px;font-size:16px;font-weight:bold;border-bottom:1px solid #eee}
   #sidepanel .sp-body{overflow-y:auto;padding:8px 12px;flex:1}
+  /* route PLANNER controls (mode checkboxes + clear) at the top of the side panel */
+  #planner{padding:10px 16px;border-bottom:1px solid #eee}
+  #planner .pl-modes{display:flex;gap:12px;margin-bottom:8px}
+  #planner label{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}
+  #pl-clear{font-size:12px;padding:3px 12px;border:1px solid #ccc;border-radius:4px;background:#f7f7f7;cursor:pointer}
+  #pl-clear:hover{background:#eee}
   body.has-panel #map{right:340px}                       /* leave room for the panel */
   body.has-panel #baselayer-ctrl{right:350px}            /* keep the base-layer icon out from under it */
   body.has-panel #route-summary{display:none!important}  /* guidance lives in the panel, not the float box */
@@ -671,6 +695,7 @@ __BASELAYERCTRL__
 <script>
 const CENTER = __CENTER__, BASEMAPS = __BASEMAPS__, DEFAULT_BM = "__DEFAULT_BM__";
 const INTERACTIVE = __INTERACTIVE__;   // false = lean BASE viewer: no picking/hover/info, base-layer selector only
+const PLAN = __PLAN__;                  // true = interactive route planner: click endpoints, pick modes, fetch /api/route
 const S = {md:true, mw:true, mc:true, cmode:"osm", arrows:__ARROWS__, names:__NAMES__, boundary:__HASBOUND__};
 let FEATURES = [], KEEP = [], LABELS = [], ARROWS = [], BOUNDARY = [];
 let ROUTE = {features:[]};              // optional shortest-path overlay (data/route.geojson), drawn on top
@@ -1053,9 +1078,17 @@ function renderRouteSummary(){         // door-to-door distance / time / avg spe
   el.querySelectorAll('.step').forEach(row => row.onclick = () => selectStep(+row.dataset.i));
 }
 const _esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function setRoute(fc, redraw=true){   // install a freshly planned route.geojson (from the boot file OR /api/route)
+  ROUTE = fc && fc.features ? fc : {features:[]};
+  // draw each network edge on the base map's DIRECTIONAL (offset) geometry; access legs have no eid -> keep theirs.
+  for(const f of ROUTE.features){ const g = GEOM_BY_EID[f.properties.eid]; if(g) f.geometry = g; }
+  STEPS = (fc && fc.steps) || []; SELSTEP = null;
+  renderRouteSummary();
+  if(redraw && map.loaded()) draw();
+}
 function selectStep(i){   // highlight step i's edges + fly to them
   SELSTEP = STEPS[i] || null;
-  document.querySelectorAll('#route-summary .step').forEach((r,j)=>r.classList.toggle('sel', j===i));
+  document.querySelectorAll('.step').forEach((r,j)=>r.classList.toggle('sel', j===i));
   const feats = SELSTEP ? (SELSTEP.edge_indices||[]).map(k=>ROUTE.features[k]).filter(Boolean) : [];
   if(feats.length){
     const xs=[], ys=[]; feats.forEach(f=>f.geometry.coordinates.forEach(c=>{xs.push(c[0]);ys.push(c[1]);}));
@@ -1077,11 +1110,44 @@ Promise.all([
   ROUTE = route && route.features ? route : {features:[]};
   BM_BY_EID = {}; GEOM_BY_EID = {};
   for(const f of roads.features){ BM_BY_EID[f.properties.eid] = f.properties.bm; GEOM_BY_EID[f.properties.eid] = f.geometry; }
-  // draw the route ON the base map's DIRECTIONAL edge: replace each network edge's centreline geometry
-  // with the same offset geometry the base map drew for that edge_id (access legs have no eid -> keep theirs).
-  for(const f of ROUTE.features){ const g = GEOM_BY_EID[f.properties.eid]; if(g) f.geometry = g; }
-  STEPS = (route && route.steps) || []; SELSTEP = null;
-  renderRouteSummary();
+  setRoute(route && route.features ? route : {features:[]}, false);   // draw() is handled by go() below
   const go=()=>refilter(); if(map.loaded()) go(); else map.on("load", go);
 });
+
+// ---- interactive route PLANNER (PLAN mode): click endpoints, pick modes, fetch /api/route -------------
+let mStart=null, mEnd=null;                       // draggable start/end maplibre markers
+const _planModes = () => [...document.querySelectorAll('.modeck:checked')].map(c=>c.value);
+const _guid = () => document.getElementById("guidance");
+function _mkMarker(lngLat, color){
+  return new maplibregl.Marker({color, draggable:true}).setLngLat(lngLat).addTo(map).on("dragend", planRoute);
+}
+function planRoute(){
+  if(!mStart || !mEnd) return;
+  const modes = _planModes(), g = _guid();
+  if(!modes.length){ if(g) g.innerHTML = "Tick at least one mode (Walk / Cycle / Drive)."; setRoute({features:[]}); return; }
+  const s = mStart.getLngLat(), e = mEnd.getLngLat();
+  const url = `/api/route?slng=${s.lng}&slat=${s.lat}&elng=${e.lng}&elat=${e.lat}&modes=${modes.join(",")}`;
+  if(g) g.innerHTML = "Routing…";
+  fetch(url).then(r=>r.json()).then(fc=>{
+    if(!fc || fc.error){ if(g) g.innerHTML = "No route (" + ((fc&&fc.error)||"error") + ")."; setRoute({features:[]}); }
+    else setRoute(fc);
+  }).catch(err=>{ if(g) g.innerHTML = "Route request failed — is the backend running? (" + err + ")"; });
+}
+function onPlanClick(ev){
+  const ll = ev.lngLat;
+  if(!mStart){ mStart = _mkMarker(ll, "#2e9e4f"); if(_guid()) _guid().innerHTML = "Click the map to set the <b>end</b>."; }
+  else if(!mEnd){ mEnd = _mkMarker(ll, "#e02b2b"); planRoute(); }
+  else { mEnd.remove(); mEnd = null; mStart.setLngLat(ll); setRoute({features:[]});   // 3rd click = start over
+         if(_guid()) _guid().innerHTML = "Click the map to set the <b>end</b>."; }
+}
+function clearPlan(){
+  if(mStart){ mStart.remove(); mStart=null; } if(mEnd){ mEnd.remove(); mEnd=null; }
+  setRoute({features:[]});
+  if(_guid()) _guid().innerHTML = "Click the map to set the <b>start</b>, then the <b>end</b>.";
+}
+if(PLAN){
+  map.on("click", onPlanClick);
+  document.getElementById("pl-clear").onclick = clearPlan;
+  document.querySelectorAll(".modeck").forEach(c => c.onchange = () => { if(mStart && mEnd) planRoute(); });
+}
 </script></body></html>"""
