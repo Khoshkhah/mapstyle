@@ -681,7 +681,9 @@ _TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"/><title>__TITLE_
   #planner label{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer}
   #pl-clear{font-size:12px;padding:3px 12px;border:1px solid #ccc;border-radius:4px;background:#f7f7f7;cursor:pointer}
   #pl-clear:hover{background:#eee}
-  /* planner markers: drop the default pin's hollow white centre so it reads as a SOLID, opaque pin */
+  /* planner markers: sit ABOVE the deck.gl route overlay (added as a ctrl at z-index 2, so it otherwise
+     paints over the pins), and drop the default pin's hollow white centre so it reads as a SOLID pin */
+  .maplibregl-marker{z-index:3}
   .maplibregl-marker svg g[fill="#FFFFFF"]{display:none}
   body.has-panel #map{right:340px}                       /* leave room for the panel */
   body.has-panel #baselayer-ctrl{right:350px}            /* keep the base-layer icon out from under it */
