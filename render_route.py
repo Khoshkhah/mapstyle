@@ -114,19 +114,22 @@ def main():
                                      "cum_m": round(cum, 1), "speed_kmh": speed, "src": src, "_i": info}})
     add_access((dx, dy), end)                   # from the network to the clicked end
 
-    # junction awareness (for route-guidance): out-degree of each edge's START node — <=2 = through-node
-    # (no real choice, a bend there isn't a "turn"), >=3 = a genuine junction. No new duckOSM export.
-    from duckosm.routing import node_out_degree
+    # junction awareness (for route-guidance): for each edge's START node, the branches leaving it —
+    # count (out-degree: <=2 through-node, >=3 junction) + their bearings (forks / roundabout exits).
+    # No new duckOSM export; from edges.source/geometry.
+    from duckosm.routing import node_branches
     nodes_by_mode = {}
     for f in feats:
         s, m = f["properties"].get("src"), f["properties"].get("mode")
         if s is not None:
             nodes_by_mode.setdefault(m, set()).add(s)
-    degs = {m: node_out_degree(con, ns, mode=m) for m, ns in nodes_by_mode.items()}
+    brs = {m: node_branches(con, ns, mode=m) for m, ns in nodes_by_mode.items()}
     for f in feats:
         s = f["properties"].pop("src", None)
         if s is not None:
-            f["properties"]["branches"] = degs.get(f["properties"]["mode"], {}).get(s)
+            bb = brs.get(f["properties"]["mode"], {}).get(s) or []
+            f["properties"]["branches"] = len(bb)                    # out-degree (count)
+            f["properties"]["branch_bearings"] = [b for _, b in bb]  # leaving bearings, for fork/exit logic
 
     total_len = round(sum(v[0] for v in by_mode.values()), 1)
     total_t = round(sum(v[1] for v in by_mode.values()), 1)
