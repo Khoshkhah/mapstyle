@@ -5,9 +5,8 @@ layers use mapstyle's own palettes. Each layer is added in z-order so they stack
 OSM base map.
 """
 
-import json
-
 import folium
+from roadstyle.fastjson import fc_dict
 
 from mapstyle.palettes import polygon_style
 
@@ -31,7 +30,7 @@ def _add_line(m, layer, theme):
     """Style each edge via roadstyle.resolve, then draw casing under fill (the sandwich)."""
     from mapstyle.roads import resolve_road
 
-    gj = json.loads(layer.gdf.to_json())
+    gj = fc_dict(layer.gdf)
     for ft in gj["features"]:
         hw = ft["properties"].get("highway") or "unclassified"
         s = resolve_road(hw)
@@ -62,7 +61,7 @@ def _add_line(m, layer, theme):
 
 
 def _add_polygon(m, layer, theme):
-    gj = json.loads(layer.gdf.to_json())
+    gj = fc_dict(layer.gdf)
     name = layer.name
     folium.GeoJson(
         gj, name=name,
