@@ -19,6 +19,13 @@
 - Fixed on the way: a class the base palette lacks (pedestrian) inherited footway's dash and drew
   as broken grey blocks; see-through car roads showed their dark casing (now mixed with white).
 - The planner's default stays `walking` (a walking leg must show).
+- **Order at junctions** (Kaveh, 2026-09-30): the walking look no longer lifts every path above
+  every road (`z_order` 9.5): that cut through junctions, and a path's halo vanished under the road
+  it crossed. Instead, by duckOSM's `walk_type`, a `crossing` (the zebra) draws entirely over the
+  street and a `sidewalk` entirely under it, casings included (roadstyle's new `band_col`:
+  `../roadstyle/docs/design/draw_order_per_edge.md`); every other path keeps the class order
+  (a street over the path ending at it), as openstreetmap-carto does. Needs roadstyle's
+  `band_col` (after 0.9.2).
 
 ## Problem
 

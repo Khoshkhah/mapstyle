@@ -23,7 +23,9 @@ _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 def load_roads(db):
     """One row per ``edge_id`` over the db's mode networks, with ``driving`` / ``walking`` /
-    ``cycling`` flags. ``edge_id`` / ``osm_id`` are strings: the hashes can pass 2**53."""
+    ``cycling`` flags and duckOSM's ``walk_type`` (sidewalk, crossing, footpath, …; the walking
+    network's, when the build has it). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
+    2**53."""
     import duckdb
     import geopandas as gpd
 
@@ -35,15 +37,18 @@ def load_roads(db):
         modes = [m for m in MODES if m in have]
         if not modes:
             raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
+        wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
+                                        "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
         union = " UNION ALL ".join(
             f"SELECT edge_id, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry, "
-            f"'{m}' AS mode FROM {m}.edges" for m in modes)
+            f"{'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode FROM {m}.edges" for m in modes)
         df = con.execute(f"""
             SELECT CAST(edge_id AS VARCHAR) AS edge_id,
                    CAST(any_value(osm_id) AS VARCHAR) AS osm_id,
                    any_value(highway) AS highway, COALESCE(any_value(name), '') AS name,
                    any_value(bridge) AS bridge, any_value(tunnel) AS tunnel,
                    any_value(layer) AS layer, bool_or(oneway) AS oneway,
+                   any_value(walk_type) AS walk_type,
                    {", ".join(f"bool_or(mode = '{m}') AS {m}" for m in MODES)},
                    ST_AsWKB(any_value(geometry)) AS wkb
             FROM ({union}) GROUP BY edge_id""").df()
@@ -341,6 +346,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
             "Road class": {}, "Modes": {"color_by": "modes", "colors": load_style("modes")["mode_colors"]}})
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
         render = rs.render_report
+    # a crossing (the zebra) draws over the street it crosses, a sidewalk under the street beside
+    # it, casings included (roadstyle's band_col; roadstyle/docs/design/draw_order_per_edge.md)
+    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1})
+    kw["band_col"] = "band"
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 

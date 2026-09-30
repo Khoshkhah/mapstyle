@@ -1,7 +1,7 @@
 # Travel modes (docs/design/mode_styles.md), passed to roadstyle as settings= (roadstyle is not
 # changed). A mode picks which network stands out; how its paths look is the path style
 # (paths.yaml). Per mode:
-#   em     the classes drawn in the path style's `em` width group, on top of every road for cars
+#   em     the classes drawn in the path style's `em` width group
 #   lanes  false = every road one centred line, not a two-way road's two lanes side by side
 #          (roadstyle's offset_frac=0, width_frac=1)
 #   fade   true = the roads for cars fade towards white (by the path style's `fade`)
@@ -30,16 +30,9 @@ walking:
       primary:   {12: 2, 13: 3, 14: 4, 15: 5.5, 16: 7, 17: 9, 18: 11}
       secondary: {12: 1.5, 13: 2.5, 14: 3.5, 15: 5, 16: 6, 17: 8, 18: 10}
       tertiary:  {12: 1.2, 13: 2, 14: 2.7, 15: 3.6, 16: 5, 17: 6.5, 18: 8.5}
-    z_order:            # on top of every road for cars (motorway = 9)
-      living_street: 9.3
-      pedestrian: 9.4
-      platform: 9.4
-      track: 9.45
-      bridleway: 9.45
-      footway: 9.5
-      path: 9.5
-      corridor: 9.5
-      steps: 9.6
+    # no z_order lift: paths keep the class order (a street over the path ending at it, as in
+    # openstreetmap-carto); crossings draw over their street and sidewalks under it by walk_type
+    # (render_map's band_col), which is what the old "every path above every road" was fixing
 
 cycling:
   em: [cycleway]

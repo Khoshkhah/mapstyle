@@ -62,14 +62,30 @@ def test_mode_covers_every_class(monaco, mode, paths):
             assert g in roads.get(table, {}) or g in defaults[table], (g, table)
 
 
-def test_komoot_walking_draws_paths_solid_with_a_halo_on_top():
+def test_komoot_walking_draws_paths_solid_with_a_halo():
     name, s = mode_settings("walking", "komoot")
-    p, z = s["palettes"][name], s["roads"]["z_order"]
+    p = s["palettes"][name]
     assert all(p[c]["dash"] is None for c in ("footway", "path", "corridor", "pedestrian"))
     assert all(p[c]["casing"] == "#ffffff" for c in ("footway", "path", "cycleway"))     # the halo
     assert "footway" not in s["config"]["minor_no_casing"]
     assert p["primary"]["fill"] != "#fcd6a4" and "opacity" not in str(load_style("modes")["walking"])
-    assert min(z[c] for c in ("footway", "steps", "platform")) > 9     # motorway = 9
+    assert "footway" not in s["roads"].get("z_order", {})              # class order, no lift
+
+
+def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
+    """walk_type -> roadstyle's band_col: a crossing (zebra) over the street, a sidewalk under it
+    (roadstyle/docs/design/draw_order_per_edge.md)."""
+    roads = load_roads(monaco)
+    assert {"crossing", "sidewalk"} <= set(roads["walk_type"].dropna())
+    seen = {}
+    from types import SimpleNamespace
+    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(monaco, layers=False)
+    g = seen["g"]
+    assert seen["band_col"] == "band"
+    assert set(g.loc[g.walk_type == "crossing", "band"]) == {1}
+    assert set(g.loc[g.walk_type == "sidewalk", "band"]) == {-1}
+    assert g.loc[~g.walk_type.isin(["crossing", "sidewalk"]), "band"].isna().all()
 
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):

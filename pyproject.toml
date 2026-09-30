@@ -13,7 +13,7 @@ authors = [{ name = "Kaveh" }]
 keywords = ["osm", "basemap", "roadstyle", "duckosm", "maplibre", "cartography"]
 
 dependencies = [
-    "roadstyle>=0.9.1",   # the page; installed editable from ../roadstyle
+    "roadstyle>=0.9.3",   # the page (band_col); installed editable from ../roadstyle
     "duckdb",             # reads the duckOSM db
     "geopandas",
     "pyyaml",             # styles/*.yaml
