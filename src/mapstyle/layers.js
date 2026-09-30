@@ -61,9 +61,13 @@ const run = async () => {
                  "icon-size": ["interpolate", ["linear"], ["zoom"], ...L.icon.size.flat()],
                  "icon-rotate": ["coalesce", ["get", "bearing"], 0], "icon-rotation-alignment": "map"},
         paint: {"icon-opacity": L.icon.opacity}});
-      // the circle stays as the click / hover target, unseen under the icon
+      // the circle stays as the click / hover target, unseen and as big as the icon (an icon is
+      // 48 px scaled by icon-size, so its radius is 24 x that): a click anywhere on the icon is its
+      // click, not the road's under it
       map.setPaintProperty(body, "circle-opacity", 0);
       map.setPaintProperty(body, "circle-stroke-width", 0);
+      map.setPaintProperty(body, "circle-radius",
+        ["interpolate", ["linear"], ["zoom"], ...L.icon.size.map(([z, s]) => [z, s * 24]).flat()]);
     }
     if (L.min_zoom) ov.layers.forEach(id => map.setLayerZoomRange(id, L.min_zoom, 24));
     base[L.label] = Object.fromEntries(ov.layers.map((id) => [id, map.getFilter(id) || null]));

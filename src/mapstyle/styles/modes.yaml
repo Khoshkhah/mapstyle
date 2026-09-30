@@ -1,59 +1,52 @@
-# Travel-mode styles (docs/design/mode_styles.md), passed to roadstyle as settings= — roadstyle
-# itself is not changed. A mode's palette = roadstyle's `carto` + osm_carto.yaml `roads.colors` +
-# the mode's `palette` overrides below. Its `roads` block is roadstyle's `roads` settings (width
-# groups in px by zoom, class -> width group, z_order), merged per entry over roadstyle's defaults;
-# a new width group also needs its `width_zoom_rate` and `casing_ratio`.
+# Travel modes (docs/design/mode_styles.md), passed to roadstyle as settings= (roadstyle is not
+# changed). A mode picks which network stands out; how its paths look is the path style
+# (paths.yaml). Per mode:
+#   em     the classes drawn in the path style's `em` width group, on top of every road for cars
+#   lanes  false = every road one centred line, not a two-way road's two lanes side by side
+#          (roadstyle's offset_frac=0, width_frac=1)
+#   fade   true = the roads for cars fade towards white (by the path style's `fade`)
+#   roads  roadstyle `roads` settings (width px by zoom per group, class -> group, z_order), merged
+#          per entry over roadstyle's defaults
 # roadstyle has no width group for `platform` (it would get residential width): every mode sets one.
+
+# the roads for cars (faded in the walking / cycling looks)
+cars: [motorway, trunk, primary, secondary, tertiary, unclassified, residential, service]
+
+all:              # the whole map: every network at its own width, none on top, nothing faded
+  roads:
+    group: {platform: path}
 
 driving:
   roads:
     group: {platform: path}
 
 walking:
-  palette:
-    # the walking network: solid (a dashed class always draws under the road casings)
-    footway:  {dash: null}
-    path:     {dash: null}
-    corridor: {dash: null}
-    steps:    {fill: "#c0392b", dash: null}     # darker than footways: a flight of steps
-    # roads for cars: lighter
-    motorway:     {opacity: 0.55}
-    trunk:        {opacity: 0.55}
-    primary:      {opacity: 0.55}
-    secondary:    {opacity: 0.55}
-    tertiary:     {opacity: 0.55}
-    unclassified: {opacity: 0.55}
-    residential:  {opacity: 0.55}
-    service:      {opacity: 0.55}
+  em: [footway, path, steps, corridor, pedestrian, platform, track, bridleway]
+  lanes: false
+  fade: true
   roads:
-    width:
-      walk:      {12: 1, 13: 1.5, 14: 2.5, 15: 3, 16: 4, 17: 5.5, 18: 7}
-      # roads for cars: ~0.6x roadstyle's widths
+    width:              # roads for cars: ~0.6x roadstyle's widths
       major:     {12: 2, 13: 3.5, 14: 5, 15: 6, 16: 8, 17: 10, 18: 13}
       primary:   {12: 2, 13: 3, 14: 4, 15: 5.5, 16: 7, 17: 9, 18: 11}
       secondary: {12: 1.5, 13: 2.5, 14: 3.5, 15: 5, 16: 6, 17: 8, 18: 10}
       tertiary:  {12: 1.2, 13: 2, 14: 2.7, 15: 3.6, 16: 5, 17: 6.5, 18: 8.5}
-    width_zoom_rate: {walk: 1.3}
-    casing_ratio: {walk: 1.0}
-    group: {footway: walk, path: walk, steps: walk, corridor: walk, platform: walk}
-    z_order:     # on top of every road for cars (motorway = 9)
-      pedestrian: 9.3
+    z_order:            # on top of every road for cars (motorway = 9)
       living_street: 9.3
+      pedestrian: 9.4
       platform: 9.4
+      track: 9.45
+      bridleway: 9.45
       footway: 9.5
       path: 9.5
       corridor: 9.5
       steps: 9.6
 
 cycling:
-  palette:
-    cycleway: {fill: "#2b5ce6", dash: null}   # solid cycling blue; footways stay thin and dashed
+  em: [cycleway]
+  lanes: false
+  fade: true
   roads:
-    width:
-      cycle: {12: 1, 13: 1.5, 14: 2.5, 15: 3, 16: 4, 17: 5.5, 18: 7}
-    width_zoom_rate: {cycle: 1.3}
-    casing_ratio: {cycle: 1.0}
-    group: {cycleway: cycle, platform: path}
+    group: {platform: path}
     z_order: {cycleway: 9.5}
 
 # Colour by modes (the dashboard's "Modes" option): which modes can use a road.

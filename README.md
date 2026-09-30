@@ -7,7 +7,9 @@ whole JavaScript API, 3D, Street View and vector tiles come with it.
 
 ```bash
 pip install -e ../roadstyle -e .          # + '.[tiles]' for --tiles
-mapstyle monaco.duckdb --mode walking     # -> monaco_walking.html
+mapstyle monaco.duckdb                    # -> monaco_all.html: the whole map
+mapstyle monaco.duckdb --mode walking     # the walking network on top, roads for cars faded
+mapstyle monaco.duckdb --paths osm        # paths as on openstreetmap.org (default: google)
 mapstyle tartu.duckdb -o tartu.html --tiles --basemap positron
 mapstyle monaco.duckdb --planner          # + a route planner: drag start and end (Drive, Walk, Cycle, Walk + drive)
 mapstyle monaco.duckdb --dashboard        # a dashboard: filter by mode, road class, layer and kind
@@ -23,7 +25,10 @@ roads = ms.load_roads(db)      # one row per edge_id, with driving / walking / c
 fcs = ms.load_layers(db)       # {layer name: GeoJSON FeatureCollection}
 ```
 
-Every other keyword goes to `roadstyle.render_edges`. A db built without `features.*` gives
+`mode`: `all` (default), `driving`, `walking`, `cycling`: which network stands out. `paths`: how
+paths look (`styles/paths.yaml`: `google` default, `osm`, `komoot`, `cyclosm`). The base map is
+`blank` (the db's own map; duckOSM has no sea yet, so a coast's sea is land-coloured); the raster
+maps are in the switcher. Every other keyword goes to `roadstyle.render_edges`. A db built without `features.*` gives
 roads only, with a logged hint. `interaction={"crossings": {"tooltip": True}}` sets how a layer opens.
 
 ## JavaScript
@@ -44,7 +49,8 @@ in the same style (and only where the page has none yet):
 
 `ms:ready` fires once they are all defined (the feature layers' images load first).
 
-- The look is data: `src/mapstyle/styles/modes.yaml` (per-mode palettes and road widths),
+- The look is data: `src/mapstyle/styles/modes.yaml` (which network stands out, per mode),
+  `paths.yaml` (path styles),
   `osm_carto.yaml` (road colours, feature-layer styles), `layers.yaml` (which `features.*` layers,
   draw order, filters).
 - Design: [`docs/design/`](docs/design/); work plan: [`docs/PLAN.md`](docs/PLAN.md).

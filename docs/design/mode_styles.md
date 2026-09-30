@@ -4,6 +4,22 @@
 2026-09-30): everything here is done in mapstyle, with roadstyle's existing per-call `settings=`
 (palettes, `roads`, `config`), `palette=` and the page's `window.map`.
 
+**Update 2026-09-30, after trying it (Kaveh):** the look of the paths is now its own choice, the
+*path style*, separate from the mode:
+
+- `render_map(db, mode, paths=...)`, `mapstyle --mode ... --paths ...`. Modes (`styles/modes.yaml`):
+  **`all`** (the whole map: every network at its own width, none on top, nothing faded; the
+  default), `driving`, `walking`, `cycling` (that network in the path style's `em` width group, on
+  top; the roads for cars fade; every road one centred line, roadstyle's `offset_frac=0`).
+- Path styles (`styles/paths.yaml`): **`google`** (default: thin solid white paths with a grey
+  edge, green cycleways), `osm` (openstreetmap.org: dotted salmon / blue), `komoot` (bold colours
+  with a white halo), `cyclosm` (solid blue cycleways, thin dark dashed footways). Kaveh compared
+  them on the whole map and liked google and osm; google is the default because a highlighted
+  route recolours a solid line completely, a dotted one only in its dots.
+- Fixed on the way: a class the base palette lacks (pedestrian) inherited footway's dash and drew
+  as broken grey blocks; see-through car roads showed their dark casing (now mixed with white).
+- The planner's default stays `walking` (a walking leg must show).
+
 ## Problem
 
 roadstyle's palettes were made for **driving** networks. On a walking or cycling network (duckOSM's

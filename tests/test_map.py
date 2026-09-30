@@ -9,7 +9,7 @@ import pytest
 import roadstyle as rs
 from roadstyle import _settings
 
-from mapstyle.map import MODES, load_layers, load_roads, main, mode_settings, render_map
+from mapstyle.map import LOOKS, MODES, load_layers, load_roads, main, mode_settings, render_map
 from mapstyle.style import load_style
 
 DUCKOSM = Path(__file__).resolve().parents[2] / "duckOSM"
@@ -45,10 +45,12 @@ def test_load_roads(monaco):
     assert g["walking"].sum() > g["driving"].sum()          # footways and steps
 
 
-@pytest.mark.parametrize("mode", MODES)
-def test_mode_covers_every_class(monaco, mode):
-    """No class falls back to roadstyle's `unclassified` look or `residential` width."""
-    name, s = mode_settings(mode)
+@pytest.mark.parametrize("paths", list(load_style("paths")))
+@pytest.mark.parametrize("mode", LOOKS)
+def test_mode_covers_every_class(monaco, mode, paths):
+    """No class falls back to roadstyle's `unclassified` look or `residential` width, in any
+    mode and path style."""
+    name, s = mode_settings(mode, paths)
     palette, roads, defaults = s["palettes"][name], s["roads"], _settings.roads()
     group = {**defaults["group"], **roads.get("group", {})}
     classes = {c for c in load_roads(monaco)["highway"].dropna()} | PATH_CLASSES
@@ -60,10 +62,13 @@ def test_mode_covers_every_class(monaco, mode):
             assert g in roads.get(table, {}) or g in defaults[table], (g, table)
 
 
-def test_walking_draws_paths_solid_and_on_top():
-    name, s = mode_settings("walking")
+def test_komoot_walking_draws_paths_solid_with_a_halo_on_top():
+    name, s = mode_settings("walking", "komoot")
     p, z = s["palettes"][name], s["roads"]["z_order"]
-    assert all(p[c]["dash"] is None for c in ("footway", "path", "steps", "corridor"))
+    assert all(p[c]["dash"] is None for c in ("footway", "path", "corridor", "pedestrian"))
+    assert all(p[c]["casing"] == "#ffffff" for c in ("footway", "path", "cycleway"))     # the halo
+    assert "footway" not in s["config"]["minor_no_casing"]
+    assert p["primary"]["fill"] != "#fcd6a4" and "opacity" not in str(load_style("modes")["walking"])
     assert min(z[c] for c in ("footway", "steps", "platform")) > 9     # motorway = 9
 
 
@@ -73,18 +78,31 @@ def test_mode_reaches_render_edges(monaco, monkeypatch):
     monkeypatch.setattr(rs, "render_edges",
                         lambda g, **kw: seen.update(kw, n=len(g)) or SimpleNamespace(_tpl="</body>"))
     render_map(monaco, "cycling", layers=False, basemap="positron")
-    assert seen["palette"] == "ms_cycling" and seen["basemap"] == "positron"
-    assert seen["settings"]["roads"]["group"]["cycleway"] == "cycle"
+    assert seen["palette"] == "ms_cycling_google" and seen["basemap"] == "positron"
+    assert seen["settings"]["roads"]["group"]["cycleway"] == "em"
 
 
 def test_render_walking_page(monaco):
-    html = render_map(monaco, "walking").html
-    assert "#c0392b" in html                                 # the steps colour reached the page
+    html = render_map(monaco, "walking", paths="komoot").html
+    assert "#b3301e" in html                                 # komoot's steps colour reached the page
 
 
-def test_unknown_mode():
+@pytest.mark.parametrize("paths", list(load_style("paths")))
+def test_no_class_inherits_a_dash(paths):
+    """A class osm_carto.yaml and the path style draw solid stays solid (pedestrian once came out
+    dashed)."""
+    name, s = mode_settings("walking", paths)
+    colors, style = load_style()["roads"]["colors"], load_style("paths")[paths].get("palette") or {}
+    for c in ("pedestrian", "platform", "living_street", "busway", "raceway"):
+        if "dash" not in colors.get(c, {}) and "dash" not in style.get(c, {}):
+            assert s["palettes"][name][c]["dash"] is None, c
+
+
+def test_unknown_mode_or_path_style():
     with pytest.raises(ValueError):
         mode_settings("flying")
+    with pytest.raises(ValueError):
+        mode_settings("walking", "crayon")
 
 
 def test_every_layer_has_a_style():

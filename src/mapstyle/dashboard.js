@@ -34,14 +34,39 @@
   }, n));
   host.insertBefore(box, ovs);
 
+  // ---- popup off also keeps a layer out of the panel's read-out --------------------------------
+  // the report fills #rp-detail from every rs:select, a road click listing the clickable layers
+  // under it; this listener runs after the report's and redraws it (the report's own markup)
+  // without the layers whose popup is off
+  const detail = document.getElementById("rp-detail"), idle = detail && detail.innerHTML;
+  const rowsOf = (p, only) => (only && only.length ? only : Object.keys(p))
+    .filter((k) => k[0] !== "_" && k !== "lvl" && p[k] != null && p[k] !== "")
+    .map((k) => "<b>" + esc(k) + "</b>: " + esc(p[k])).join("<br>");
+  const popupOn = (label) => { const s = rsGetInteraction(label); return !s || s.popup; };
+  if (detail) document.addEventListener("rs:select", (e) => {
+    const d = e.detail;
+    if (d.overlay) { if (!popupOn(d.overlay)) detail.innerHTML = idle; return; }
+    const ovs = (d.overlays || []).filter((o) => popupOn(o.label));
+    if (ovs.length === (d.overlays || []).length) return;
+    detail.innerHTML = rowsOf(d.properties, d.fields) + ovs.map((o) =>
+      '<hr style="border:none;border-top:1px solid var(--line);margin:6px 0"><span style="color:var(--mut)">'
+      + esc(o.label) + "</span><br>" + rowsOf(o.properties, o.fields)).join("");
+  });
+
   // ---- per layer: switches and kinds -----------------------------------------------------------
   const rows = ovs ? [...ovs.querySelectorAll("label.rp-chk")] : [];
   for (const ov of window.RS_OVERLAYS || []) {
     const st = rsGetInteraction(ov.label); if (!st) continue;
     const d = el("details", "ms-layer", "<summary>clicks, kinds</summary>");
-    const sw = el("div", "ms-sw");
-    for (const k of ["clickable", "tooltip", "popup"])
-      sw.appendChild(check(k, st[k], (c) => rsSetInteraction(ov.label, {[k]: c})));
+    const sw = el("div", "ms-sw"), cb = {};
+    // a layer that isn't clickable opens no popup: its popup switch waits, greyed
+    const grey = () => { const off = !cb.clickable.checked; cb.popup.disabled = off;
+      cb.popup.parentNode.style.opacity = off ? 0.45 : 1; cb.popup.parentNode.title = off ? "needs clickable" : ""; };
+    for (const k of ["clickable", "tooltip", "popup"]) {
+      const lab = check(k, st[k], (c) => { rsSetInteraction(ov.label, {[k]: c}); grey(); });
+      cb[k] = lab.querySelector("input"); sw.appendChild(lab);
+    }
+    grey();
     d.appendChild(sw);
     const counts = window.RS_KINDS[ov.label] || {}, names = Object.keys(counts);
     if (names.length > 1) {

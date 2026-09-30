@@ -13,7 +13,9 @@ from pathlib import Path
 
 from mapstyle.style import load_style
 
-MODES = ("driving", "walking", "cycling")
+MODES = ("driving", "walking", "cycling")          # duckOSM's networks: the roads' mode flags
+LOOKS = ("all",) + MODES                           # render_map(mode=): "all" emphasises none (modes.yaml)
+PATHS = "google"                                   # the default path style (styles/paths.yaml)
 log = logging.getLogger(__name__)
 _HERE = Path(__file__).parent
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
@@ -51,22 +53,41 @@ def load_roads(db):
     return gpd.GeoDataFrame(df, geometry=geom)
 
 
-def mode_settings(mode):
-    """``(palette_name, settings)`` for ``rs.render_edges``: the mode's palette (roadstyle's
-    carto + osm_carto.yaml's colours + the mode's overrides) and its ``roads`` settings."""
+def mode_settings(mode, paths=PATHS):
+    """``(palette_name, settings)`` for ``rs.render_edges``: the palette (roadstyle's carto +
+    osm_carto.yaml's colours + the path style's, paths.yaml) and the ``roads`` / ``config``
+    settings (the mode's network in the path style's ``em`` width group, on top; modes.yaml)."""
     import roadstyle as rs
 
-    if mode not in MODES:
-        raise ValueError(f"unknown mode {mode!r}; choose from {MODES}")
-    spec = load_style("modes")[mode] or {}
+    if mode not in LOOKS:
+        raise ValueError(f"unknown mode {mode!r}; choose from {LOOKS}")
+    styles = load_style("paths")
+    if paths not in styles:
+        raise ValueError(f"unknown path style {paths!r}; choose from {tuple(styles)}")
+    modes, st = load_style("modes"), styles[paths]
+    spec = modes[mode] or {}
     base = rs.palette_to_dict("carto")
     colors = load_style()["roads"]["colors"]
-    over = spec.get("palette") or {}
-    palette = {c: {**base.get(c, base["footway"]), **colors.get(c, {}), **over.get(c, {})}
+    over = st.get("palette") or {}
+    # a class the base lacks (pedestrian, steps, platform, …) starts from footway's entry without
+    # its dash: osm_carto.yaml gives the dash where a class has one
+    new = {**base["footway"], "dash": None}
+    palette = {c: {**base.get(c, new), **colors.get(c, {}), **over.get(c, {})}
                for c in {*base, *colors, *over}}
-    name = f"ms_{mode}"
+    if spec.get("fade") and st.get("fade"):
+        for c in modes["cars"]:
+            for k in ("fill", "casing"):
+                if palette[c].get(k):
+                    palette[c][k] = _mix(palette[c][k], "#ffffff", st["fade"])
+    roads = {k: dict(v) for k, v in (spec.get("roads") or {}).items()}
+    for k, v in {"width": {"em": st["em"]["width"]}, "width_zoom_rate": {"em": 1.3},
+                 "casing_ratio": {"em": st["em"]["casing_ratio"]},
+                 "group": {**{c: "em" for c in spec.get("em", [])}, **(st.get("group") or {})}}.items():
+        roads.setdefault(k, {}).update(v)
+    config = {"minor_no_casing": st["minor_no_casing"]} if "minor_no_casing" in st else {}
+    name = f"ms_{mode}_{paths}"
     # json round trip: zoom keys as strings, like roadstyle's own width tables
-    return name, json.loads(json.dumps({"palettes": {name: palette}, "roads": spec.get("roads") or {}}))
+    return name, json.loads(json.dumps({"palettes": {name: palette}, "roads": roads, "config": config}))
 
 
 def load_layers(db, names=None):
@@ -119,6 +140,12 @@ def load_layers(db, names=None):
 
 def _kind(name):
     return next(s["kind"] for s in load_style("layers")["layers"] if s["name"] == name)
+
+
+def _mix(a, b, t):
+    """Hex colour ``a`` mixed ``t`` of the way to ``b``."""
+    x, y = (bytes.fromhex(h.lstrip("#")) for h in (a, b))
+    return "#" + "".join(f"{round(p + (q - p) * t):02x}" for p, q in zip(x, y))
 
 
 def _darker(hex_color, f=0.6):
@@ -266,35 +293,39 @@ def planner_data(db, roads):
     return data
 
 
-def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None, **kwargs):
+def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
+               paths=PATHS, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
-    names, or False = roads only. ``interaction``: a layer's opening ``{clickable, tooltip, popup}``,
+    names, or False = roads only. ``paths``: how walking / cycling paths look (styles/paths.yaml:
+    komoot, osm, cyclosm, google). ``interaction``: a layer's opening ``{clickable, tooltip, popup}``,
     e.g. ``{"landcover": {"clickable": True}}``. ``planner=True`` adds the route planner
     (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
-    kind and interaction filters (docs/design/dashboard.md). ``mode`` defaults to driving, walking
-    with the planner or the dashboard (every path drawn solid and wide). ``kwargs`` go to roadstyle
+    kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
+    (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
+    The base map is ``blank`` (duckOSM has no sea yet: PLAN step 3). ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 
-    mode = mode or ("walking" if planner or dashboard else "driving")
+    mode = mode or ("walking" if planner else "all")
     if planner and kwargs.get("tiles"):
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
     if planner and dashboard:
         raise ValueError("planner=True and dashboard=True both use the right-hand panel: pick one")
-    palette, settings = mode_settings(mode)
+    palette, settings = mode_settings(mode, paths)
     roads = load_roads(db)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
     overlays, config = feature_overlays(fcs, interaction)
-    kw = {"name": f"{Path(db).stem} ({mode})", "tooltip": ["edge_id", "osm_id", "highway", "name"],
+    kw = {"name": f"{Path(db).stem} ({mode}, {paths})", "tooltip": ["edge_id", "osm_id", "highway", "name"],
           "copy_field": "edge_id", "overlays": overlays}
-    if fcs:     # a label-free raster under the features: duckOSM has no sea polygons (yet)
-        kw.update(basemap="voyager_nolabels",
-                  basemaps=["voyager_nolabels", "blank", "voyager", "positron", "osm", "satellite"])
+    if load_style("modes")[mode].get("lanes") is False:        # one centred line per road
+        kw.update(offset_frac=0, width_frac=1)
+    # blank: the map is the db's own (Kaveh, 2026-09-30); the raster maps stay in the switcher
+    kw.update(basemap="blank", basemaps=["blank", "voyager_nolabels", "voyager", "positron", "osm", "satellite"])
     html = f"<script>{(_HERE / 'layers.js').read_text().replace('__MS__', _json(config))}</script>"
     if planner:
         roads["k"] = range(len(roads))                          # the feature index the graphs point to
@@ -305,6 +336,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         n = roads[list(MODES)].sum(axis=1)
         roads["modes"] = ["all modes" if k == len(MODES) else " + ".join(m for m in MODES if r[m])
                           for k, (_, r) in zip(n, roads[list(MODES)].iterrows())]
+        kw.pop("tooltip")                # the panel shows the clicked road: no road hover tooltip
         kw.update(name=f"{Path(db).stem}: dashboard", color_options={
             "Road class": {}, "Modes": {"color_by": "modes", "colors": load_style("modes")["mode_colors"]}})
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
@@ -321,9 +353,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
     ap.add_argument("db", help="a duckOSM .duckdb")
     ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
-    ap.add_argument("--mode", choices=MODES,
-                    help="travel-mode style (default: driving, walking with --planner / --dashboard)")
+    ap.add_argument("--mode", choices=LOOKS,
+                    help="which network stands out (default: all, walking with --planner)")
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
+    ap.add_argument("--paths", default=PATHS, choices=tuple(load_style("paths")),
+                    help=f"how walking / cycling paths look (default: {PATHS})")
     ap.add_argument("--planner", action="store_true", help="add the route planner (drag start and end)")
     ap.add_argument("--dashboard", action="store_true", help="a dashboard: filter by mode, class, layer, kind")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
@@ -333,8 +367,9 @@ def main(argv=None):
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
-    mode = a.mode or ("walking" if a.planner or a.dashboard else "driving")
+    mode = a.mode or ("walking" if a.planner else "all")
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
-    render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard, **kw).save(out)
+    render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,
+               paths=a.paths, **kw).save(out)
     print(out)

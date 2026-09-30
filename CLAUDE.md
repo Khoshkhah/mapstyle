@@ -32,8 +32,10 @@ missing-features case).
 ## What is where today
 
 - `map.py` — the library; its `main()` is the `mapstyle` CLI. `render_map(db, mode, layers=True)` → `rs.render_edges` with:
-  roads from `load_roads(db)` (one row per `edge_id`, mode flags) in the mode's palette +
-  `settings=` from `styles/modes.yaml` (design: `docs/design/mode_styles.md`); feature layers
+  roads from `load_roads(db)` (one row per `edge_id`, mode flags) in `mode_settings(mode, paths)`:
+  palette + `settings=` from `styles/modes.yaml` (`all`/driving/walking/cycling: which network is
+  on top) and `styles/paths.yaml` (path styles, default `google`) (design:
+  `docs/design/mode_styles.md`); base map `blank` (Kaveh's choice; no sea yet); feature layers
   from `load_layers(db)` (`styles/layers.yaml`: which `features.<table>` layers, draw order,
   `where`) as one `rs.Overlay` each, styled from `osm_carto.yaml` `features`, plus `layers.js`
   (injected before `</body>`) for what overlays can't draw: colour by `kind`, zoom ranges,

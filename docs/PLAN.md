@@ -32,7 +32,8 @@ and its own JS on the page's `window.map` (MapLibre).
 - [x] **Styles per travel mode:** mapstyle's own walking / cycling palettes (every OSM path class:
       steps, pedestrian, corridor, platform, bridleway), passed as roadstyle settings
       (`styles/modes.yaml`, `mapstyle.map.render_map(db, mode)`), one page per mode. Design:
-      [`design/mode_styles.md`](design/mode_styles.md). Routes visible on footways: checked with
+      [`design/mode_styles.md`](design/mode_styles.md). Since: mode `all` (default) and path styles
+      (`styles/paths.yaml`: google default, osm, komoot, cyclosm). Routes visible on footways: checked with
       the route planner (step 2).
 - [x] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
       `window.map` layer), point icons with rotation (crossings), area textures (`patterns.py`),
@@ -83,12 +84,12 @@ and its own JS on the page's `window.map` (MapLibre).
 - [ ] Delete `route_map.py`, `scripts/route_map_stress.py` and `docs/design/route_map.md` once
       `duckosm route-map` calls mapstyle (`render_map(planner=True)`).
 - [ ] **Extract the sea:** duckOSM builds no sea (OSM has only `natural=coastline` lines, land on
-      their left), so mapstyle draws feature layers over a raster base map. Clip the precomputed
+      their left), so on mapstyle's `blank` base map a coast's sea is land-coloured. Clip the precomputed
       sea polygons (osmdata.openstreetmap.de "water polygons", built from the world coastline; what
       openstreetmap-carto uses) to the area into `features.water_polygons` (`kind = 'sea'`). Building
       them from the extract's own coastline lines is the offline alternative, but fragile (open ends
-      at the clip edge, one gap floods the land). Then mapstyle's default base map goes back to
-      `blank` (`design/feature_layers.md` §3).
+      at the clip edge, one gap floods the land; a prototype got Monaco right and Stockholm county
+      wrong). `design/feature_layers.md` §3.
 - [ ] `viz` extra → `mapstyle`; `duckosm viz` and `duckosm route-map` call mapstyle; docs (Draw a
       map, Route).
 
