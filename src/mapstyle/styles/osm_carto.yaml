@@ -128,6 +128,7 @@ roads:
     track:         {fill: "#ac8327", casing: null, dash: [4, 4]}
     construction:  {fill: "#ffffff", casing: "#bbbbbb", dash: [5, 4]}
     corridor:      {fill: "#fa8072", casing: null, dash: [2, 3]}
+    platform:      {fill: "#bbbbbb", casing: "#969696"}
     raceway:       {fill: "#ffc0cb", casing: "#bbbbbb"}
     busway:        {fill: "#ffffff", casing: "#bbbbbb"}
 

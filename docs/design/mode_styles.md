@@ -12,8 +12,6 @@ roadstyle's palettes were made for **driving** networks. On a walking or cycling
 - Widths come from `roads.width` by `roads.group`, not from the palette's `width` (that one is
   folium/lonboard only). `footway`, `path`, `cycleway`, `steps`, `corridor` and `bridleway` are in
   the `path` group: 0.4 px at z12 up to 3 px at z19.
-- `config.minzoom` hides `footway` / `path` below z15 and `cycleway` below z14: at city zoom they
-  are not drawn at all.
 - Dashed classes (footway, path, cycleway in every palette) are always drawn under the solid road
   casing (`render_web.py`), whatever `z_order` says. In `mono` they are also light grey (`#ABABAB`).
 - `steps`, `corridor`, `platform` and `bridleway` (and `pedestrian` in `carto` and `mono`) are in
@@ -28,13 +26,15 @@ roadstyle's palettes were made for **driving** networks. On a walking or cycling
 ### 1. A settings set per travel mode, owned by mapstyle
 
 A mode is one roadstyle `settings=` dict, shipped as data next to `styles/osm_carto.yaml`, with
-three parts, because the width, visibility and colour live in different places:
+two parts, because the width and the colour live in different places:
 
 - `palettes.ms_<mode>`: a new palette (colour, casing, dash) with an entry for every OSM path
   class (steps, pedestrian, corridor, platform, bridleway), so nothing falls back to `unclassified`;
 - `roads`: a width group for the mode's own network (`width`, `casing_ratio`), `group` entries
-  mapping its classes to it (including `platform`), and `z_order` putting them on top;
-- `config.minzoom`: the mode's own classes shown from city zoom.
+  mapping its classes to it (including `platform`), and `z_order` putting them on top.
+
+(`config.minzoom` would hide paths at city zoom, but it is opt-in, `minzoom=True`; mapstyle leaves
+it off.)
 
 | Mode | The network you use is drawn | Roads for cars |
 |---|---|---|
@@ -69,7 +69,7 @@ the `case` on the route ids goes inside every zoom stop, not around roadstyle's 
 ## Checks
 
 - Tests: for every mode, the palette and `roads.group` cover every class in the walking and
-  cycling networks; `config.minzoom` shows the mode's classes at city zoom; `mode=` reaches
+  cycling networks; `mode=` reaches
   `render_edges` with the mode's palette and settings.
 - In a browser (snapshots, before and after): Monaco walking and cycling at city zoom, and a route
   along footways.

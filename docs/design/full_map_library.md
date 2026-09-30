@@ -78,7 +78,6 @@ The whole roadstyle API, plus:
 
 | Call | Does |
 |---|---|
-| `msSetMode("walking")` / `msSetMode(null)` | show one mode's network in its style / all modes |
 | `rsSetOverlay("POIs", false)` | already in roadstyle: each feature layer is an overlay |
 | `rs:select` with `e.detail.overlay` | already in roadstyle: a click on a POI / crossing |
 
@@ -87,8 +86,8 @@ Kept small on purpose: a new `ms*` call only when roadstyle's can't do it.
 ### 4. Built on roadstyle as it is (no roadstyle changes)
 
 1. **Styles per travel mode**: mapstyle's own walking / cycling palettes, passed as roadstyle
-   `settings=` ("a new name adds a palette"); every OSM path class gets an entry. Switching mode in
-   the page: `msSetMode` (mapstyle JS). Details: [`mode_styles.md`](mode_styles.md).
+   `settings=` ("a new name adds a palette"); every OSM path class gets an entry. One page per mode
+   (no live switch). Details: [`mode_styles.md`](mode_styles.md).
 2. **Feature layers**: roadstyle overlays where they fit (one style per layer); what they can't do
    (colour by a column, icons, rotation, textures, zoom ranges) is mapstyle's own MapLibre layers
    added through the page's `window.map`.
@@ -124,7 +123,7 @@ Like roadstyle's `render_dashboard` / `render_street_view`:
 ## Checks
 
 - Tests on a small duckOSM db built in the test (Monaco sample): `load` (merge by `edge_id`, flags,
-  every layer, missing `features.*`), `render_map` keywords reaching roadstyle, `msSetMode`.
+  every layer, missing `features.*`), `render_map` keywords reaching roadstyle.
 - In a browser (playwright snapshots): Monaco all modes, walking, cycling; POIs and crossings
   visible and clickable; `route-map` routes along footways visible.
 - File size on Monaco, Södermalm, Tartu (inline and tiled).

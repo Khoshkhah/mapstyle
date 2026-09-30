@@ -20,11 +20,8 @@ in `src/mapstyle/` is mostly the old deck.gl viewer that the plan replaces; `REA
 ```bash
 .venv/bin/pip install -e ../roadstyle        # .venv's roadstyle metadata is stale; do this first
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest                             # no tests yet (the plan adds them, on a Monaco db)
-.venv/bin/pytest tests/test_x.py::test_y     # a single test, once they exist
-
-# test data: a small duckOSM db with features.*
-cd ../duckOSM && .venv/bin/duckosm build -c config/sample_monaco.yaml   # needs build_features: true
+.venv/bin/pytest                             # builds a Monaco db with ../duckOSM (~10 s) per session
+MAPSTYLE_TEST_DB=monaco.duckdb .venv/bin/pytest tests/test_modes.py::test_load_roads   # reuse a built db
 
 # the current (to-be-replaced) viewer, from ../duckOSM/data/db/tartu.duckdb
 .venv/bin/python render_tartu.py [db] [out_dir] [--debug]   # -> render/basemap (gitignored)
@@ -36,6 +33,9 @@ missing-features case).
 
 ## What is where today
 
+- `map.py` — the new code: `load_roads(db)` (one row per `edge_id`, mode flags) and
+  `render_map(db, mode)` → `rs.render_edges` with the mode's palette + `settings=` from
+  `styles/modes.yaml` (design: `docs/design/mode_styles.md`).
 - `merge.py` — the live code: `merge_modes(db)` merges duckOSM's driving/walking/cycling networks
   into one row per `edge_id` with mode flags (kept by the plan as `ms.load`); `render_merge` is the
   ~860-line deck.gl viewer (to be deleted).

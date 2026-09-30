@@ -29,9 +29,11 @@ roadstyle stays as it is (Kaveh, 2026-09-30). mapstyle builds on what it already
 `settings=` (new palettes, per-class styles, draw order), `overlays=`, `color_options`, the JS API,
 and its own JS on the page's `window.map` (MapLibre).
 
-- [ ] **Styles per travel mode:** mapstyle's own walking / cycling palettes (every OSM path class:
-      steps, pedestrian, corridor, platform, bridleway), passed as roadstyle settings; routes wide
-      enough to see on footways. Design note for sign-off: [`design/mode_styles.md`](design/mode_styles.md).
+- [x] **Styles per travel mode:** mapstyle's own walking / cycling palettes (every OSM path class:
+      steps, pedestrian, corridor, platform, bridleway), passed as roadstyle settings
+      (`styles/modes.yaml`, `mapstyle.map.render_map(db, mode)`), one page per mode. Design:
+      [`design/mode_styles.md`](design/mode_styles.md). Routes visible on footways: checked with
+      the route planner (step 2).
 - [ ] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
       `window.map` layer), point icons with rotation (crossings), area textures (`patterns.py`),
       zoom ranges: mapstyle's own MapLibre layers added through `window.map`.
@@ -46,7 +48,8 @@ and its own JS on the page's `window.map` (MapLibre).
 - [ ] `ms.render_map(data_or_db, mode=None, layers=None, style="carto", **roadstyle_keywords)` →
       `rs.render_edges(..., overlays=[...])`. `osm_carto.yaml` + `layers.yaml` become roadstyle
       settings / overlay styles.
-- [ ] JS: `msSetMode(mode|null)` (mapstyle JS, see `design/mode_styles.md`); layers via `rsSetOverlay`, clicks via `rs:select`.
+- [ ] JS: layers via `rsSetOverlay`, clicks via `rs:select` (modes are one page each, see
+      `design/mode_styles.md`).
 - [ ] `ms.render_route_planner(db)`: move `../duckOSM/src/duckosm/route_map.py` here (routing in
       the browser over `edge_graph` / `mm.*`; checked on Monaco against duckOSM's `route()` /
       `route_multimodal()`: 8 of 8 trips).
@@ -55,7 +58,7 @@ and its own JS on the page's `window.map` (MapLibre).
       lonboard, `io.load_layer`, `render_tartu.py`, `render_route.py`, the width model, stale docs
       (`PROCESS.md`, `rendering.md`, `width-model.md` as needed).
 - [ ] Tests on a Monaco db (build below): load, missing features, keywords reaching roadstyle,
-      `msSetMode`, the planner's graphs. Browser checks (playwright, `rs.snapshot`): all modes,
+      the planner's graphs. Browser checks (playwright, `rs.snapshot`): all modes,
       walking, cycling, POIs/crossings clickable, a footway route visible.
 - [ ] Size: Monaco / Södermalm inline < ~10 MB; bigger areas with roadstyle's `tiles=True` for the roads (feature layers: simplify, or mapstyle's own tiles, see duckmap's `tiles.py`).
 
