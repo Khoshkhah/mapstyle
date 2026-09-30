@@ -69,7 +69,9 @@ def test_walking_draws_paths_solid_and_on_top():
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):
     seen = {}
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, n=len(g)))
+    from types import SimpleNamespace
+    monkeypatch.setattr(rs, "render_edges",
+                        lambda g, **kw: seen.update(kw, n=len(g)) or SimpleNamespace(_tpl="</body>"))
     render_map(monaco, "cycling", layers=False, basemap="positron")
     assert seen["palette"] == "ms_cycling" and seen["basemap"] == "positron"
     assert seen["settings"]["roads"]["group"]["cycleway"] == "cycle"
@@ -128,17 +130,19 @@ def test_cli(monaco, tmp_path, capsys):
     assert capsys.readouterr().out.strip() == str(tmp_path / "m.html")
 
 
-def test_page_script_parses(monaco, tmp_path):
-    """layers.js with its config filled in is valid JavaScript (a syntax error silently drops
-    every icon, texture and kind colour)."""
+def test_page_scripts_parse(monaco, tmp_path):
+    """mapstyle's scripts with their config filled in are valid JavaScript (a syntax error silently
+    drops every icon, texture, kind colour and rs* function)."""
     import re
     import shutil
     if not shutil.which("node"):
         pytest.skip("needs node")
-    html = render_map(monaco, "walking").html
-    js = re.search(r"<script>(// mapstyle's feature layers.*?)</script>", html, re.S).group(1)
-    (tmp_path / "layers.js").write_text(js)
-    subprocess.run(["node", "--check", tmp_path / "layers.js"], check=True)
+    html = render_map(monaco, "walking", dashboard=True).html
+    js = re.findall(r"<script>((?:// mapstyle's part|// mapstyle's dashboard).*?)</script>", html, re.S)
+    assert len(js) == 2
+    for i, s in enumerate(js):
+        (tmp_path / f"{i}.js").write_text(s)
+        subprocess.run(["node", "--check", tmp_path / f"{i}.js"], check=True)
 
 
 # ---- route planner (docs/design/route_planner.md) ----------------------------------------------
@@ -205,3 +209,29 @@ def test_planner_on_monaco(monaco, monaco_mm):
 def test_planner_refuses_tiles(monaco):
     with pytest.raises(ValueError):
         render_map(monaco, planner=True, tiles=True)
+
+
+# ---- dashboard and mapstyle's rs* functions (docs/design/dashboard.md) --------------------------
+
+def _ms(html):
+    import json
+    return json.loads(html.split("const MS = ", 1)[1].split(", map = window.map;", 1)[0])
+
+
+def test_every_page_has_the_rs_functions(monaco):
+    html = render_map(monaco, layers=["crossings"], interaction={"crossings": {"tooltip": True}}).html
+    assert all(f in html for f in ("rsSetModes", "rsSetKinds", "rsSetInteraction"))
+    ms = _ms(html)
+    assert ms["layers"][0]["interaction"] == {"clickable": True, "tooltip": True, "popup": True}
+    assert set(ms["kinds"]["crossings"]) == {"crossing"}
+    assert "rsSetModes" in render_map(monaco, layers=False).html       # roads only: modes still
+
+
+def test_dashboard(monaco):
+    html = render_map(monaco, dashboard=True).html
+    assert 'id="rp-ovs"' in html and "mapstyle's dashboard" in html   # roadstyle's report + ours
+    assert '"Modes"' in html and "walking + cycling" in html           # the colour option
+    landcover = next(L for L in _ms(html)["layers"] if L["label"] == "landcover")
+    assert landcover["interaction"]["clickable"] is False              # decoration: today's default
+    with pytest.raises(ValueError):
+        render_map(monaco, dashboard=True, planner=True)

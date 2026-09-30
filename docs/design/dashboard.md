@@ -1,6 +1,8 @@
 # A dashboard: every mode on one page, filtered by mode and category
 
-**Status:** proposal, for sign-off before implementation. **roadstyle and duckOSM are not changed.**
+**Status:** approved 2026-09-30 and implemented (`render_map(dashboard=True, interaction=)`,
+`mapstyle --dashboard`, `layers.js`, `dashboard.js`; browser check `scripts/dashboard_check.py`).
+**roadstyle and duckOSM are not changed.**
 
 ## Goal
 

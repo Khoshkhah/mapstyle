@@ -7,6 +7,7 @@ feature layer is an ``rs.Overlay`` plus mapstyle's page script (layers.js) for w
 
 import base64
 import json
+from collections import Counter
 import logging
 from pathlib import Path
 
@@ -129,9 +130,10 @@ def _data_url(mime, data):
     return f"data:{mime};base64," + base64.b64encode(data).decode()
 
 
-def feature_overlays(fcs):
+def feature_overlays(fcs, interaction=None):
     """``(overlays, script_config)`` for ``load_layers`` output: one ``rs.Overlay`` per layer, and
-    what layers.js adds on top (colour by kind, zoom ranges, dashes, textures, icons)."""
+    what layers.js adds on top (colour by kind, zoom ranges, dashes, textures, icons, each layer's
+    opening ``{clickable, tooltip, popup}``: today's defaults updated by ``interaction``)."""
     import roadstyle as rs
     from mapstyle.patterns import pattern_png
 
@@ -145,7 +147,7 @@ def feature_overlays(fcs):
         if name == "landcover":               # colour, outline and texture by kind
             fills = dict(areas["landcover"])
             default = fills.pop("default")
-            ov.update(color=default, opacity=1.0, width=1, popup=[])
+            ov.update(color=default, opacity=1.0, width=1)
             L["color_by"] = {"map": fills, "default": default}
             L["outline_by"] = {"map": st["landcover_outline"], "default": "rgba(0,0,0,0)"}
             L["patterns"] = {}
@@ -156,15 +158,15 @@ def feature_overlays(fcs):
         elif kind == "polygon":
             a = areas.get(name, {})
             ov.update(color=a.get("fill"), outline=a.get("outline"), opacity=a.get("opacity", 1.0),
-                      width=0.5, popup=[] if name == "water" else ["name", "kind"])
+                      width=0.5)
             L["min_zoom"] = a.get("min_zoom")
         elif kind == "line":
             ln = lines.get(name, {})
-            ov.update(color=ln.get("color"), width=ln.get("width"), popup=[])
+            ov.update(color=ln.get("color"), width=ln.get("width"))
             L["dash"] = ln.get("dash")
         else:
             p = {**points["default"], **points.get(name, {})}
-            ov.update(color=p["color"], radius=4, popup=["name", "kind"])
+            ov.update(color=p["color"], radius=4)
             L["min_zoom"] = p.get("min_zoom")
             if p.get("icon"):
                 svg = (_HERE / "icons" / p["icon"]).read_text()
@@ -173,9 +175,15 @@ def feature_overlays(fcs):
                 # the SVGs are 48 px: icon-size = px / 48, scaled by the category's size
                 L["icon"] = {"image": f"ms-icon-{name}", "opacity": icon["opacity"],
                              "size": [[z, px * p["size"] / 48] for z, px in icon["size"].items()]}
-        overlays.append(rs.Overlay(**ov))
+        # built clickable with a tooltip so rsSetInteraction can switch both ways (layers.js);
+        # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
+        L["interaction"] = {"clickable": not (name in ("landcover", "water") or kind == "line"),
+                            "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
+        overlays.append(rs.Overlay(**ov, popup=["name", "kind"], tooltip=["name", "kind"]))
         layers.append(L)
-    return overlays, {"layers": layers, "images": images}
+    kinds = {n: dict(Counter(f["properties"]["kind"] for f in fc["features"]).most_common())
+             for n, fc in fcs.items()}
+    return overlays, {"layers": layers, "images": images, "kinds": kinds}
 
 
 def _json(data):
@@ -258,47 +266,66 @@ def planner_data(db, roads):
     return data
 
 
-def render_map(db, mode=None, layers=True, planner=False, **kwargs):
+def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
-    ``features.*`` base map. ``layers``: True = every styles/layers.yaml layer, a list of names, or
-    False = roads only. ``planner=True`` adds the route planner (docs/design/route_planner.md).
-    ``mode`` defaults to driving, walking with the planner (every path solid and wide, so a walking
-    leg shows). ``kwargs`` go to roadstyle (``basemap``, ``tiles``, ``arrows``, ...)."""
+    ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
+    ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
+    names, or False = roads only. ``interaction``: a layer's opening ``{clickable, tooltip, popup}``,
+    e.g. ``{"landcover": {"clickable": True}}``. ``planner=True`` adds the route planner
+    (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
+    kind and interaction filters (docs/design/dashboard.md). ``mode`` defaults to driving, walking
+    with the planner or the dashboard (every path drawn solid and wide). ``kwargs`` go to roadstyle
+    (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 
-    mode = mode or ("walking" if planner else "driving")
+    mode = mode or ("walking" if planner or dashboard else "driving")
     if planner and kwargs.get("tiles"):
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
+    if planner and dashboard:
+        raise ValueError("planner=True and dashboard=True both use the right-hand panel: pick one")
     palette, settings = mode_settings(mode)
     roads = load_roads(db)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
-    overlays, config = feature_overlays(fcs)
+    unknown = set(interaction or {}) - set(fcs)
+    if unknown:
+        log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
+    overlays, config = feature_overlays(fcs, interaction)
     kw = {"name": f"{Path(db).stem} ({mode})", "tooltip": ["edge_id", "osm_id", "highway", "name"],
           "copy_field": "edge_id", "overlays": overlays}
     if fcs:     # a label-free raster under the features: duckOSM has no sea polygons (yet)
         kw.update(basemap="voyager_nolabels",
                   basemaps=["voyager_nolabels", "blank", "voyager", "positron", "osm", "satellite"])
-    html = ""
-    if fcs:
-        html += f"<script>{(_HERE / 'layers.js').read_text().replace('__MS__', _json(config))}</script>"
+    html = f"<script>{(_HERE / 'layers.js').read_text().replace('__MS__', _json(config))}</script>"
     if planner:
         roads["k"] = range(len(roads))                          # the feature index the graphs point to
         html += (_HERE / "planner.html").read_text().replace("__RM__", _json(planner_data(db, roads)))
         kw.update(name=f"{Path(db).stem}: route planner", filter_control=False)
-    m = rs.render_edges(roads, palette=palette, settings=settings, **{**kw, **kwargs})
-    return _inject(m, html) if html else m
+    render = rs.render_edges
+    if dashboard:
+        n = roads[list(MODES)].sum(axis=1)
+        roads["modes"] = ["all modes" if k == len(MODES) else " + ".join(m for m in MODES if r[m])
+                          for k, (_, r) in zip(n, roads[list(MODES)].iterrows())]
+        kw.update(name=f"{Path(db).stem}: dashboard", color_options={
+            "Road class": {}, "Modes": {"color_by": "modes", "colors": load_style("modes")["mode_colors"]}})
+        html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
+        render = rs.render_report
+    m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
+    return _inject(m, html)
 
 
 def main(argv=None):
-    """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--planner] [--tiles] [--basemap KEY]``"""
+    """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--planner | --dashboard]
+    [--tiles] [--basemap KEY]``"""
     import argparse
 
     ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
     ap.add_argument("db", help="a duckOSM .duckdb")
     ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
-    ap.add_argument("--mode", choices=MODES, help="travel-mode style (default: driving, walking with --planner)")
+    ap.add_argument("--mode", choices=MODES,
+                    help="travel-mode style (default: driving, walking with --planner / --dashboard)")
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
     ap.add_argument("--planner", action="store_true", help="add the route planner (drag start and end)")
+    ap.add_argument("--dashboard", action="store_true", help="a dashboard: filter by mode, class, layer, kind")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
     ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
     a = ap.parse_args(argv)
@@ -306,7 +333,8 @@ def main(argv=None):
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
-    mode = a.mode or ("walking" if a.planner else "driving")
-    out = a.out or f"{Path(a.db).stem}_{'planner' if a.planner else mode}.html"
-    render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, **kw).save(out)
+    mode = a.mode or ("walking" if a.planner or a.dashboard else "driving")
+    kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
+    out = a.out or f"{Path(a.db).stem}_{kind}.html"
+    render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard, **kw).save(out)
     print(out)

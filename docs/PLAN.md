@@ -58,6 +58,10 @@ and its own JS on the page's `window.map` (MapLibre).
       duckOSM's `route()` / `route_multimodal()`; turn-by-turn directions). Drive, Walk, Cycle;
       Walk + drive with the `mm` tables. Design: [`design/route_planner.md`](design/route_planner.md).
       Browser check: `scripts/planner_check.py`.
+- [x] Dashboard: `render_map(db, dashboard=True)` / `mapstyle db --dashboard` (roadstyle's report
+      page + filters by mode, road class, layer and kind, colour by modes) and, on every page,
+      `rsSetModes` / `rsSetKinds` / `rsSetInteraction` (`interaction=`). Design:
+      [`design/dashboard.md`](design/dashboard.md).
 - [x] CLI: `mapstyle db.duckdb -o map.html [--mode walking] [--no-layers] [--tiles] [--basemap KEY]`
       (`--tiles` needs `pip install 'mapstyle[tiles]'`).
 - [x] Delete: the deck.gl viewer (`render_merge` / `render_web.py`), `render_basemap` + folium /

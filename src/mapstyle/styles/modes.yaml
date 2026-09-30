@@ -55,3 +55,13 @@ cycling:
     casing_ratio: {cycle: 1.0}
     group: {cycleway: cycle, platform: path}
     z_order: {cycleway: 9.5}
+
+# Colour by modes (the dashboard's "Modes" option): which modes can use a road.
+mode_colors:
+  all modes:          "#555555"
+  driving + walking:  "#e67e22"
+  driving + cycling:  "#9b59b6"
+  walking + cycling:  "#16a085"
+  driving:            "#e74c3c"
+  walking:            "#27ae60"
+  cycling:            "#2b6cb0"
