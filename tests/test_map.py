@@ -83,9 +83,13 @@ def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
     render_map(monaco, layers=False)
     g = seen["g"]
     assert seen["band_col"] == "band"
-    assert set(g.loc[g.walk_type == "crossing", "band"]) == {1}
-    assert set(g.loc[g.walk_type == "sidewalk", "band"]) == {-1}
+    foot = g.highway == "footway"
+    assert set(g.loc[foot & (g.walk_type == "crossing"), "band"]) == {1}
+    assert set(g.loc[foot & (g.walk_type == "sidewalk"), "band"]) == {-1}
     assert g.loc[~g.walk_type.isin(["crossing", "sidewalk"]), "band"].isna().all()
+    # a car road duckOSM marks "sidewalk" (you walk on its sidewalk) stays with the streets
+    road = (g.walk_type == "sidewalk") & g.highway.isin(["residential", "secondary", "primary"])
+    assert road.sum() > 100 and g.loc[road, "band"].isna().all()
 
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):

@@ -16,6 +16,8 @@ from mapstyle.style import load_style
 MODES = ("driving", "walking", "cycling")          # duckOSM's networks: the roads' mode flags
 LOOKS = ("all",) + MODES                           # render_map(mode=): "all" emphasises none (modes.yaml)
 PATHS = "google"                                   # the default path style (styles/paths.yaml)
+# the ways that are paths, not roads (duckOSM's own list: global_junctions._NON_ROAD_HIGHWAYS)
+PATH_CLASSES = ("footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "corridor")
 log = logging.getLogger(__name__)
 _HERE = Path(__file__).parent
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
@@ -347,8 +349,11 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
         render = rs.render_report
     # a crossing (the zebra) draws over the street it crosses, a sidewalk under the street beside
-    # it, casings included (roadstyle's band_col; roadstyle/docs/design/draw_order_per_edge.md)
-    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1})
+    # it, casings included (roadstyle's band_col; roadstyle/docs/design/draw_order_per_edge.md).
+    # Paths only: duckOSM also marks a car road "sidewalk" when you walk along its own sidewalk,
+    # and that road must stay with the other streets (708 road edges in Monaco).
+    path = roads["highway"].isin(PATH_CLASSES)
+    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
     kw["band_col"] = "band"
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
