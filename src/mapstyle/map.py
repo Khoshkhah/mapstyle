@@ -178,20 +178,99 @@ def feature_overlays(fcs):
     return overlays, {"layers": layers, "images": images}
 
 
-def _inject(m, config):
-    """Add layers.js to a roadstyle page, before ``</body>`` as roadstyle's own pages add their sidebar."""
-    js = (_HERE / "layers.js").read_text().replace("__MS__", json.dumps(config).replace("</", "<\\/"))
-    m._tpl = m._tpl.replace("</body>", f"<script>{js}</script></body>", 1)
+def _json(data):
+    """JSON safe inside a ``<script>``."""
+    return json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+
+
+def _inject(m, html):
+    """Add ``html`` to a roadstyle page before ``</body>``, as roadstyle's own pages add their sidebar."""
+    m._tpl = m._tpl.replace("</body>", html + "</body>", 1)
     return m
 
 
-def render_map(db, mode="driving", layers=True, **kwargs):
+def planner_data(db, roads):
+    """The route planner's graphs (the page's ``RM``), as duckOSM's route_map.py builds them: per mode
+    its turn graph (``edge_graph``) over the feature indices of ``roads`` (``load_roads``), and
+    walk + drive from ``mm.*`` when the db has it. Node ids become small integers (some pass 2**53)."""
+    import duckdb
+
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        con.execute("INSTALL spatial; LOAD spatial;")
+        have = {tuple(r) for r in con.execute(
+            "SELECT table_schema, table_name FROM information_schema.tables").fetchall()}
+        modes = [m for m in MODES if (m, "edges") in have and (m, "edge_graph") in have]
+        if not modes:
+            raise ValueError(f"{db}: no mode with edges + edge_graph to route on")
+        k_of = {int(e): k for k, e in enumerate(roads["edge_id"])}
+        ends = {}                                   # edge_id -> (source, target, length_m, junction)
+        for m in MODES:
+            if (m, "edges") in have:
+                jn = "junction" if con.execute(
+                    "SELECT count(*) FROM information_schema.columns WHERE table_schema = ? "
+                    "AND table_name = 'edges' AND column_name = 'junction'", [m]).fetchone()[0] else "NULL"
+                for e, s, t, ln, j in con.execute(
+                        f"SELECT edge_id, source, target, length_m, {jn} FROM {m}.edges").fetchall():
+                    ends.setdefault(e, (s, t, ln, j))
+        node_ids = sorted({x for s, t, *_ in ends.values() for x in (s, t)})
+        n_of = {n: i for i, n in enumerate(node_ids)}
+        row = [ends[int(e)] for e in roads["edge_id"]]
+        data = {"modes": modes, "n": len(roads), "src": [n_of[r[0]] for r in row],
+                "tgt": [n_of[r[1]] for r in row], "name": list(roads["name"]),
+                "len": [round(r[2] or 0.0, 1) for r in row],
+                "hw": [h or "" for h in roads["highway"]],       # for the turn-by-turn directions
+                "rb": [k for k, r in enumerate(row) if r[3] in ("roundabout", "circular")],
+                "graphs": {}, "mm": None}
+        for m in modes:                                        # edge-based graph of legal turns
+            es = con.execute(f"SELECT edge_id, cost_s, length_m FROM {m}.edges ORDER BY edge_id").fetchall()
+            nxt = {}
+            for f, t in con.execute(f"SELECT from_edge, to_edge FROM {m}.edge_graph").fetchall():
+                if f in k_of and t in k_of:
+                    nxt.setdefault(k_of[f], []).append(k_of[t])
+            data["graphs"][m] = {"k": [k_of[e] for e, _, _ in es],
+                                 "cost": [round(c or 0.0, 3) for _, c, _ in es],
+                                 "len": [round(ln or 0.0, 2) for _, _, ln in es],
+                                 "next": [nxt.get(k_of[e], []) for e, _, _ in es]}
+        # walk + drive over duckOSM's intermodal graph (`duckosm multimodal`), when it's there;
+        # walk + cycle needs bike stations to mean anything (bike anywhere), so not offered
+        if {"walking", "driving"} <= set(modes) and ("mm", "edges") in have and ("mm", "transfers") in have:
+            mi = {m: i for i, m in enumerate(modes) if m in ("walking", "driving")}
+            mm_edges = [[mi[md], n_of[s], n_of[t], k_of[e], round(c or 0.0, 3)]
+                        for md, s, t, e, c in con.execute(
+                            "SELECT mode, source, target, edge_id, cost_s FROM mm.edges").fetchall()
+                        if md in mi and e in k_of and s in n_of and t in n_of]
+            mm_tr = [[n_of[n], mi[fm], mi[tm], round(c or 0.0, 3)]
+                     for n, fm, tm, c in con.execute(
+                         "SELECT node_id, from_mode, to_mode, cost_s FROM mm.transfers").fetchall()
+                     if fm in mi and tm in mi and n in n_of]
+            data["mm"] = {"edges": mm_edges, "transfers": mm_tr, "nodes": len(node_ids)}
+        # the page opens with a route: markers on the roads nearest 30 % and 70 % along the diagonal
+        x0, y0, x1, y1 = con.execute(
+            f"SELECT min(ST_XMin(geometry)), min(ST_YMin(geometry)), max(ST_XMax(geometry)), "
+            f"max(ST_YMax(geometry)) FROM {modes[0]}.edges").fetchone()
+        near = (f"SELECT ST_X(p), ST_Y(p) FROM (SELECT ST_LineInterpolatePoint(geometry, 0.5) AS p "
+                f"FROM {modes[0]}.edges ORDER BY ST_Distance(ST_Centroid(geometry), ST_Point(?, ?)) LIMIT 1)")
+        data["start"], data["end"] = (list(con.execute(near, [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]).fetchone())
+                                      for f in (0.3, 0.7))
+    finally:
+        con.close()
+    return data
+
+
+def render_map(db, mode=None, layers=True, planner=False, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map. ``layers``: True = every styles/layers.yaml layer, a list of names, or
-    False = roads only. ``kwargs`` go to roadstyle (``basemap``, ``tiles``, ``arrows``, ...)."""
+    False = roads only. ``planner=True`` adds the route planner (docs/design/route_planner.md).
+    ``mode`` defaults to driving, walking with the planner (every path solid and wide, so a walking
+    leg shows). ``kwargs`` go to roadstyle (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 
+    mode = mode or ("walking" if planner else "driving")
+    if planner and kwargs.get("tiles"):
+        raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
     palette, settings = mode_settings(mode)
+    roads = load_roads(db)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
     overlays, config = feature_overlays(fcs)
     kw = {"name": f"{Path(db).stem} ({mode})", "tooltip": ["edge_id", "osm_id", "highway", "name"],
@@ -199,19 +278,27 @@ def render_map(db, mode="driving", layers=True, **kwargs):
     if fcs:     # a label-free raster under the features: duckOSM has no sea polygons (yet)
         kw.update(basemap="voyager_nolabels",
                   basemaps=["voyager_nolabels", "blank", "voyager", "positron", "osm", "satellite"])
-    m = rs.render_edges(load_roads(db), palette=palette, settings=settings, **{**kw, **kwargs})
-    return _inject(m, config) if fcs else m
+    html = ""
+    if fcs:
+        html += f"<script>{(_HERE / 'layers.js').read_text().replace('__MS__', _json(config))}</script>"
+    if planner:
+        roads["k"] = range(len(roads))                          # the feature index the graphs point to
+        html += (_HERE / "planner.html").read_text().replace("__RM__", _json(planner_data(db, roads)))
+        kw.update(name=f"{Path(db).stem}: route planner", filter_control=False)
+    m = rs.render_edges(roads, palette=palette, settings=settings, **{**kw, **kwargs})
+    return _inject(m, html) if html else m
 
 
 def main(argv=None):
-    """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--tiles] [--basemap KEY]``"""
+    """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--planner] [--tiles] [--basemap KEY]``"""
     import argparse
 
     ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
     ap.add_argument("db", help="a duckOSM .duckdb")
     ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
-    ap.add_argument("--mode", choices=MODES, default="driving", help="travel-mode style (default: driving)")
+    ap.add_argument("--mode", choices=MODES, help="travel-mode style (default: driving, walking with --planner)")
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
+    ap.add_argument("--planner", action="store_true", help="add the route planner (drag start and end)")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
     ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
     a = ap.parse_args(argv)
@@ -219,6 +306,7 @@ def main(argv=None):
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
-    out = a.out or f"{Path(a.db).stem}_{a.mode}.html"
-    render_map(a.db, a.mode, layers=not a.no_layers, **kw).save(out)
+    mode = a.mode or ("walking" if a.planner else "driving")
+    out = a.out or f"{Path(a.db).stem}_{'planner' if a.planner else mode}.html"
+    render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, **kw).save(out)
     print(out)

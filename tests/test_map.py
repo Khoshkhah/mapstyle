@@ -139,3 +139,69 @@ def test_page_script_parses(monaco, tmp_path):
     js = re.search(r"<script>(// mapstyle's feature layers.*?)</script>", html, re.S).group(1)
     (tmp_path / "layers.js").write_text(js)
     subprocess.run(["node", "--check", tmp_path / "layers.js"], check=True)
+
+
+# ---- route planner (docs/design/route_planner.md) ----------------------------------------------
+
+def _rm(html):
+    import json
+    return json.loads(html.split("const RM = ", 1)[1].split(";</script>", 1)[0])
+
+
+def test_planner_embeds_the_turn_graph(tmp_path):
+    """Ported from duckOSM's test_route_map: node ids pass 2**53, the page sees small indices."""
+    import duckdb
+    big, db = 2**62 + 1, tmp_path / "t.duckdb"
+    con = duckdb.connect(str(db))
+    con.execute("INSTALL spatial; LOAD spatial; CREATE SCHEMA driving")
+    con.execute("CREATE TABLE driving.edges(edge_id BIGINT, osm_id BIGINT, source BIGINT, target BIGINT, "
+                "name VARCHAR, highway VARCHAR, bridge BOOLEAN, tunnel BOOLEAN, layer INTEGER, "
+                "oneway BOOLEAN, length_m DOUBLE, cost_s DOUBLE, geometry GEOMETRY)")
+    g = lambda w: f"ST_GeomFromText('{w}')"
+    con.execute(f"""INSERT INTO driving.edges VALUES
+        (30, 1, 1, 2, 'A', 'residential', false, false, 0, true, 100, 10, {g('LINESTRING(7.40 43.73, 7.41 43.73)')}),
+        (10, 2, 2, {big}, 'B', 'residential', false, false, 0, true, 200, 20, {g('LINESTRING(7.41 43.73, 7.42 43.73)')}),
+        (20, 3, {big}, 4, NULL, 'service', false, false, 0, true, 50, 5, {g('LINESTRING(7.42 43.73, 7.43 43.73)')})""")
+    con.execute("CREATE TABLE driving.edge_graph(from_edge BIGINT, to_edge BIGINT)")
+    con.execute("INSERT INTO driving.edge_graph VALUES (30, 10), (10, 20)")
+    con.close()
+
+    rm = _rm(render_map(db, planner=True, layers=False).html)
+    eid = [int(e) for e in load_roads(db)["edge_id"]]         # feature index k -> edge_id
+    k = {e: i for i, e in enumerate(eid)}
+    assert rm["modes"] == ["driving"] and rm["n"] == 3 and rm["mm"] is None
+    assert all(7.40 <= p[0] <= 7.43 for p in (rm["start"], rm["end"]))
+    assert rm["name"][k[10]] == "B" and rm["name"][k[20]] == ""
+    assert rm["hw"][k[20]] == "service" and rm["rb"] == []   # no `junction` column: no roundabouts
+    assert max(rm["src"] + rm["tgt"]) < 4                     # 4 nodes, remapped to 0..3
+    assert rm["tgt"][k[10]] == rm["src"][k[20]]               # B ends where the service road starts (big)
+    d = rm["graphs"]["driving"]
+    nxt = {eid[a]: [eid[b] for b in bs] for a, bs in zip(d["k"], d["next"])}
+    assert nxt == {10: [20], 20: [], 30: [10]}                # as edge_graph
+    assert {eid[a]: c for a, c in zip(d["k"], d["cost"])} == {10: 20, 20: 5, 30: 10}
+
+
+@pytest.fixture(scope="session")
+def monaco_mm(monaco, tmp_path_factory):
+    """Monaco with duckOSM's walk + drive tables (`duckosm multimodal`, on a copy)."""
+    import shutil
+    exe = DUCKOSM / ".venv/bin/duckosm"
+    if not exe.exists():
+        pytest.skip(f"needs duckOSM with its .venv at {DUCKOSM}")
+    db = tmp_path_factory.mktemp("mm") / "monaco_mm.duckdb"
+    shutil.copy(monaco, db)
+    subprocess.run([exe, "multimodal", db], cwd=DUCKOSM, check=True, capture_output=True)
+    return db
+
+
+def test_planner_on_monaco(monaco, monaco_mm):
+    rm = _rm(render_map(monaco, planner=True, layers=False).html)
+    assert rm["modes"] == list(MODES) and rm["mm"] is None    # no walk + drive: the page says why
+    assert all(len(rm["graphs"][m]["k"]) > 1000 for m in MODES)
+    mm = _rm(render_map(monaco_mm, planner=True, layers=False).html)["mm"]
+    assert len(mm["edges"]) > 10_000 and len(mm["transfers"]) > 1000
+
+
+def test_planner_refuses_tiles(monaco):
+    with pytest.raises(ValueError):
+        render_map(monaco, planner=True, tiles=True)

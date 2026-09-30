@@ -9,6 +9,7 @@ whole JavaScript API, 3D, Street View and vector tiles come with it.
 pip install -e ../roadstyle -e .          # + '.[tiles]' for --tiles
 mapstyle monaco.duckdb --mode walking     # -> monaco_walking.html
 mapstyle tartu.duckdb -o tartu.html --tiles --basemap positron
+mapstyle monaco.duckdb --planner          # + a route planner: drag start and end (Drive, Walk, Cycle, Walk + drive)
 ```
 
 ```python

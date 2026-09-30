@@ -53,9 +53,11 @@ and its own JS on the page's `window.map` (MapLibre).
 - [ ] JS: layers via `rsSetOverlay`, clicks via `rs:select` (modes are one page each, see
       `design/mode_styles.md`). Wired (`layers.js` joins its layers to the overlays); still to
       check by hand in a browser: unticking a layer hides its icons, a click shows the popup.
-- [ ] `ms.render_route_planner(db)`: move `../duckOSM/src/duckosm/route_map.py` here (routing in
-      the browser over `edge_graph` / `mm.*`; checked on Monaco against duckOSM's `route()` /
-      `route_multimodal()`: 8 of 8 trips).
+- [x] Route planner: `render_map(db, planner=True)` / `mapstyle db --planner`, moved from
+      `../duckOSM/src/duckosm/route_map.py` (routing in the browser over `edge_graph` / `mm.*`, as
+      duckOSM's `route()` / `route_multimodal()`; turn-by-turn directions). Drive, Walk, Cycle;
+      Walk + drive with the `mm` tables. Design: [`design/route_planner.md`](design/route_planner.md).
+      Browser check: `scripts/planner_check.py`.
 - [x] CLI: `mapstyle db.duckdb -o map.html [--mode walking] [--no-layers] [--tiles] [--basemap KEY]`
       (`--tiles` needs `pip install 'mapstyle[tiles]'`).
 - [x] Delete: the deck.gl viewer (`render_merge` / `render_web.py`), `render_basemap` + folium /
@@ -72,6 +74,10 @@ and its own JS on the page's `window.map` (MapLibre).
 ### 3. duckOSM (repo `../duckOSM`)
 
 - [ ] `build_features` default `true` (config.py, template, docs).
+- [ ] Build the `mm` tables (walk + drive) in every build, so the planner always offers Walk +
+      drive (today a separate `duckosm multimodal` run; the page says so when they're missing).
+- [ ] Delete `route_map.py`, `scripts/route_map_stress.py` and `docs/design/route_map.md` once
+      `duckosm route-map` calls mapstyle (`render_map(planner=True)`).
 - [ ] **Extract the sea:** duckOSM builds no sea (OSM has only `natural=coastline` lines, land on
       their left), so mapstyle draws feature layers over a raster base map. Clip the precomputed
       sea polygons (osmdata.openstreetmap.de "water polygons", built from the world coastline; what

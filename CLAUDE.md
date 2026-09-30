@@ -38,4 +38,7 @@ missing-features case).
   `where`) as one `rs.Overlay` each, styled from `osm_carto.yaml` `features`, plus `layers.js`
   (injected before `</body>`) for what overlays can't draw: colour by `kind`, zoom ranges,
   dashes, textures (`patterns.py`), icons (`icons/*.svg`) (design: `docs/design/feature_layers.md`).
+  `planner=True` adds `planner.html` (the route planner, from duckOSM's `route_map.py`, with the
+  graphs from `planner_data`; design: `docs/design/route_planner.md`; browser check:
+  `scripts/planner_check.py`). Re-extract it when duckOSM's planner changes.
 - `patterns.py` (landcover texture tiles), `icons/*.svg` (point icons), `style.py` (`load_style`).
