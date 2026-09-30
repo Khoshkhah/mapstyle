@@ -1,16 +1,11 @@
-"""Procedural pattern atlas for landcover fills (OpenStreetMap-Carto-style textures).
-
-Builds a single RGBA PNG of 64px **alpha-mask** tiles (symbol = opaque, background = transparent) —
-trees / graves / waves / dots / sand / hatch — plus a `name -> box` mapping. Used with deck.gl's
-`FillStyleExtension` in MASK mode: the atlas alpha is the symbol shape, tinted by the pattern layer's
-`getFillColor` (a darker shade of the landcover fill). So a forest reads as green + darker tree dots,
-a cemetery as green + graves, wetland as blue-green + waves — like OSM, over the solid base fill.
+"""Procedural landcover textures (OpenStreetMap-Carto style): 64 px tiles of trees / graves / waves /
+dots / sand / hatch / rows, drawn in a darker shade of the landcover fill, so a forest reads as green +
+darker tree dots, a cemetery as green + graves, wetland as blue-green + waves.
 """
 import io
 import math
 
 TILE = 64
-_ORDER = ["trees", "graves", "waves", "dots", "sand", "hatch", "rows"]
 
 
 def _trees(d):
@@ -69,17 +64,3 @@ def pattern_png(name, color):
     out.save(buf, "PNG")
     return buf.getvalue()
 
-
-def build_pattern_atlas():
-    """Return ``(png_bytes, mapping)``; mapping = ``{name: {x, y, width, height, mask: True}}``."""
-    from PIL import Image, ImageDraw
-    atlas = Image.new("RGBA", (TILE * len(_ORDER), TILE), (0, 0, 0, 0))
-    mapping = {}
-    for i, name in enumerate(_ORDER):
-        tile = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))
-        _DRAW[name](ImageDraw.Draw(tile))
-        atlas.paste(tile, (i * TILE, 0))
-        mapping[name] = {"x": i * TILE, "y": 0, "width": TILE, "height": TILE, "mask": True}
-    buf = io.BytesIO()
-    atlas.save(buf, "PNG")
-    return buf.getvalue(), mapping

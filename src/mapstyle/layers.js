@@ -2,8 +2,11 @@
 // roadstyle overlay (window.RS_OVERLAYS, by label); this adds what an overlay can't draw: colour by
 // `kind`, zoom ranges, dashes, textures, icons. Every layer added here is pushed into the overlay's
 // `layers`, so rsSetOverlay / the Layers control hide it with its overlay.
-(function(){
+(function start(){
+// poll, like roadstyle's own page code: `window.map` is the container <div> until the map is built,
+// and `load` / `idle` can fire before this runs or not at all (offline, failed tile requests)
 const MS = __MS__, map = window.map;
+if (!(map && typeof map.getSource === "function" && map.isStyleLoaded())) return setTimeout(start, 100);
 // keep roadstyle's hover / select `case` around a new base colour
 const swap = (e, v) => Array.isArray(e) && e[0] === "case" ? e.slice(0, -1).concat([v]) : v;
 const match = (by) => ["match", ["get", "kind"], ...Object.entries(by.map).flat(), by.default];
@@ -44,5 +47,5 @@ const run = async () => {
     if (L.min_zoom) ov.layers.forEach(id => map.setLayerZoomRange(id, L.min_zoom, 24));
   });
 };
-if (map.isStyleLoaded()) run(); else map.on("load", run);
+run();
 })();

@@ -9,7 +9,7 @@ import pytest
 import roadstyle as rs
 from roadstyle import _settings
 
-from mapstyle.map import MODES, load_layers, load_roads, mode_settings, render_map
+from mapstyle.map import MODES, load_layers, load_roads, main, mode_settings, render_map
 from mapstyle.style import load_style
 
 DUCKOSM = Path(__file__).resolve().parents[2] / "duckOSM"
@@ -120,3 +120,22 @@ def test_page_has_overlays_and_script(monaco):
     assert "window.RS_OVERLAYS" in html
     plain = render_map(monaco, "walking", layers=False).html
     assert "ms-icon-crossings" not in plain
+
+
+def test_cli(monaco, tmp_path, capsys):
+    main([str(monaco), "--mode", "walking", "--no-layers", "-o", str(tmp_path / "m.html")])
+    assert (tmp_path / "m.html").stat().st_size > 100_000
+    assert capsys.readouterr().out.strip() == str(tmp_path / "m.html")
+
+
+def test_page_script_parses(monaco, tmp_path):
+    """layers.js with its config filled in is valid JavaScript (a syntax error silently drops
+    every icon, texture and kind colour)."""
+    import re
+    import shutil
+    if not shutil.which("node"):
+        pytest.skip("needs node")
+    html = render_map(monaco, "walking").html
+    js = re.search(r"<script>(// mapstyle's feature layers.*?)</script>", html, re.S).group(1)
+    (tmp_path / "layers.js").write_text(js)
+    subprocess.run(["node", "--check", tmp_path / "layers.js"], check=True)

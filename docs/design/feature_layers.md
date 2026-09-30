@@ -12,7 +12,7 @@ into `features.*` (Monaco: `land` 237 polygons, `water_polygons` 27, `water_line
 `public_transport` 107, `pois` 1645, `place_labels` 10; every table has `osm_id`, `kind`, `name`,
 `tags`, `geom`). mapstyle already says *which* layers to draw and *how*:
 
-- `layers.yaml` (repo root, read by `render_tartu.py`): 15 layers in draw order, each a
+- `layers.yaml` (repo root, read by the old `render_tartu.py`): 15 layers in draw order, each a
   `features.<table>` with an optional `where` (e.g. railways = `streets` where `kind IN ('rail', …)`),
   `centroid` (a point from a polygon), `bearing` (oriented crossings), `merge_into` (school / hospital
   grounds drawn in one sort with landcover).

@@ -39,30 +39,35 @@ and its own JS on the page's `window.map` (MapLibre).
       zoom ranges: mapstyle's own MapLibre layers added through `window.map`. Design note for
       sign-off: [`design/feature_layers.md`](design/feature_layers.md). Done: `render_map(db, mode,
       layers=True)`, `styles/layers.yaml`, `layers.js`.
-- [ ] **Multi-mode roads:** one feature per `edge_id` with `driving` / `walking` / `cycling` flags
-      (`merge_modes`); the mode style picks what to draw.
+- [x] **Multi-mode roads:** one feature per `edge_id` with `driving` / `walking` / `cycling` flags
+      (`load_roads`); every mode page draws all edges, in the mode's style.
 
 ### 2. mapstyle on roadstyle
 
-- [ ] `ms.load(db, modes=None, layers=None)` → roads (one row per `edge_id`, `driving`/`walking`/
-      `cycling` flags), `layers[name]` GeoDataFrames from `layers.yaml`, `boundary` from
-      `main.boundary`. Missing `features.*` / table / column → skip with a hint, never fail.
-- [ ] `ms.render_map(data_or_db, mode=None, layers=None, style="carto", **roadstyle_keywords)` →
-      `rs.render_edges(..., overlays=[...])`. `osm_carto.yaml` + `layers.yaml` become roadstyle
-      settings / overlay styles.
+- [x] Loading: `ms.load_roads(db)` (one row per `edge_id`, mode flags) and `ms.load_layers(db)`
+      (`{name: FeatureCollection}` from `layers.yaml`). Missing `features.*` / table / column →
+      skip with a hint, never fail.
+- [ ] `boundary` from `main.boundary` drawn as roadstyle's `boundary=` outline.
+- [x] `ms.render_map(db, mode="driving", layers=True, **roadstyle_keywords)` →
+      `rs.render_edges(..., palette=, settings=, overlays=[...])` + `layers.js`.
 - [ ] JS: layers via `rsSetOverlay`, clicks via `rs:select` (modes are one page each, see
-      `design/mode_styles.md`).
+      `design/mode_styles.md`). Wired (`layers.js` joins its layers to the overlays); still to
+      check by hand in a browser: unticking a layer hides its icons, a click shows the popup.
 - [ ] `ms.render_route_planner(db)`: move `../duckOSM/src/duckosm/route_map.py` here (routing in
       the browser over `edge_graph` / `mm.*`; checked on Monaco against duckOSM's `route()` /
       `route_multimodal()`: 8 of 8 trips).
-- [ ] CLI: `mapstyle db.duckdb -o map.html [--mode walking] [--tiles]`.
-- [ ] Delete: the deck.gl viewer (`render_merge` / `render_web.py`), `render_basemap` + folium /
+- [x] CLI: `mapstyle db.duckdb -o map.html [--mode walking] [--no-layers] [--tiles] [--basemap KEY]`
+      (`--tiles` needs `pip install 'mapstyle[tiles]'`).
+- [x] Delete: the deck.gl viewer (`render_merge` / `render_web.py`), `render_basemap` + folium /
       lonboard, `io.load_layer`, `render_tartu.py`, `render_route.py`, the width model, stale docs
-      (`PROCESS.md`, `rendering.md`, `width-model.md` as needed).
+      (`PROCESS.md`, `rendering.md`, `width-model.md` as needed). Done; this breaks route-viewer's
+      `--build-base` (it runs `render_tartu.py`), see step 4.
 - [ ] Tests on a Monaco db (build below): load, missing features, keywords reaching roadstyle,
       the planner's graphs. Browser checks (playwright, `rs.snapshot`): all modes,
       walking, cycling, POIs/crossings clickable, a footway route visible.
 - [ ] Size: Monaco / Södermalm inline < ~10 MB; bigger areas with roadstyle's `tiles=True` for the roads (feature layers: simplify, or mapstyle's own tiles, see duckmap's `tiles.py`).
+      Measured (walking, roadstyle's gzip): Monaco 2.8 MB, Tartu 10.2 MB (6.7 roads only).
+      `tiles=True` with the feature layers on top works (Monaco, checked in a browser).
 
 ### 3. duckOSM (repo `../duckOSM`)
 

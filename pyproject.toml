@@ -5,30 +5,30 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mapstyle"
 version = "0.0.1"
-description = "OSM full-base-map styling — roadstyle's engine generalized to polygons + points + multi-layer composition"
+description = "A duckOSM database as a full interactive map (roads per travel mode + base-map layers), drawn by roadstyle"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Kaveh" }]
-keywords = ["osm", "basemap", "roadstyle", "folium", "lonboard", "cartography"]
+keywords = ["osm", "basemap", "roadstyle", "duckosm", "maplibre", "cartography"]
 
-# Reuses roadstyle for the road layers; adds polygon/point stylers + composition.
 dependencies = [
-    "roadstyle",      # installed editable from ../roadstyle (the styling brain)
+    "roadstyle>=0.9.1",   # the page; installed editable from ../roadstyle
+    "duckdb",             # reads the duckOSM db
     "geopandas",
-    "shapely",
-    "folium",
-    "pyyaml",         # stylesheet config (styles/*.yaml)
-    "pillow",         # landcover texture tiles (patterns.py)
+    "pyyaml",             # styles/*.yaml
+    "pillow",             # landcover texture tiles (patterns.py)
 ]
 
 [project.optional-dependencies]
-duckdb = ["duckdb"]                 # read basemap.* layers straight from a duckmap .duckdb
-lonboard = ["lonboard", "pyarrow"]   # WebGL backend for large layers (pyarrow = geoarrow conversion)
-dev = ["pytest", "duckdb"]
+tiles = ["roadstyle[tiles]"]   # --tiles / render_map(tiles=True)
+dev = ["pytest"]
+
+[project.scripts]
+mapstyle = "mapstyle.map:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js", "style/vendor/*"]
+mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js"]

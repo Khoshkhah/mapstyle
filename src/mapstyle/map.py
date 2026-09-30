@@ -201,3 +201,24 @@ def render_map(db, mode="driving", layers=True, **kwargs):
                   basemaps=["voyager_nolabels", "blank", "voyager", "positron", "osm", "satellite"])
     m = rs.render_edges(load_roads(db), palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, config) if fcs else m
+
+
+def main(argv=None):
+    """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--tiles] [--basemap KEY]``"""
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
+    ap.add_argument("db", help="a duckOSM .duckdb")
+    ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
+    ap.add_argument("--mode", choices=MODES, default="driving", help="travel-mode style (default: driving)")
+    ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
+    ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
+    ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
+    a = ap.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    kw = {"tiles": True} if a.tiles else {}
+    if a.basemap:
+        kw["basemap"] = a.basemap
+    out = a.out or f"{Path(a.db).stem}_{a.mode}.html"
+    render_map(a.db, a.mode, layers=not a.no_layers, **kw).save(out)
+    print(out)

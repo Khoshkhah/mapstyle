@@ -1,110 +1,6 @@
-# mapstyle stylesheet — road widths + colours. Edit these and re-render (no code change).
+# mapstyle's openstreetmap-carto look: road colours by class (the base of every mode palette,
+# styles/modes.yaml) and the feature layers' style (styles/layers.yaml). Edit and re-render.
 roads:
-  # ---- PHYSICAL WIDTH MODEL (see docs/width-model.md) ------------------------------------------
-  # Road width is PHYSICAL, not a hand-tuned pixel table. Each DIRECTED edge's base width in metres
-  # = its lane count (OSM `lanes`, directional) x lane_m[class]. It is then drawn as
-  #     width_px = base_metres x (1 / metres_per_pixel) x zoom_boost(zoom)
-  # `1/metres_per_pixel` (true physical scale, latitude-correct) is computed at render time; the ONE
-  # global `zoom_boost` curve is the only per-zoom knob and is shared by ALL classes, so class-to-class
-  # width ratios stay fixed at every zoom. A one-way road = one line at its lanes; a two-way road =
-  # two directional lines (each sized by ITS lanes), offset +/-base/2 so they sit edge-to-edge.
-  width_model:
-    # physical metres per lane, by class (class = importance; a trunk lane reads wider than a service lane)
-    lane_m:
-      default:       3.0
-      major:         3.0
-      trunk:         3.0
-      primary:       3.0
-      secondary:     3.0
-      tertiary:      3.0
-      residential:   2.75
-      living_street: 2.75
-      service:       2.75
-      service_minor: 2.5
-      pedestrian:    2.5
-      path:          1.5
-    # FIXED lane count by class. Width is NOT read from OSM lane tags (too noisy — turn-lane bulges,
-    # unreliable single-track; 91% of roads are untagged anyway). base width (metres) = lanes x lane_m.
-    # `lanes` = lanes PER DIRECTION of a TWO-WAY road (each direction drawn at this; 0.5 = single-track,
-    #   one lane shared both ways).
-    lanes:
-      default:       1
-      major:         1
-      trunk:         1
-      primary:       1
-      secondary:     1
-      tertiary:      1
-      residential:   1
-      living_street: 0.5
-      service:       0.5
-      service_minor: 0.5
-      pedestrian:    0.5
-      path:          0.5
-    # `lanes_oneway` = TOTAL lanes of a ONE-WAY road (drawn as one CENTRED line). Two cases:
-    #  1. SINGLE-carriageway street that can TRANSITION one-way<->two-way (default / secondary /
-    #     tertiary / residential / living_street / service / pedestrian): the carriageway is the same
-    #     physical width either way, so `lanes_oneway = 2 x lanes` -> one-way = the whole carriageway =
-    #     two-way total, and the two render FLUSH at the transition (no width step).
-    #  2. DUAL-carriageway arterial (major / trunk / primary): a one-way way is ONE separate carriageway
-    #     (median between the two directions), NOT the full road. So `lanes_oneway = lanes` (the
-    #     per-direction count) — a one-way trunk carriageway stays 2 lanes, it does NOT become 4.
-    #  Plus the `path` group (footway/cycleway/steps/track) draws as a single centred line in both
-    #  directions, so there too `lanes_oneway = lanes`.
-    lanes_oneway:
-      default:       2      # street: = 2 x lanes (1)
-      major:         2      # DUAL carriageway: one-way = one carriageway = lanes (2), NOT 2 x
-      trunk:         2      # DUAL carriageway
-      primary:       2      # DUAL carriageway (one-way primary carriageway ~2 lanes)
-      secondary:     2      # street: = 2 x lanes (1)
-      tertiary:      2      # street: = 2 x lanes (1)  — was 1; caused the width step at one-way<->two-way
-      residential:   2      # street: = 2 x lanes (1)
-      living_street: 1      # street: = 2 x lanes (0.5)
-      service:       1      # street: = 2 x lanes (0.5)
-      service_minor: 1      # street: = 2 x lanes (0.5)
-      pedestrian:    1      # street: = 2 x lanes (0.5)
-      path:          0.5    # single centred line, so one-way = two-way = lanes (0.5)
-    # ONE global legibility multiplier OVER true physical size, by zoom (interpolated; flat ->1.0 = true
-    # scale at high zoom, lifted at low zoom so thin roads stay visible). NOTE it DECREASES with zoom
-    # because the physical (1/mpp) factor already grows 2x/zoom — net width still grows. See the doc.
-    zoom_boost:
-      12: 9.0
-      14: 4.0
-      15: 2.6
-      16: 1.8
-      17: 1.3
-      18: 1.1
-      20: 1.0
-    lane_overlap:  1.15      # two directional lanes overlap this much at the centre (no seam, no gap)
-
-  # casing (road outline) line-width = fill * ratio
-  casing_ratio:
-    major: 1.17
-    primary: 1.18
-    secondary: 1.19
-    tertiary: 1.21
-    residential: 1.24
-    living_street: 1.24
-    service: 1.27
-    service_minor: 1.3
-    pedestrian: 1.21
-    path: 1.0
-
-  # classes hidden below this zoom (declutter minor roads / paths when zoomed out); absent = always shown
-  min_zoom:
-    living_street: 15
-    service:       15
-    pedestrian:    15
-    footway:       15
-    path:          15
-    steps:         15
-    cycleway:      15
-    bridleway:     15
-    track:         15
-    construction:  15
-    corridor:      15
-    raceway:       15
-    busway:        15
-
   # road colours (openstreetmap-carto), by highway class.
   #   fill   = the road colour
   #   casing = the road EDGE (outline) colour — null for path-like classes (drawn dashed, no edge)
@@ -132,47 +28,9 @@ roads:
     raceway:       {fill: "#ffc0cb", casing: "#bbbbbb"}
     busway:        {fill: "#ffffff", casing: "#bbbbbb"}
 
-# oneway direction arrows (openstreetmap-carto look). Tune density/size/start-zoom here.
-arrows:
-  min_zoom:    16        # don't draw arrows below this zoom
-  spacing_px:  120       # target on-screen gap between arrows — LOWER = MORE arrows
-  size_px:     6         # arrow icon size, in pixels (also the cap; arrows scale down on thin roads)
-  color:       "#8a8a8a" # arrow fill colour (gray reads better than a dark slate)
-  sample_m:    10        # base sampling step along the road (metres); keep well below the smallest
-                         # on-screen cell so every cell gets an arrow (bake density, not final count)
-
-# street-name labels. Each name is sized to fit its road in BOTH directions (length + width) and
-# repeated along long roads; tune the size range / density here.
-names:
-  min_size:    10        # smallest font (px); below this the name is hidden (road too short/thin)
-  max_size:    22        # largest font (px); cap so names never get huge
-  width_ratio: 1.25      # font size as a multiple of the road's painted width (keeps text inside it)
-  glyph:       0.64      # average glyph width as a fraction of font size (text-width estimate)
-  repeat_px:   300       # minimum on-screen gap between repeats of the same name
-  sample_m:    80        # spacing of label candidates along each road (bake density)
-  # color:     "#8a8a8a" # label colour; when unset it follows the oneway arrows' colour (arrows.color)
-  halo:        0         # white halo/shadow width (px) behind each name; 0 = no shadow
-
-# shortest-path OVERLAY (data/route.geojson, drawn on top). A route is a HIGHLIGHT of real road edges,
-# so it is sized with the SAME per-zoom physical width model as the roads: each path edge reuses its own
-# baked `bm` (base metres) and the viewer's width_px(bm, zoom) — the highlight tracks the road width at
-# every zoom instead of a fixed pixel width. Only the colours + a couple of multipliers live here.
-route:
-  modes:                 # per-LEG-mode colour (solid lines, distinguished by colour). A trip =
-    driving: {color: "#2e6eeb"}                    #   access walk -> (walk|cycle|drive)* -> access walk.
-    cycling: {color: "#16a085"}
-    walking: {color: "#e67e22"}
-    access:  {color: "#9aa0a6"}                    # off-network walk (point <-> nearest road) — muted grey
-  halo:       "#ffffff"  # halo/casing colour under the path (for contrast on any basemap)
-  width_mult: 1.25       # path width = road width (width_px) x this — slightly overshoots the road
-  halo_px:    3          # extra px of halo on EACH side beyond the path
-  min_px:     3.5        # never thinner than this, so the path stays visible when zoomed out
-  access_px:  2.5        # off-network access legs are a THIN fixed line (not a road, so not road-width)
-
 # ---- FEATURES ------------------------------------------------------------------------------------
-# Base-map feature-layer styling (everything render_merge draws under the roads via feature_layers).
-# All colours / sizes / icons live HERE, not in code — edit and re-render. Keyed by the layer name
-# passed to load_layer. Area fills may key by feature `class`; `default` catches the rest.
+# Feature-layer styling (mapstyle.map.feature_overlays), keyed by the layer name in layers.yaml.
+# Landcover fills / outlines / textures key by the feature's `kind`; `default` catches the rest.
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
