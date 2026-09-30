@@ -33,17 +33,17 @@ missing-features case).
 
 ## What is where today
 
-- `map.py` — the new code: `load_roads(db)` (one row per `edge_id`, mode flags) and
-  `render_map(db, mode)` → `rs.render_edges` with the mode's palette + `settings=` from
-  `styles/modes.yaml` (design: `docs/design/mode_styles.md`).
-- `merge.py` — the live code: `merge_modes(db)` merges duckOSM's driving/walking/cycling networks
-  into one row per `edge_id` with mode flags (kept by the plan as `ms.load`); `render_merge` is the
-  ~860-line deck.gl viewer (to be deleted).
-- The look: `src/mapstyle/styles/osm_carto.yaml` (road widths/colours, arrows, `features.*`
-  styles keyed by layer `name`) + `layers.yaml` (which duckOSM `features.<table>` layers to show,
-  draw order, `where` filters). Both survive the port: as roadstyle `settings=` / overlays where
-  those fit, otherwise as mapstyle's own MapLibre layers on `window.map`.
-- `patterns.py` (landcover textures) and `icons/*.svg` are cartography to carry over.
+- `map.py` — the new code. `render_map(db, mode, layers=True)` → `rs.render_edges` with:
+  roads from `load_roads(db)` (one row per `edge_id`, mode flags) in the mode's palette +
+  `settings=` from `styles/modes.yaml` (design: `docs/design/mode_styles.md`); feature layers
+  from `load_layers(db)` (`styles/layers.yaml`: which `features.<table>` layers, draw order,
+  `where`) as one `rs.Overlay` each, styled from `osm_carto.yaml` `features`, plus `layers.js`
+  (injected before `</body>`) for what overlays can't draw: colour by `kind`, zoom ranges,
+  dashes, textures (`patterns.py`), icons (`icons/*.svg`) (design: `docs/design/feature_layers.md`).
+- `merge.py` — `merge_modes(db)` + `render_merge`, the ~860-line deck.gl viewer (to be deleted;
+  `load_roads` replaces `merge_modes`).
+- `src/mapstyle/styles/osm_carto.yaml` also still holds the old viewer's width model and route
+  style (dead with it).
 - `roads.py` — the openstreetmap-carto road palette by `highway` class (from `osm_carto.yaml`).
 - Dead per the plan: `io.load_layer` (duckmap `basemap.*`), `render.py` / `render_folium.py` /
   `render_lonboard.py` / `render_web.py`, the physical width model (`merge._base_m` /

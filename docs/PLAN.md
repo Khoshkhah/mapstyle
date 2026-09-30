@@ -34,10 +34,11 @@ and its own JS on the page's `window.map` (MapLibre).
       (`styles/modes.yaml`, `mapstyle.map.render_map(db, mode)`), one page per mode. Design:
       [`design/mode_styles.md`](design/mode_styles.md). Routes visible on footways: checked with
       the route planner (step 2).
-- [ ] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
+- [x] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
       `window.map` layer), point icons with rotation (crossings), area textures (`patterns.py`),
       zoom ranges: mapstyle's own MapLibre layers added through `window.map`. Design note for
-      sign-off: [`design/feature_layers.md`](design/feature_layers.md).
+      sign-off: [`design/feature_layers.md`](design/feature_layers.md). Done: `render_map(db, mode,
+      layers=True)`, `styles/layers.yaml`, `layers.js`.
 - [ ] **Multi-mode roads:** one feature per `edge_id` with `driving` / `walking` / `cycling` flags
       (`merge_modes`); the mode style picks what to draw.
 
@@ -66,6 +67,13 @@ and its own JS on the page's `window.map` (MapLibre).
 ### 3. duckOSM (repo `../duckOSM`)
 
 - [ ] `build_features` default `true` (config.py, template, docs).
+- [ ] **Extract the sea:** duckOSM builds no sea (OSM has only `natural=coastline` lines, land on
+      their left), so mapstyle draws feature layers over a raster base map. Clip the precomputed
+      sea polygons (osmdata.openstreetmap.de "water polygons", built from the world coastline; what
+      openstreetmap-carto uses) to the area into `features.water_polygons` (`kind = 'sea'`). Building
+      them from the extract's own coastline lines is the offline alternative, but fragile (open ends
+      at the clip edge, one gap floods the land). Then mapstyle's default base map goes back to
+      `blank` (`design/feature_layers.md` §3).
 - [ ] `viz` extra → `mapstyle`; `duckosm viz` and `duckosm route-map` call mapstyle; docs (Draw a
       map, Route).
 

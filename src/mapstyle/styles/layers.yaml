@@ -1,5 +1,5 @@
 # WHICH base-map feature layers to load + show, in DRAW ORDER (first = bottom).
-# Read by render_tartu.py — this is layer SELECTION, kept separate from the visual style
+# Read by mapstyle.map.load_layers — this is layer SELECTION, kept separate from the visual style
 # (styles/osm_carto.yaml holds the look: features.areas / lines / points, keyed by `name`).
 #
 #   name      layer id (must match its styling entry in osm_carto.yaml features.*)

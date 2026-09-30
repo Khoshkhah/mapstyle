@@ -1,4 +1,5 @@
-"""Travel-mode styles (docs/design/mode_styles.md) on a Monaco duckOSM db built by ../duckOSM."""
+"""mapstyle.map on a Monaco duckOSM db built by ../duckOSM: travel-mode styles
+(docs/design/mode_styles.md) and feature layers (docs/design/feature_layers.md)."""
 
 import os
 import subprocess
@@ -8,7 +9,8 @@ import pytest
 import roadstyle as rs
 from roadstyle import _settings
 
-from mapstyle.map import MODES, load_roads, mode_settings, render_map
+from mapstyle.map import MODES, load_layers, load_roads, mode_settings, render_map
+from mapstyle.style import load_style
 
 DUCKOSM = Path(__file__).resolve().parents[2] / "duckOSM"
 # classes of walking / cycling networks elsewhere (Tartu, Södermalm) that Monaco lacks
@@ -68,7 +70,7 @@ def test_walking_draws_paths_solid_and_on_top():
 def test_mode_reaches_render_edges(monaco, monkeypatch):
     seen = {}
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, n=len(g)))
-    render_map(monaco, "cycling", basemap="positron")
+    render_map(monaco, "cycling", layers=False, basemap="positron")
     assert seen["palette"] == "ms_cycling" and seen["basemap"] == "positron"
     assert seen["settings"]["roads"]["group"]["cycleway"] == "cycle"
 
@@ -81,3 +83,40 @@ def test_render_walking_page(monaco):
 def test_unknown_mode():
     with pytest.raises(ValueError):
         mode_settings("flying")
+
+
+def test_every_layer_has_a_style():
+    st, here = load_style()["features"], Path(__file__).resolve().parents[1] / "src/mapstyle"
+    for s in load_style("layers")["layers"]:
+        name = s.get("merge_into") or s["name"]
+        if s["kind"] == "polygon":
+            assert name in st["areas"], name
+        elif s["kind"] == "line":
+            assert name in st["lines"], name
+        elif "icon" in st["points"].get(name, {}):
+            assert (here / "icons" / st["points"][name]["icon"]).exists(), name
+
+
+def test_load_layers(monaco):
+    fcs = load_layers(monaco)
+    assert "institutional" not in fcs                       # merged into landcover
+    assert {"hospital", "grass"} <= {f["properties"]["kind"] for f in fcs["landcover"]["features"]}
+    b = ["bearing" in f["properties"] for f in fcs["crossings"]["features"]]
+    assert sum(b) > 0.9 * len(b)                             # Monaco: 546 of 553
+    assert fcs["parking_p"]["features"][0]["geometry"]["type"] == "Point"    # centroid
+    assert list(load_layers(monaco, ["crossings"])) == ["crossings"]
+
+
+def test_no_features_is_roads_only(tmp_path, caplog):
+    import duckdb
+    duckdb.connect(str(tmp_path / "empty.duckdb")).close()
+    assert load_layers(tmp_path / "empty.duckdb") == {}
+    assert "no features.*" in caplog.text
+
+
+def test_page_has_overlays_and_script(monaco):
+    html = render_map(monaco, "walking").html
+    assert "__MS__" not in html and "ms-icon-crossings" in html and "ms-pat-forest" in html
+    assert "window.RS_OVERLAYS" in html
+    plain = render_map(monaco, "walking", layers=False).html
+    assert "ms-icon-crossings" not in plain

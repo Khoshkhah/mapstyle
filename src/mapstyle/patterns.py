@@ -57,6 +57,19 @@ _DRAW = {"trees": _trees, "graves": _graves, "waves": _waves, "dots": _dots,
          "sand": _sand, "hatch": _hatch, "rows": _rows}
 
 
+def pattern_png(name, color):
+    """One tile of pattern ``name`` drawn in ``color`` (hex) on transparent: a MapLibre
+    ``fill-pattern`` image (MapLibre can't tint one, so each colour is its own tile)."""
+    from PIL import Image, ImageDraw
+    tile = Image.new("RGBA", (TILE, TILE), (0, 0, 0, 0))
+    _DRAW[name](ImageDraw.Draw(tile))
+    out = Image.new("RGBA", tile.size, color)
+    out.putalpha(tile.getchannel("A"))
+    buf = io.BytesIO()
+    out.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def build_pattern_atlas():
     """Return ``(png_bytes, mapping)``; mapping = ``{name: {x, y, width, height, mask: True}}``."""
     from PIL import Image, ImageDraw

@@ -36,7 +36,7 @@ DB = _args[0] if len(_args) > 0 else "../duckOSM/data/db/tartu.duckdb"
 OUT = _args[1] if len(_args) > 1 else (
     "render/planner" if PLAN else "render/guidance" if GUIDANCE else
     "render/debug_visualization" if DEBUG else "render/basemap")
-LAYERS = Path(__file__).parent / "layers.yaml"   # WHICH feature layers to show (config, separate from style)
+LAYERS = Path(__file__).parent / "src/mapstyle/styles/layers.yaml"   # WHICH feature layers to show (config, separate from style)
 
 
 def load(table, name, kind, where=None, centroid=False, bearing=False):

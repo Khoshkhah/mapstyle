@@ -75,8 +75,11 @@ ms.render_map(db, mode="walking", layers=True)    # True = every layers.yaml lay
 
 - `features.*`, a table or a column missing → that layer is skipped with a logged hint, never an
   error (Södermalm has no `features.*`: roads only, as today).
-- With feature layers the default base map is `blank`: the features *are* the base map. The raster
-  base maps stay in the switcher. Without them, the default stays roadstyle's.
+- With feature layers the default base map is `voyager_nolabels`, drawn under them. `blank` was
+  the plan (the features *are* the base map), but duckOSM has no sea: `water_polygons` holds lakes
+  and basins, and the sea is only implied by coastline lines, so on `blank` Monaco's sea was
+  land-coloured. `blank` stays in the switcher and becomes the default once duckOSM builds sea
+  polygons (PLAN step 3). Without feature layers, the default stays roadstyle's.
 - `load_layers(db, names=None)` → `{name: FeatureCollection}` for dashboards that want the data.
 
 ### 4. Size

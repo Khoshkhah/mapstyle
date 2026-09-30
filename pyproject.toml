@@ -19,6 +19,7 @@ dependencies = [
     "shapely",
     "folium",
     "pyyaml",         # stylesheet config (styles/*.yaml)
+    "pillow",         # landcover texture tiles (patterns.py)
 ]
 
 [project.optional-dependencies]
@@ -30,4 +31,4 @@ dev = ["pytest", "duckdb"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-mapstyle = ["styles/*.yaml", "style/vendor/*"]
+mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js", "style/vendor/*"]
