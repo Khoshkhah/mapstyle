@@ -23,16 +23,20 @@ Decided: roadstyle's road widths (the physical width model is not ported); duckO
 
 ## Steps
 
-### 1. roadstyle (generic features first; repo `../roadstyle`, read its `AGENTS.md`)
+### 1. Mode styles and map layers, in mapstyle (roadstyle is not changed)
 
-- [ ] **Styles per travel mode:** `mode=` + `rsSetMode`, every OSM path class (steps, pedestrian,
-      corridor, platform, bridleway) in every palette, highlights ≥ 3 px. Draft note (uncommitted):
-      `../roadstyle/docs/design/mode_styles.md`.
-- [ ] **Richer overlays** (new roadstyle design note): colour by a column, point icons (SVG per
-      value) with rotation by a column (crossings), area textures (from `patterns.py`),
-      `minzoom`/`maxzoom`, overlays inside `tiles=True`.
-- [ ] **Multi-mode roads:** one feature per `edge_id` with mode flags; the mode style picks what to draw.
-- [ ] Release (CHANGELOG, PyPI).
+roadstyle stays as it is (Kaveh, 2026-09-30). mapstyle builds on what it already offers:
+`settings=` (new palettes, per-class styles, draw order), `overlays=`, `color_options`, the JS API,
+and its own JS on the page's `window.map` (MapLibre).
+
+- [ ] **Styles per travel mode:** mapstyle's own walking / cycling palettes (every OSM path class:
+      steps, pedestrian, corridor, platform, bridleway), passed as roadstyle settings; routes wide
+      enough to see on footways. Design note for sign-off: [`design/mode_styles.md`](design/mode_styles.md).
+- [ ] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
+      `window.map` layer), point icons with rotation (crossings), area textures (`patterns.py`),
+      zoom ranges: mapstyle's own MapLibre layers added through `window.map`.
+- [ ] **Multi-mode roads:** one feature per `edge_id` with `driving` / `walking` / `cycling` flags
+      (`merge_modes`); the mode style picks what to draw.
 
 ### 2. mapstyle on roadstyle
 
@@ -42,7 +46,7 @@ Decided: roadstyle's road widths (the physical width model is not ported); duckO
 - [ ] `ms.render_map(data_or_db, mode=None, layers=None, style="carto", **roadstyle_keywords)` →
       `rs.render_edges(..., overlays=[...])`. `osm_carto.yaml` + `layers.yaml` become roadstyle
       settings / overlay styles.
-- [ ] JS: `msSetMode(mode|null)` (calls `rsSetMode`); layers via `rsSetOverlay`, clicks via `rs:select`.
+- [ ] JS: `msSetMode(mode|null)` (mapstyle JS, see `design/mode_styles.md`); layers via `rsSetOverlay`, clicks via `rs:select`.
 - [ ] `ms.render_route_planner(db)`: move `../duckOSM/src/duckosm/route_map.py` here (routing in
       the browser over `edge_graph` / `mm.*`; checked on Monaco against duckOSM's `route()` /
       `route_multimodal()`: 8 of 8 trips).
@@ -53,7 +57,7 @@ Decided: roadstyle's road widths (the physical width model is not ported); duckO
 - [ ] Tests on a Monaco db (build below): load, missing features, keywords reaching roadstyle,
       `msSetMode`, the planner's graphs. Browser checks (playwright, `rs.snapshot`): all modes,
       walking, cycling, POIs/crossings clickable, a footway route visible.
-- [ ] Size: Monaco / Södermalm inline < ~10 MB; bigger areas with `tiles=True`.
+- [ ] Size: Monaco / Södermalm inline < ~10 MB; bigger areas with roadstyle's `tiles=True` for the roads (feature layers: simplify, or mapstyle's own tiles, see duckmap's `tiles.py`).
 
 ### 3. duckOSM (repo `../duckOSM`)
 
@@ -63,7 +67,7 @@ Decided: roadstyle's road widths (the physical width model is not ported); duckO
 
 ### 4. Publish
 
-- [ ] README + docs site (mkdocs, like roadstyle / duckOSM), pyproject (`roadstyle>=<new>`, fix
+- [ ] README + docs site (mkdocs, like roadstyle / duckOSM), pyproject (`roadstyle>=0.9.1`, fix
       `package-data`), repo public, PyPI (after duckOSM 0.1.0).
 - [ ] Archive duckmap; freeze route-viewer on its last mapstyle commit (or port it to the planner).
 

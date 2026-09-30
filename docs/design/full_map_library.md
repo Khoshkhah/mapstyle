@@ -48,8 +48,7 @@ area, and anyone with a duckOSM build.
 mapstyle reads the db file with `duckdb`; it never imports duckOSM. The dependency runs one way:
 `duckosm[viz]` → mapstyle → roadstyle.
 
-Anything that is useful without duckOSM goes into **roadstyle** (see 4); mapstyle keeps only what
-needs a duckOSM db.
+**roadstyle is not changed** (Kaveh, 2026-09-30): mapstyle uses it as it is (see 4).
 
 ### 2. Python API
 
@@ -85,18 +84,15 @@ The whole roadstyle API, plus:
 
 Kept small on purpose: a new `ms*` call only when roadstyle's can't do it.
 
-### 4. What roadstyle needs first (generic, each its own roadstyle design note)
+### 4. Built on roadstyle as it is (no roadstyle changes)
 
-1. **Styles per travel mode**: `mode=` and `rsSetMode` (draft: `roadstyle/docs/design/mode_styles.md`),
-   every OSM path class in every palette, and highlights at least 3 px wide. `msSetMode` calls it.
-2. **Richer overlays**, to carry mapstyle's feature layers:
-   - colour by a column (`color_by="kind", colors={...}`), instead of one colour per layer;
-   - point **icons** (an SVG per value) and **rotation** by a column (crossings);
-   - area **textures** (mapstyle's `patterns.py`);
-   - `minzoom` / `maxzoom` per overlay;
-   - overlays in the **tiles** (`tiles=True` today tiles the roads only; buildings are Tartu's
-     second-largest layer).
-3. **Multi-mode roads:** a road used by several modes is one feature with mode flags; the mode style
+1. **Styles per travel mode**: mapstyle's own walking / cycling palettes, passed as roadstyle
+   `settings=` ("a new name adds a palette"); every OSM path class gets an entry. Switching mode in
+   the page: `msSetMode` (mapstyle JS). Details: [`mode_styles.md`](mode_styles.md).
+2. **Feature layers**: roadstyle overlays where they fit (one style per layer); what they can't do
+   (colour by a column, icons, rotation, textures, zoom ranges) is mapstyle's own MapLibre layers
+   added through the page's `window.map`.
+3. **Multi-mode roads:** one feature per `edge_id` with mode flags (`merge_modes`); the mode style
    picks which ones to draw and how.
 
 ### 5. The look
@@ -135,7 +131,7 @@ Like roadstyle's `render_dashboard` / `render_street_view`:
 
 ## Steps
 
-1. roadstyle: mode styles (1), then richer overlays (2); release.
+1. mapstyle: mode palettes and feature layers on roadstyle as it is (4).
 2. mapstyle: `load` + `render_map` on roadstyle; port the look; delete the deck.gl viewer, the folium /
    lonboard backends, duckmap and Tartu leftovers; tests; CLI.
 3. duckOSM: `viz` extra → mapstyle; `duckosm viz` and `route-map` use it; docs.
