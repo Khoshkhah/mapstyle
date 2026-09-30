@@ -36,7 +36,8 @@ and its own JS on the page's `window.map` (MapLibre).
       the route planner (step 2).
 - [ ] **Feature layers beyond roadstyle's overlays:** colour by a column (one overlay per value, or a
       `window.map` layer), point icons with rotation (crossings), area textures (`patterns.py`),
-      zoom ranges: mapstyle's own MapLibre layers added through `window.map`.
+      zoom ranges: mapstyle's own MapLibre layers added through `window.map`. Design note for
+      sign-off: [`design/feature_layers.md`](design/feature_layers.md).
 - [ ] **Multi-mode roads:** one feature per `edge_id` with `driving` / `walking` / `cycling` flags
       (`merge_modes`); the mode style picks what to draw.
 
