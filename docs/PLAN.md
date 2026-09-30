@@ -1,39 +1,76 @@
-# mapstyle — plan
+# mapstyle — work plan
 
-Generalize `roadstyle` (line/edge styling) into a full OSM base-map renderer.
+**What mapstyle becomes** (approved 2026-09-30, design: [`design/full_map_library.md`](design/full_map_library.md)):
+the **full-map library on top of roadstyle**. Its only input is a **duckOSM database**; it decides
+what is on the map and how it looks, and roadstyle draws it (one offline HTML page, roadstyle's JS
+API, 3D, Street View, tiles). Like roadstyle, it is for **building dashboards**, not only a picture.
+duckOSM's `duckosm viz` and `duckosm route-map` become mapstyle pages.
 
-## Why a new package (not extending roadstyle)
+Decided: roadstyle's road widths (the physical width model is not ported); duckOSM builds
+`features.*` by default; the route planner moves here; the PyPI name "mapstyle" is ours already.
 
-roadstyle is a clean, column-agnostic styling brain but **line-only** in two places: the
-spec-JSON and `roadstyle.js` bake/draw only line casing+fill. Extending it in place would
-break its single responsibility and its backward-compatible spec. So `mapstyle` is a sibling
-that **imports roadstyle** for the road layers and adds what roadstyle lacks.
+## Status before this plan (2026-09-30 review)
 
-## What we reuse vs add
+- Reads a duckOSM db already (`merge.merge_modes`, `render_tartu.py` + `layers.yaml` for `features.*`).
+- The viewer is its own deck.gl app (`render_merge`): a folder + `serve.py`, CDN JS, 60 MB for
+  Tartu, none of roadstyle's JS API. It gets replaced by roadstyle's page.
+- Dead code: `io.load_layer` (duckmap's `basemap.*`), folium / lonboard `render_basemap`, Tartu paths
+  in the scripts, route-viewer `/api/route` hooks. duckmap (the sibling) is superseded by duckOSM's
+  `features.*` and will be archived; only its MVT code (`duckmap/src/duckmap/tiles.py`) is a reference.
+- No tests. `.venv` has a stale roadstyle metadata (0.2.0.dev1): `pip install -e ../roadstyle` first.
+- Branch `viewer-more-info` (2 commits, info-panel fields in the deck.gl viewer) is unmerged; it
+  goes away with that viewer.
 
-| Concern | Reuse from roadstyle | New in mapstyle |
-|---|---|---|
-| Styling brain | `resolve(class, palette, theme)`, `PALETTES`, `THEMES`, `Styler`s | `PolygonStyler` (fill+outline), `PointStyler` (marker) |
-| Road layers | the whole line pipeline | — |
-| Composition | — | `render_basemap(layers)` — many layers, one map, z-ordered |
-| Backends | folium / lonboard patterns | polygon + point rendering per backend |
-| Frontend (later) | `roadstyle.js` casing/fill | polygon outline + point markers branch |
+## Steps
 
-## Layers (z-order, bottom → top)
+### 1. roadstyle (generic features first; repo `../roadstyle`, read its `AGENTS.md`)
 
-landcover → water → waterways → buildings → roads(_driving/_walking/_cycling) → railways →
-places/POIs. Each is a `Layer(name, gdf, kind, palette, z)`.
+- [ ] **Styles per travel mode:** `mode=` + `rsSetMode`, every OSM path class (steps, pedestrian,
+      corridor, platform, bridleway) in every palette, highlights ≥ 3 px. Draft note (uncommitted):
+      `../roadstyle/docs/design/mode_styles.md`.
+- [ ] **Richer overlays** (new roadstyle design note): colour by a column, point icons (SVG per
+      value) with rotation by a column (crossings), area textures (from `patterns.py`),
+      `minzoom`/`maxzoom`, overlays inside `tiles=True`.
+- [ ] **Multi-mode roads:** one feature per `edge_id` with mode flags; the mode style picks what to draw.
+- [ ] Release (CHANGELOG, PyPI).
 
-## Incremental build (matches the layer-by-layer workflow)
+### 2. mapstyle on roadstyle
 
-1. **driving roads** via roadstyle, composed on a shared folium map ← *increment 1 (done)*
-2. **+ cycling**, **+ walking** (distinct palettes / toggles)
-3. **+ water, + landcover, + buildings** (PolygonStyler — fills now, outlines/refinement next)
-4. **+ places / POIs** (PointStyler — markers + labels)
-5. **web (mapstyle.js) + lonboard** backends for scale
+- [ ] `ms.load(db, modes=None, layers=None)` → roads (one row per `edge_id`, `driving`/`walking`/
+      `cycling` flags), `layers[name]` GeoDataFrames from `layers.yaml`, `boundary` from
+      `main.boundary`. Missing `features.*` / table / column → skip with a hint, never fail.
+- [ ] `ms.render_map(data_or_db, mode=None, layers=None, style="carto", **roadstyle_keywords)` →
+      `rs.render_edges(..., overlays=[...])`. `osm_carto.yaml` + `layers.yaml` become roadstyle
+      settings / overlay styles.
+- [ ] JS: `msSetMode(mode|null)` (calls `rsSetMode`); layers via `rsSetOverlay`, clicks via `rs:select`.
+- [ ] `ms.render_route_planner(db)`: move `../duckOSM/src/duckosm/route_map.py` here (routing in
+      the browser over `edge_graph` / `mm.*`; checked on Monaco against duckOSM's `route()` /
+      `route_multimodal()`: 8 of 8 trips).
+- [ ] CLI: `mapstyle db.duckdb -o map.html [--mode walking] [--tiles]`.
+- [ ] Delete: the deck.gl viewer (`render_merge` / `render_web.py`), `render_basemap` + folium /
+      lonboard, `io.load_layer`, `render_tartu.py`, `render_route.py`, the width model, stale docs
+      (`PROCESS.md`, `rendering.md`, `width-model.md` as needed).
+- [ ] Tests on a Monaco db (build below): load, missing features, keywords reaching roadstyle,
+      `msSetMode`, the planner's graphs. Browser checks (playwright, `rs.snapshot`): all modes,
+      walking, cycling, POIs/crossings clickable, a footway route visible.
+- [ ] Size: Monaco / Södermalm inline < ~10 MB; bigger areas with `tiles=True`.
 
-## Open questions
+### 3. duckOSM (repo `../duckOSM`)
 
-- Per-mode road styling: same carto palette, or cycling/walking highlighted differently?
-- Polygon palette: reuse the duckmap OSM-carto colors (done) vs a roadstyle-style palette table.
-- Frontend: extend `roadstyle.js` in place vs a `mapstyle.js` fork (deferred until backends matter).
+- [ ] `build_features` default `true` (config.py, template, docs).
+- [ ] `viz` extra → `mapstyle`; `duckosm viz` and `duckosm route-map` call mapstyle; docs (Draw a
+      map, Route).
+
+### 4. Publish
+
+- [ ] README + docs site (mkdocs, like roadstyle / duckOSM), pyproject (`roadstyle>=<new>`, fix
+      `package-data`), repo public, PyPI (after duckOSM 0.1.0).
+- [ ] Archive duckmap; freeze route-viewer on its last mapstyle commit (or port it to the planner).
+
+## Test data
+
+```bash
+cd ../duckOSM && .venv/bin/duckosm build -c config/sample_monaco.yaml   # add build_features: true until it's the default
+```
+
+`../duckOSM/data/db/tartu.duckdb` has `features.*`; `sodermalm.duckdb` has none (the missing-features case).
