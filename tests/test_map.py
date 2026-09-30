@@ -72,6 +72,20 @@ def test_komoot_walking_draws_paths_solid_with_a_halo():
     assert "footway" not in s["roads"].get("z_order", {})              # class order, no lift
 
 
+def test_one_way_streets_are_not_drawn_as_two_lanes(monaco, monkeypatch):
+    """A one-way street's walking-only reverse edge doesn't make it a two-way road: twoway only
+    where both directions are open to cars or bikes (Kaveh: Rue du Castelleretto)."""
+    seen = {}
+    from types import SimpleNamespace
+    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(monaco, layers=False)
+    g = seen["g"].set_index("edge_id")
+    assert seen["twoway_col"] == "twoway"
+    assert not g.loc["441704187184649227", "twoway"] and not g.loc["5990211243552773545", "twoway"]
+    assert g.loc[g.highway == "footway", "twoway"].sum() == 0                      # paths: one line
+    assert g.loc[g.driving & (g.highway == "residential"), "twoway"].sum() > 100    # real two-way streets
+
+
 def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
     """walk_type -> roadstyle's band_col: a crossing (zebra) over the street, a sidewalk under it
     (roadstyle/docs/design/draw_order_per_edge.md)."""

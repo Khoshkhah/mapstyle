@@ -149,6 +149,19 @@ def _kind(name):
     return next(s["kind"] for s in load_style("layers")["layers"] if s["name"] == name)
 
 
+def _vehicle_twoway(roads):
+    """Per edge: a road (not a path: a footway or cycleway is one line, even where bikes may ride it
+    both ways) whose reverse edge (the same line, end to start) exists, both open to cars or bikes,
+    i.e. a real two-way road's lane, not a walking-only reverse direction."""
+    key = lambda c: (round(c[0], 6), round(c[1], 6))                     # noqa: E731, roadstyle's
+    ends = [(key(g.coords[0]), key(g.coords[-1])) for g in roads.geometry]
+    veh = ((roads["driving"] | roads["cycling"]) & ~roads["highway"].isin(PATH_CLASSES)).tolist()
+    by = {}
+    for i, k in enumerate(ends):
+        by.setdefault(k, []).append(i)
+    return [veh[i] and any(veh[j] for j in by.get((k[1], k[0]), []) if j != i) for i, k in enumerate(ends)]
+
+
 def _mix(a, b, t):
     """Hex colour ``a`` mixed ``t`` of the way to ``b``."""
     x, y = (bytes.fromhex(h.lstrip("#")) for h in (a, b))
@@ -355,6 +368,11 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     path = roads["highway"].isin(PATH_CLASSES)
     roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
     kw["band_col"] = "band"
+    # two lanes only for a road two-way for vehicles: duckOSM's walking network has both directions
+    # of every street, so a one-way street's walking-only reverse edge would make roadstyle draw it
+    # as a two-way road (666 of Monaco's 1,578 road pairs); roadstyle's twoway_col, twin_ends.md
+    roads["twoway"] = _vehicle_twoway(roads)
+    kw["twoway_col"] = "twoway"
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 
