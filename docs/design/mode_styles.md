@@ -1,61 +1,75 @@
 # Styles for each travel mode (walking, cycling), and routes you can see
 
 **Status:** proposal, for sign-off before implementation. **roadstyle is not changed** (Kaveh,
-2026-09-30): everything here is done in mapstyle, with roadstyle's existing `settings=`,
-`palette=`, `include=`, `color_options` and the page's `window.map`.
+2026-09-30): everything here is done in mapstyle, with roadstyle's existing per-call `settings=`
+(palettes, `roads`, `config`), `palette=` and the page's `window.map`.
 
 ## Problem
 
 roadstyle's palettes were made for **driving** networks. On a walking or cycling network (duckOSM's
-`viz` and `route-map`), the paths people walk and cycle on almost disappear:
+`viz` and `route-map`), the paths people walk and cycle on almost disappear. In the web renderer:
 
-- In every palette, `footway`, `path` and `cycleway` are 1.2–1.5 px dashed lines at the bottom of
-  the draw order; in `mono` they're light grey (`#ABABAB`). At city zoom they vanish.
-- `steps`, `corridor`, `platform` and `bridleway` (and `pedestrian` in `mono`) are in no palette, so
-  they fall back to the `unclassified` style: a flight of steps is drawn like a road.
-- Highlighting a set (`rsColor`) changes only the fill colour and keeps the class width, so a route
-  along a footway stays a thin dashed line (seen in duckOSM's `route-map`: walking legs nearly invisible).
+- Widths come from `roads.width` by `roads.group`, not from the palette's `width` (that one is
+  folium/lonboard only). `footway`, `path`, `cycleway`, `steps`, `corridor` and `bridleway` are in
+  the `path` group: 0.4 px at z12 up to 3 px at z19.
+- `config.minzoom` hides `footway` / `path` below z15 and `cycleway` below z14: at city zoom they
+  are not drawn at all.
+- Dashed classes (footway, path, cycleway in every palette) are always drawn under the solid road
+  casing (`render_web.py`), whatever `z_order` says. In `mono` they are also light grey (`#ABABAB`).
+- `steps`, `corridor`, `platform` and `bridleway` (and `pedestrian` in `carto` and `mono`) are in
+  no palette, so they take the `unclassified` colours and casing. `platform` is also missing from
+  `roads.group`, so it gets *residential* width: a platform is drawn like a road.
+- Highlighting a set (`rsColor`, `rsHighlight`) changes only the colour and keeps the class width, so
+  a route along a footway stays a thin line (seen in duckOSM's `route-map`: walking legs nearly
+  invisible).
 
 ## Proposal
 
-### 1. A palette per travel mode, owned by mapstyle
+### 1. A settings set per travel mode, owned by mapstyle
 
-roadstyle settings can add palettes ("a new name adds a palette", per road class, with `fill`,
-`casing`, `width`, `dash`, …) and change the draw order (`roads.z_order`). mapstyle ships them as
-data (next to `styles/osm_carto.yaml`) and passes them with `settings=` and `palette=`:
+A mode is one roadstyle `settings=` dict, shipped as data next to `styles/osm_carto.yaml`, with
+three parts, because the width, visibility and colour live in different places:
+
+- `palettes.ms_<mode>`: a new palette (colour, casing, dash) with an entry for every OSM path
+  class (steps, pedestrian, corridor, platform, bridleway), so nothing falls back to `unclassified`;
+- `roads`: a width group for the mode's own network (`width`, `casing_ratio`), `group` entries
+  mapping its classes to it (including `platform`), and `z_order` putting them on top;
+- `config.minzoom`: the mode's own classes shown from city zoom.
 
 | Mode | The network you use is drawn | Roads for cars |
 |---|---|---|
 | `driving` | the carto look | as today |
-| `walking` | footway, pedestrian, path, steps, corridor, platform, living_street: solid, ~3 px, on top; steps with their own dash | thinner and lighter, underneath |
+| `walking` | footway, pedestrian, path, steps, corridor, platform, living_street: **solid** (a dashed class always draws under road casings), ~3 px at city zoom, on top; steps in their own colour | thinner and lighter, underneath |
 | `cycling` | cycleway: solid, ~3 px, cycling blue; roads by class as usual | footways (where you push the bike) thin and dashed |
 
-Every OSM path class (steps, pedestrian, corridor, platform, bridleway) gets an entry, so nothing
-falls back to a road look.
-
 ```python
-ms.render_map("monaco.duckdb", mode="walking")     # -> rs.render_edges(..., palette="ms_walking", settings=...)
+ms.render_map("monaco.duckdb", mode="walking")
+# -> rs.render_edges(..., palette="ms_walking", settings=MODES["walking"])
 ```
 
-### 2. Switching mode in the page
+`settings=` applies to that render only and rebuilds roadstyle's width tables, so modes don't leak
+into each other.
 
-`msSetMode("walking")`: mapstyle's own JS. Options, to settle while building (check roadstyle's
-layer ids in a built page first):
+### 2. One page per mode
 
-- a) `rsFilter` to the mode's edges (the `driving` / `walking` / `cycling` flags) plus
-  `window.map.setPaintProperty` on roadstyle's road layers with the mode's widths and colours;
-- b) one page per mode, linked (simplest; no live switch).
+Each mode is its own page, linked to the others. No live switch in the page: in roadstyle the width
+expression is built in Python and the dash layers exist only for the dash values present at render
+time, so switching mode live would mean rebuilding both in JS. (Colours alone could switch live
+through `color_options` + `rsSetColorField`; that's not enough for a mode.) Add a live switch when
+someone needs one.
 
 ### 3. Routes you can see on any road
 
-roadstyle's `rsColor` keeps the class width. mapstyle's route planner draws the route's width itself:
-a `window.map` line-width expression on roadstyle's road layers keyed on the route's feature ids
-(still recolouring the road, not drawing a second line over it), or it relies on the mode palette
-(1) making footways wide enough.
+First rely on (1): with footways ~3 px, a route recoloured with `rsColor` should be visible. If it
+isn't, the route planner widens the route's roads itself: `window.map.setPaintProperty` on
+roadstyle's road layers with a `line-width` keyed on the route's feature ids (still recolouring the
+road, not drawing a second line over it). MapLibre needs the zoom `interpolate` at the top level, so
+the `case` on the route ids goes inside every zoom stop, not around roadstyle's expression.
 
 ## Checks
 
-- Tests: every mode palette covers every class in the walking and cycling networks; `mode=` reaches
-  `render_edges`.
+- Tests: for every mode, the palette and `roads.group` cover every class in the walking and
+  cycling networks; `config.minzoom` shows the mode's classes at city zoom; `mode=` reaches
+  `render_edges` with the mode's palette and settings.
 - In a browser (snapshots, before and after): Monaco walking and cycling at city zoom, and a route
   along footways.
