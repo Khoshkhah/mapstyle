@@ -1,0 +1,13 @@
+{
+  "name": "mapstyle",
+  "version": "0.1.0",
+  "description": "Whole OpenStreetMap maps in one offline HTML page from a duckOSM database: a skill for drawing travel-mode maps, base maps, route planners and dashboards, and scripting them.",
+  "author": {
+    "name": "Kaveh",
+    "url": "https://github.com/Khoshkhah"
+  },
+  "homepage": "https://khoshkhah.github.io/mapstyle/",
+  "repository": "https://github.com/Khoshkhah/mapstyle",
+  "license": "MIT",
+  "keywords": ["openstreetmap", "osm", "map", "basemap", "maplibre", "cartography", "duckdb", "duckosm", "route-planner", "skill"]
+}

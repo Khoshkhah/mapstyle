@@ -1,0 +1,15 @@
+{
+  "name": "mapstyle",
+  "description": "Whole OpenStreetMap maps in one offline HTML page: the mapstyle agent skill.",
+  "owner": {
+    "name": "Kaveh",
+    "url": "https://github.com/Khoshkhah"
+  },
+  "plugins": [
+    {
+      "name": "mapstyle",
+      "source": "./",
+      "description": "Whole OpenStreetMap maps in one offline HTML page from a duckOSM database: a skill for drawing travel-mode maps, base maps, route planners and dashboards, and scripting them."
+    }
+  ]
+}

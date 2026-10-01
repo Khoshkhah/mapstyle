@@ -65,6 +65,7 @@ nav:
       - How roads are drawn: guides/roads.md
       - Route planner: guides/planner.md
       - Dashboard: guides/dashboard.md
+      - AI agents: guides/agents.md
   - Gallery: gallery.md
   - Reference:
       - Python API: reference/python.md
@@ -74,6 +75,30 @@ nav:
 
 plugins:
   - search
+  # /llms.txt (an index for AI agents, llmstxt.org) and /llms-full.txt (every page as Markdown)
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >
+        mapstyle draws a whole OpenStreetMap map as one offline HTML page: the roads for driving,
+        walking and cycling over a full base map, from a duckOSM database, with an optional route
+        planner or dashboard and a JavaScript API. An agent skill with the essentials:
+        https://github.com/Khoshkhah/mapstyle/blob/main/skills/mapstyle/SKILL.md
+      sections:
+        Get started:
+          - index.md
+          - get-started.md
+        Guides:
+          - guides/modes.md
+          - guides/base-map.md
+          - guides/roads.md
+          - guides/planner.md
+          - guides/dashboard.md
+          - guides/agents.md
+        Reference:
+          - reference/python.md
+          - reference/cli.md
+          - reference/javascript.md
+          - reference/styles.md
 
 markdown_extensions:
   - admonition

@@ -32,4 +32,10 @@
 
     A side panel to filter, colour and inspect the map.
 
+-   **[AI agents](agents.md)**
+
+    ---
+
+    The agent skill, the Claude plugin, and the docs as text for language models.
+
 </div>
