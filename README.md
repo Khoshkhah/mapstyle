@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/logo.svg" alt="mapstyle" width="96">
+  <img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/logo.svg" alt="mapstyle" width="96">
 </p>
 
 <h1 align="center">mapstyle</h1>
@@ -27,7 +27,7 @@
 ---
 
 <p align="center">
-  <img src="docs/img/hero.jpg" alt="Monaco drawn by mapstyle: streets, paths, buildings, parks, the port and the sea" width="900">
+  <img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/hero.jpg" alt="Monaco drawn by mapstyle: streets, paths, buildings, parks, the port and the sea" width="900">
 </p>
 
 ## Quick start
@@ -68,12 +68,12 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
 
 <table>
   <tr>
-    <td><img src="docs/img/mode_walking.jpg" alt="The walking mode"><br><sub>Walking: paths in front</sub></td>
-    <td><img src="docs/img/roads_walkway.jpg" alt="A raised walkway over a roundabout"><br><sub>A raised walkway over a roundabout</sub></td>
+    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/mode_walking.jpg" alt="The walking mode"><br><sub>Walking: paths in front</sub></td>
+    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/roads_walkway.jpg" alt="A raised walkway over a roundabout"><br><sub>A raised walkway over a roundabout</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/img/planner.jpg" alt="The route planner"><br><sub>The route planner</sub></td>
-    <td><img src="docs/img/dashboard.jpg" alt="The dashboard"><br><sub>The dashboard</sub></td>
+    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/planner.jpg" alt="The route planner"><br><sub>The route planner</sub></td>
+    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/dashboard.jpg" alt="The dashboard"><br><sub>The dashboard</sub></td>
   </tr>
 </table>
 
@@ -85,7 +85,7 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
 | **mapstyle** | reads that file (with `duckdb` only) and styles all of it as one map |
 | [**roadstyle**](https://github.com/Khoshkhah/roadstyle) | draws the page: MapLibre GL, the road styling, the JavaScript API |
 
-The look is data: four YAML files in [`src/mapstyle/styles/`](src/mapstyle/styles/) (travel modes,
+The look is data: four YAML files in [`src/mapstyle/styles/`](https://github.com/Khoshkhah/mapstyle/tree/main/src/mapstyle/styles/) (travel modes,
 path styles, colours, layers). See [Styles](https://khoshkhah.github.io/mapstyle/reference/styles/).
 
 ## Command line
@@ -97,12 +97,12 @@ mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm
 
 ## For AI agents
 
-- **Using mapstyle:** the agent skill [`skills/mapstyle/SKILL.md`](skills/mapstyle/SKILL.md) has the
+- **Using mapstyle:** the agent skill [`skills/mapstyle/SKILL.md`](https://github.com/Khoshkhah/mapstyle/blob/main/skills/mapstyle/SKILL.md) has the
   install, the one call, the options, the JavaScript API and the traps in one page. In Claude Code:
   `/plugin marketplace add Khoshkhah/mapstyle`, then `/plugin install mapstyle@mapstyle`.
 - **The docs as text:** [`llms.txt`](https://khoshkhah.github.io/mapstyle/llms.txt) and
   [`llms-full.txt`](https://khoshkhah.github.io/mapstyle/llms-full.txt) (every page, one file).
-- **Changing mapstyle:** [`AGENTS.md`](AGENTS.md) has the commands and the project's rules.
+- **Changing mapstyle:** [`AGENTS.md`](https://github.com/Khoshkhah/mapstyle/blob/main/AGENTS.md) has the commands and the project's rules.
 
 More: [AI agents](https://khoshkhah.github.io/mapstyle/guides/agents/).
 
@@ -116,7 +116,7 @@ python -m venv .venv && .venv/bin/pip install -e ".[dev,tiles]"
 
 Tests look for duckOSM in `../duckOSM` (with its `.venv`), or wherever `DUCKOSM_DIR` /
 `DUCKOSM_EXE` point; `MAPSTYLE_TEST_DB` reuses a database you already built. Design notes are in
-[`docs/design/`](docs/design/).
+[`docs/design/`](https://github.com/Khoshkhah/mapstyle/tree/main/docs/design/).
 
 ## License
 
