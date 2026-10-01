@@ -11,8 +11,7 @@ cycling over a full base map, from one <a href="https://github.com/Khoshkhah/duc
 [:material-rocket-launch: Get started](get-started.md){ .md-button }
 
 ```bash
-pip install "duckosm @ git+https://github.com/Khoshkhah/duckOSM" \
-            "mapstyle @ git+https://github.com/Khoshkhah/mapstyle"
+pip install mapstyle "duckosm @ git+https://github.com/Khoshkhah/duckOSM"
 
 curl -LO https://download.geofabrik.de/europe/monaco-latest.osm.pbf
 duckosm build --pbf monaco-latest.osm.pbf -o monaco.duckdb \

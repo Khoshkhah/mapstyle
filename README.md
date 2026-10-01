@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/mapstyle/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mapstyle"></a>
   <a href="https://github.com/Khoshkhah/mapstyle/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Khoshkhah/mapstyle/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://khoshkhah.github.io/mapstyle/"><img alt="Docs" src="https://img.shields.io/badge/docs-khoshkhah.github.io%2Fmapstyle-0f9488"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB">
@@ -33,8 +34,7 @@
 ## Quick start
 
 ```bash
-pip install "duckosm @ git+https://github.com/Khoshkhah/duckOSM" \
-            "mapstyle @ git+https://github.com/Khoshkhah/mapstyle"
+pip install mapstyle "duckosm @ git+https://github.com/Khoshkhah/duckOSM"
 
 curl -LO https://download.geofabrik.de/europe/monaco-latest.osm.pbf
 duckosm build --pbf monaco-latest.osm.pbf -o monaco.duckdb \

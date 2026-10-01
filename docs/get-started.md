@@ -5,12 +5,12 @@
 ## 1. Install
 
 ```bash
-pip install "duckosm @ git+https://github.com/Khoshkhah/duckOSM" \
-            "mapstyle @ git+https://github.com/Khoshkhah/mapstyle"
+pip install mapstyle "duckosm @ git+https://github.com/Khoshkhah/duckOSM"
 ```
 
 mapstyle needs Python 3.10+. It installs [roadstyle](https://pypi.org/project/roadstyle/) from PyPI;
-add `"mapstyle[tiles] @ git+…"` for [vector tiles](#big-areas).
+add `"mapstyle[tiles]"` for [vector tiles](#big-areas). duckOSM isn't on PyPI yet: it installs from
+GitHub.
 
 ## 2. Build a database with duckOSM
 
@@ -68,7 +68,7 @@ A city like Monaco or Tartu fits in one page (3-12 MB). For a region, draw the r
 inside the page:
 
 ```bash
-pip install "mapstyle[tiles] @ git+https://github.com/Khoshkhah/mapstyle"
+pip install "mapstyle[tiles]"
 mapstyle stockholm.duckdb --tiles
 ```
 

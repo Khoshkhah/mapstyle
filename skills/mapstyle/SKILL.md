@@ -12,9 +12,8 @@ API: `/reference/python/`; JavaScript: `/reference/javascript/`).
 ## Install
 
 ```bash
-pip install "duckosm @ git+https://github.com/Khoshkhah/duckOSM" \
-            "mapstyle @ git+https://github.com/Khoshkhah/mapstyle"     # not on PyPI yet
-pip install "mapstyle[tiles] @ git+https://github.com/Khoshkhah/mapstyle"   # + vector tiles
+pip install mapstyle "duckosm @ git+https://github.com/Khoshkhah/duckOSM"   # duckOSM: not on PyPI yet
+pip install "mapstyle[tiles]"                                               # + vector tiles
 ```
 
 Python 3.10+. roadstyle (>= 0.10) comes from PyPI.
