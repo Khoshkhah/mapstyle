@@ -26,11 +26,11 @@
 
     Lanes, one-way arrows, bridges, tunnels, raised walkways, crossings and sidewalks.
 
--   **[Route planner](planner.md)**
+-   **[Route planner (demo)](planner.md)**
 
     ---
 
-    Routes by car, on foot, by bike, or walk + drive, with turn-by-turn directions.
+    A demo page: drag a start and an end, see the route.
 
 -   **[Dashboard](dashboard.md)**
 

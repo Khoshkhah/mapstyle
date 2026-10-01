@@ -48,7 +48,7 @@ import mapstyle as ms
 ms.render_map("monaco.duckdb").save("monaco.html")                    # the whole map
 ms.render_map("monaco.duckdb", mode="walking", paths="komoot")        # paths in front
 ms.render_map("monaco.duckdb", theme="grey")                          # a quiet map for data
-ms.render_map("monaco.duckdb", planner=True).save("planner.html")     # + a route planner
+ms.render_map("monaco.duckdb", planner=True).save("planner.html")     # a route planner demo
 ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashboard
 ```
 
@@ -61,8 +61,8 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
   water, buildings, railways, parking, transit, traffic lights and crossings. No tile server, no API key.
 - **Roads drawn right at junctions**: two-way roads as two lanes, bridges over, tunnels under only
   where they really pass under a road, raised walkways, crossings over their street.
-- **A route planner** in the page: drive, walk, cycle or walk + drive, fastest or shortest, with
-  turn-by-turn directions.
+- **A route planner demo**: drag a start and an end and see duckOSM's route on the map (routing
+  itself is duckOSM's job).
 - **A dashboard**: filter by mode, road class and layer, colour by mode, inspect what you click.
 - **A JavaScript API**: every page is a [roadstyle](https://github.com/Khoshkhah/roadstyle) page
   (`rsQuery`, `rsFilter`, `rsColor`, …) plus `rsSetModes`, `rsSetKinds` and `rsSetInteraction`;
@@ -74,7 +74,7 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
     <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/roads_walkway.jpg" alt="A raised walkway over a roundabout"><br><sub>A raised walkway over a roundabout</sub></td>
   </tr>
   <tr>
-    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/planner.jpg" alt="The route planner"><br><sub>The route planner</sub></td>
+    <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/planner.jpg" alt="The route planner"><br><sub>The route planner demo</sub></td>
     <td><img src="https://raw.githubusercontent.com/Khoshkhah/mapstyle/main/docs/img/dashboard.jpg" alt="The dashboard"><br><sub>The dashboard</sub></td>
   </tr>
 </table>

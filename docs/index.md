@@ -50,12 +50,11 @@ mapstyle monaco.duckdb          # -> monaco_all.html: one file, opens offline
 
     [:octicons-arrow-right-24: How roads are drawn](guides/roads.md)
 
--   :material-map-marker-path:{ .lg .middle } **Route planner**
+-   :material-map-marker-path:{ .lg .middle } **Route planner (demo)**
 
     ---
 
-    Drag a start and an end: fastest or shortest route, turn-by-turn directions, by car, on foot,
-    by bike, or walk + drive.
+    A demo of a page built on mapstyle: drag a start and an end, see duckOSM's route.
 
     [:octicons-arrow-right-24: Route planner](guides/planner.md)
 
