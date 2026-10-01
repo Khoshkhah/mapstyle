@@ -80,9 +80,14 @@ ms.render_map(db, mode="walking", layers=True)    # True = every layers.yaml lay
   duckOSM `docs/design/sea.md`), drawn first, in the water colour; a db built before it has no
   `ocean` table, so its coast's sea stays land-coloured. The raster maps (`voyager_nolabels`
   first) stay in the switcher.
-- The *Layers* control (roadstyle's overlay box) sits under *Roads* in the top-left stack and folds
-  like it (Kaveh, 2026-09-30; `layers.js` moves and folds roadstyle's box, roadstyle unchanged). A
-  page without that stack (the planner) keeps it bottom-right, foldable.
+- Every feature layer is built hidden (`rs.Overlay(visible=False)`) and `layers.js` shows it
+  (`rsSetOverlay`) once styled, so the page never flashes plain dots or every building first
+  (Kaveh, 2026-09-30: "it shows all POI as points and then removes them").
+- The *Roads* and *Layers* boxes both start folded, and *Layers* (roadstyle's overlay box) sits
+  under *Roads* in the top-left stack and folds like it (Kaveh, 2026-09-30; `layers.js` folds and
+  moves roadstyle's boxes, roadstyle unchanged). A head CSS rule (`map.py`'s `_BOX_CSS`) keeps each
+  box unseen until it is placed, so neither shows unfolded or jumps. A page without that stack (the
+  planner) keeps Layers bottom-right, folded.
 - `load_layers(db, names=None)` → `{name: FeatureCollection}` for dashboards that want the data.
 
 ### 4. Size

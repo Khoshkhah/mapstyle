@@ -5,11 +5,16 @@
 // 2. The rs* functions mapstyle adds, defined like roadstyle's own (and only where the page has
 //    none yet): rsSetModes / rsGetModes, rsSetKinds / rsGetKinds / RS_KINDS,
 //    rsSetInteraction / rsGetInteraction.
+// 3. The Roads and Layers boxes: both folded at the start, Layers under Roads and foldable like it.
+// 3. (below) the Roads and Layers boxes: folded at the start, Layers under Roads; map.py keeps both
+//    unseen until they are placed, so neither jumps (a fallback shows them after 8 s regardless).
+setTimeout(() => placeBoxes(), 8000);
 (function start(){
 // poll, like roadstyle's own page code: `window.map` is the container <div> until the map is built,
 // and `load` / `idle` can fire before this runs or not at all (offline, failed tile requests)
 const MS = __MS__, map = window.map;
 if (!(map && typeof map.getSource === "function" && map.isStyleLoaded())) return setTimeout(start, 100);
+placeBoxes();
 // keep roadstyle's hover / select `case` around a new base colour
 const swap = (e, v) => Array.isArray(e) && e[0] === "case" ? e.slice(0, -1).concat([v]) : v;
 const match = (by) => ["match", ["get", "kind"], ...Object.entries(by.map).flat(), by.default];
@@ -77,6 +82,7 @@ const run = async () => {
     state[L.label] = {clickable: true, tooltip: true, popup: true,
                       color: map.getPaintProperty(body, p), paint: p, body, tip: ov.tooltip};
     setInteraction(L.label, L.interaction);
+    rsSetOverlay(L.label, true);                       // built hidden (map.py): shown once styled
   });
 
   // ---- rsSetInteraction: a layer's clicks, hover tooltip and click popup ----------------------
@@ -122,23 +128,36 @@ const run = async () => {
   fire("ms:ready", {});
 };
 run();
-
-// ---- 3. The Layers control: collapsible like Roads, and under it in the top-left stack -----------
-// (Kaveh, 2026-09-30). roadstyle draws it as a fixed box at the bottom right with no collapse; this
-// only folds and moves that box (a page with no Roads stack, the planner, keeps it in place).
-// Panel pages have none: their layers sit in the Roads card.
-const ovBox = document.querySelector(".ov-ctrl"), stack = document.getElementById("rs-tl");
-if (ovBox && !ovBox.dataset.ms) {
-  ovBox.dataset.ms = "1";
-  const hd = ovBox.querySelector(".ov-hd"), body = ovBox.querySelector(".ov-body");
-  if (stack) Object.assign(ovBox.style, {position: "static", maxHeight: "none", overflow: "auto", minHeight: "0"});
-  Object.assign(hd.style, {cursor: "pointer", userSelect: "none"});
-  hd.textContent = "Layers ▾";
-  hd.onclick = () => {
-    const open = body.style.display === "none";
-    body.style.display = open ? "" : "none";
-    hd.textContent = "Layers " + (open ? "▾" : "▸");
-  };
-  if (stack) stack.appendChild(ovBox);
-}
 })();
+
+// ---- 3. The Roads and Layers boxes ---------------------------------------------------------------
+// (Kaveh, 2026-09-30) Both start folded; the Layers box (roadstyle's, fixed at the bottom right with
+// no fold) goes under Roads in the top-left stack and folds like it (a page with no stack, the
+// planner, keeps it in place; panel pages have none: their layers sit in the Roads card). map.py's
+// head CSS keeps a box unseen until it has data-ms, so it never shows unfolded or in the wrong place
+// ("it first creates that box and then moves it"); placed once the map is ready, when the planner's
+// side panel is docked too.
+function placeBoxes() {
+  const flt = document.querySelector(".flt-ctrl"), ovBox = document.querySelector(".ov-ctrl");
+  const stack = document.getElementById("rs-tl");
+  if (flt && !flt.dataset.ms) {
+    flt.classList.add("collapsed");
+    const hd = flt.querySelector(".flt-hd");
+    if (hd) hd.textContent = "Roads ▸";
+    flt.dataset.ms = "1";
+  }
+  if (ovBox && !ovBox.dataset.ms) {
+    const hd = ovBox.querySelector(".ov-hd"), body = ovBox.querySelector(".ov-body");
+    if (stack) Object.assign(ovBox.style, {position: "static", maxHeight: "none", overflow: "auto", minHeight: "0"});
+    Object.assign(hd.style, {cursor: "pointer", userSelect: "none"});
+    body.style.display = "none";
+    hd.textContent = "Layers ▸";
+    hd.onclick = () => {
+      const open = body.style.display === "none";
+      body.style.display = open ? "" : "none";
+      hd.textContent = "Layers " + (open ? "▾" : "▸");
+    };
+    if (stack) stack.appendChild(ovBox);
+    ovBox.dataset.ms = "1";
+  }
+}

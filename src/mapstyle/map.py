@@ -219,7 +219,9 @@ def feature_overlays(fcs, interaction=None):
         # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
         L["interaction"] = {"clickable": not (name in ("landcover", "water") or kind == "line"),
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
-        overlays.append(rs.Overlay(**ov, popup=["name", "kind"], tooltip=["name", "kind"]))
+        # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
+        # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")
+        overlays.append(rs.Overlay(**ov, popup=["name", "kind"], tooltip=["name", "kind"], visible=False))
         layers.append(L)
     kinds = {n: dict(Counter(f["properties"]["kind"] for f in fc["features"]).most_common())
              for n, fc in fcs.items()}
@@ -231,9 +233,14 @@ def _json(data):
     return json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
 
 
+# the Roads / Layers boxes stay unseen until layers.js has folded and placed them (data-ms)
+_BOX_CSS = "<style>.flt-ctrl:not([data-ms]),.ov-ctrl:not([data-ms]){visibility:hidden}</style>"
+
+
 def _inject(m, html):
-    """Add ``html`` to a roadstyle page before ``</body>``, as roadstyle's own pages add their sidebar."""
-    m._tpl = m._tpl.replace("</body>", html + "</body>", 1)
+    """Add ``html`` to a roadstyle page before ``</body>``, as roadstyle's own pages add their sidebar
+    (and ``_BOX_CSS`` to its head, so it applies from the first paint)."""
+    m._tpl = m._tpl.replace("</head>", _BOX_CSS + "</head>", 1).replace("</body>", html + "</body>", 1)
     return m
 
 
