@@ -47,6 +47,7 @@ import mapstyle as ms
 
 ms.render_map("monaco.duckdb").save("monaco.html")                    # the whole map
 ms.render_map("monaco.duckdb", mode="walking", paths="komoot")        # paths in front
+ms.render_map("monaco.duckdb", theme="grey")                          # a quiet map for data
 ms.render_map("monaco.duckdb", planner=True).save("planner.html")     # + a route planner
 ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashboard
 ```
@@ -54,7 +55,8 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
 ## What you get
 
 - **Every travel mode on one map**, or one brought to the front: `all`, `driving`, `walking`,
-  `cycling`; and four looks for paths (`google`, `osm`, `komoot`, `cyclosm`).
+  `cycling`; four looks for paths (`google`, `osm`, `komoot`, `cyclosm`); and three **themes**
+  for the whole map: `osm` (detailed), `google` (clean), `grey` (quiet, for your data on top).
 - **A full base map from the same database**: the sea, land use with openstreetmap.org's textures,
   water, buildings, railways, parking, transit, traffic lights and crossings. No tile server, no API key.
 - **Roads drawn right at junctions**: two-way roads as two lanes, bridges over, tunnels under only
@@ -92,6 +94,7 @@ path styles, colours, layers). See [Styles](https://khoshkhah.github.io/mapstyle
 
 ```text
 mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm,komoot,cyclosm}]
+            [--theme {osm,google,grey}]
             [--no-layers] [--planner] [--dashboard] [--tiles] [--basemap BASEMAP]
 ```
 

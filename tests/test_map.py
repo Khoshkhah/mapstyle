@@ -291,3 +291,34 @@ def test_dashboard(monaco):
     assert landcover["interaction"]["clickable"] is False              # decoration: today's default
     with pytest.raises(ValueError):
         render_map(monaco, dashboard=True, planner=True)
+
+
+# ---- themes (docs/design/themes.md) -------------------------------------------------------------
+
+def test_grey_theme_is_muted_except_the_water_and_green_hints():
+    import colorsys
+    import re
+    from mapstyle.style import _walk, load_theme
+    style, th, _ = load_theme("grey")
+    _, settings = mode_settings("all", "google", "grey")
+    hints = {"#d5dde0", "#c3cfd4", "#bcc3cc", "#e7ece5", "#e9ede7"}      # water, cycleways, green
+    seen = []
+    _walk([style["roads"], style["features"], settings["palettes"]], seen.append)
+    cols = {c.lower() for c in seen if isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c)}
+    sat = lambda c: colorsys.rgb_to_hls(*(int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)))[2]  # noqa: E731
+    assert cols and all(sat(c) <= 0.15 for c in cols - hints), sorted(c for c in cols - hints if sat(c) > 0.15)
+    assert style["features"]["landcover_pattern"] == {} and th["background"] == "#f5f5f3"
+
+
+def test_theme_osm_is_todays_page_and_an_unknown_theme_names_the_choices(monaco):
+    assert render_map(monaco, layers=False).html == render_map(monaco, layers=False, theme="osm").html
+    with pytest.raises(ValueError, match="unknown theme 'nope'; choose from \\('osm', 'google', 'grey'\\)"):
+        render_map(monaco, theme="nope")
+    html = render_map(monaco, theme="grey").html
+    assert "blank_grey" in html and "#f5f5f3" in html
+
+
+def test_cli_theme(monaco, tmp_path, capsys):
+    out = tmp_path / "grey.html"
+    main([str(monaco), "--theme", "grey", "--no-layers", "-o", str(out)])
+    assert out.exists() and "blank_grey" in out.read_text()

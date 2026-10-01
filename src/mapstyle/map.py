@@ -11,7 +11,7 @@ from collections import Counter
 import logging
 from pathlib import Path
 
-from mapstyle.style import load_style
+from mapstyle.style import _walk, load_style, load_theme, themes
 
 MODES = ("driving", "walking", "cycling")          # duckOSM's networks: the roads' mode flags
 LOOKS = ("all",) + MODES                           # render_map(mode=): "all" emphasises none (modes.yaml)
@@ -60,10 +60,11 @@ def load_roads(db):
     return gpd.GeoDataFrame(df, geometry=geom)
 
 
-def mode_settings(mode, paths=PATHS):
+def mode_settings(mode, paths=PATHS, theme="osm"):
     """``(palette_name, settings)`` for ``rs.render_edges``: the palette (roadstyle's carto +
-    osm_carto.yaml's colours + the path style's, paths.yaml) and the ``roads`` / ``config``
-    settings (the mode's network in the path style's ``em`` width group, on top; modes.yaml)."""
+    osm_carto.yaml's colours + the path style's, paths.yaml, all in the ``theme``'s colours) and the
+    ``roads`` / ``config`` settings (the mode's network in the path style's ``em`` width group, on
+    top; modes.yaml; plus the theme's roadstyle settings)."""
     import roadstyle as rs
 
     if mode not in LOOKS:
@@ -73,9 +74,11 @@ def mode_settings(mode, paths=PATHS):
         raise ValueError(f"unknown path style {paths!r}; choose from {tuple(styles)}")
     modes, st = load_style("modes"), styles[paths]
     spec = modes[mode] or {}
-    base = rs.palette_to_dict("carto")
-    colors = load_style()["roads"]["colors"]
-    over = st.get("palette") or {}
+    style, th, color = load_theme(theme)
+    base = _walk(rs.palette_to_dict("carto"), color)
+    colors = style["roads"]["colors"]
+    over = {c: {**v, **(th.get("paths") or {}).get(c, {})}
+            for c, v in _walk(st.get("palette") or {}, color).items()}
     # a class the base lacks (pedestrian, steps, platform, …) starts from footway's entry without
     # its dash: osm_carto.yaml gives the dash where a class has one
     new = {**base["footway"], "dash": None}
@@ -92,7 +95,8 @@ def mode_settings(mode, paths=PATHS):
                  "group": {**{c: "em" for c in spec.get("em", [])}, **(st.get("group") or {})}}.items():
         roads.setdefault(k, {}).update(v)
     config = {"minor_no_casing": st["minor_no_casing"]} if "minor_no_casing" in st else {}
-    name = f"ms_{mode}_{paths}"
+    config.update(th.get("roadstyle") or {})
+    name = f"ms_{mode}_{paths}" + ("" if theme in (None, "osm") else f"_{theme}")
     # json round trip: zoom keys as strings, like roadstyle's own width tables
     return name, json.loads(json.dumps({"palettes": {name: palette}, "roads": roads, "config": config}))
 
@@ -170,14 +174,14 @@ def _data_url(mime, data):
     return f"data:{mime};base64," + base64.b64encode(data).decode()
 
 
-def feature_overlays(fcs, interaction=None):
+def feature_overlays(fcs, interaction=None, style=None):
     """``(overlays, script_config)`` for ``load_layers`` output: one ``rs.Overlay`` per layer, and
     what layers.js adds on top (colour by kind, zoom ranges, dashes, textures, icons, each layer's
     opening ``{clickable, tooltip, popup}``: today's defaults updated by ``interaction``)."""
     import roadstyle as rs
     from mapstyle.patterns import pattern_png
 
-    st = load_style()["features"]
+    st = (style or load_style())["features"]
     areas, lines, points, icon = st["areas"], st["lines"], st["points"], st["icon"]
     overlays, layers, images = [], [], {}
     for name, fc in fcs.items():
@@ -314,7 +318,7 @@ def planner_data(db, roads):
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, **kwargs):
+               paths=PATHS, theme="osm", **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -324,6 +328,8 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
     (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
+    ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
+    (docs/design/themes.md).
     The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
     ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
@@ -334,19 +340,24 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
     if planner and dashboard:
         raise ValueError("planner=True and dashboard=True both use the right-hand panel: pick one")
-    palette, settings = mode_settings(mode, paths)
+    palette, settings = mode_settings(mode, paths, theme)
+    style, th, _ = load_theme(theme)
     roads = load_roads(db)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
-    overlays, config = feature_overlays(fcs, interaction)
-    kw = {"name": f"{Path(db).stem} ({mode}, {paths})", "tooltip": ["edge_id", "osm_id", "highway", "name"],
+    overlays, config = feature_overlays(fcs, interaction, style)
+    kw = {"name": f"{Path(db).stem} ({mode}, {paths}" + ("" if theme in (None, "osm") else f", {theme}") + ")", "tooltip": ["edge_id", "osm_id", "highway", "name"],
           "copy_field": "edge_id", "overlays": overlays}
     if load_style("modes")[mode].get("lanes") is False:        # one centred line per road
         kw.update(offset_frac=0, width_frac=1)
     # blank: the map is the db's own (Kaveh, 2026-09-30); the raster maps stay in the switcher
-    kw.update(basemap="blank", basemaps=["blank", "voyager_nolabels", "voyager", "positron", "osm", "satellite"])
+    bg = "blank"
+    if th.get("background"):                   # the theme's land colour: a plain base map of its own
+        bg = f"blank_{theme}"
+        rs.register_basemap(rs.Basemap(bg, f"Blank ({theme})", "", "", bg=th["background"]))
+    kw.update(basemap=bg, basemaps=[bg, "voyager_nolabels", "voyager", "positron", "osm", "satellite"])
     html = f"<script>{(_HERE / 'layers.js').read_text().replace('__MS__', _json(config))}</script>"
     if planner:
         roads["k"] = range(len(roads))                          # the feature index the graphs point to
@@ -391,6 +402,8 @@ def main(argv=None):
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
     ap.add_argument("--paths", default=PATHS, choices=tuple(load_style("paths")),
                     help=f"how walking / cycling paths look (default: {PATHS})")
+    ap.add_argument("--theme", default="osm", choices=themes(),
+                    help="the whole map's colours (default: osm; grey: a quiet map for data)")
     ap.add_argument("--planner", action="store_true", help="add the route planner (drag start and end)")
     ap.add_argument("--dashboard", action="store_true", help="a dashboard: filter by mode, class, layer, kind")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
@@ -404,5 +417,5 @@ def main(argv=None):
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
     render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,
-               paths=a.paths, **kw).save(out)
+               paths=a.paths, theme=a.theme, **kw).save(out)
     print(out)

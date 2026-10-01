@@ -6,6 +6,16 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Themes:** `theme=` / `--theme` gives the whole map its colours: `osm` (today's, the default),
+  `google` (clean: light land, white streets, yellow main roads, light blue water) and `grey` (a
+  quiet map for your data on top). A theme is a short YAML in `styles/themes/`: a background, a
+  transform for every colour of the `osm` look, and the colours that differ. Your own colours
+  (`rsColor`, colour options, the planner's route) are never themed.
+
+### Fixed
+- An empty colour or texture list (a theme can empty one) no longer breaks the page.
+
 ## [0.1.0] — 2026-10-01
 
 The first release: a whole OpenStreetMap map in one offline HTML page, from a

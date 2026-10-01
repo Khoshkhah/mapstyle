@@ -61,6 +61,7 @@ nav:
   - Guides:
       - guides/index.md
       - Travel modes & path styles: guides/modes.md
+      - Themes: guides/themes.md
       - The base map: guides/base-map.md
       - How roads are drawn: guides/roads.md
       - Route planner: guides/planner.md
@@ -89,6 +90,7 @@ plugins:
           - get-started.md
         Guides:
           - guides/modes.md
+          - guides/themes.md
           - guides/base-map.md
           - guides/roads.md
           - guides/planner.md

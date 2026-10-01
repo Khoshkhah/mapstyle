@@ -17,7 +17,8 @@ if (!(map && typeof map.getSource === "function" && map.isStyleLoaded())) return
 placeBoxes();
 // keep roadstyle's hover / select `case` around a new base colour
 const swap = (e, v) => Array.isArray(e) && e[0] === "case" ? e.slice(0, -1).concat([v]) : v;
-const match = (by) => ["match", ["get", "kind"], ...Object.entries(by.map).flat(), by.default];
+// colour by kind; with no kinds listed (a theme can empty a list) just the default
+const match = (by) => Object.keys(by.map).length ? ["match", ["get", "kind"], ...Object.entries(by.map).flat(), by.default] : by.default;
 const loadImage = ([name, url]) => new Promise(done => {
   const img = new Image();
   img.onload = () => { if (!map.hasImage(name)) map.addImage(name, img); done(); };
@@ -56,7 +57,7 @@ const run = async () => {
     if (L.color_by) map.setPaintProperty(body, p, swap(map.getPaintProperty(body, p), match(L.color_by)));
     if (L.outline_by) map.setPaintProperty(ov.layers[1], "line-color", match(L.outline_by));
     if (L.dash) map.setPaintProperty(body, "line-dasharray", L.dash);
-    if (L.patterns) add({id: ov.source + "-pattern", type: "fill",
+    if (L.patterns && Object.keys(L.patterns).length) add({id: ov.source + "-pattern", type: "fill",
       filter: ["match", ["get", "kind"], Object.keys(L.patterns), true, false],
       paint: {"fill-pattern": ["match", ["get", "kind"], ...Object.entries(L.patterns).flat(),
                                Object.values(L.patterns)[0]]}}, ov.layers[1]);

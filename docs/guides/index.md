@@ -8,6 +8,12 @@
 
     `all`, `driving`, `walking`, `cycling`; and four looks for footways and cycleways.
 
+-   **[Themes](themes.md)**
+
+    ---
+
+    The whole map's colours: `osm`, `google`, `grey`, or your own.
+
 -   **[The base map](base-map.md)**
 
     ---

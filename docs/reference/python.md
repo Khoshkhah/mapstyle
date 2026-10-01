@@ -20,6 +20,7 @@ writes the HTML file, `.html` is the page as a string, and in Jupyter it shows i
 | `mode` | `"all"` (`"walking"` with `planner=True`) | which network stands out: `all`, `driving`, `walking`, `cycling` ([guide](../guides/modes.md)) |
 | `layers` | `True` | the base-map layers: `True` = all, a list of names, or `False` = roads only ([guide](../guides/base-map.md)) |
 | `paths` | `"google"` | how paths look: `google`, `osm`, `komoot`, `cyclosm` |
+| `theme` | `"osm"` | the whole map's colours: `osm`, `google`, `grey`, or a file of yours ([guide](../guides/themes.md)) |
 | `planner` | `False` | add the [route planner](../guides/planner.md) |
 | `dashboard` | `False` | make it a [dashboard](../guides/dashboard.md) |
 | `interaction` | `None` | how a layer opens: `{"crossings": {"clickable": True, "tooltip": True, "popup": False}}` |
@@ -27,6 +28,7 @@ writes the HTML file, `.html` is the page as a string, and in Jupyter it shows i
 
 ```python
 ms.render_map("tartu.duckdb", mode="cycling", tiles=True).save("tartu.html")
+ms.render_map("monaco.duckdb", theme="grey", dashboard=True)
 ms.render_map("monaco.duckdb", layers=["buildings", "water"], basemap="positron")
 ```
 

@@ -2,6 +2,7 @@
 
 ```text
 mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm,komoot,cyclosm}]
+            [--theme {osm,google,grey}]
             [--no-layers] [--planner] [--dashboard] [--tiles] [--basemap BASEMAP]
 ```
 
@@ -11,6 +12,7 @@ mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm
 | `-o`, `--out` | the HTML file to write (default: `<db name>_<mode>.html`) |
 | `--mode` | which network stands out (default: `all`; `walking` with `--planner`) |
 | `--paths` | how walking and cycling paths look (default: `google`) |
+| `--theme` | the whole map's colours: `osm` (default), `google`, `grey` ([Themes](../guides/themes.md)) |
 | `--no-layers` | roads only, no base-map layers |
 | `--planner` | add the [route planner](../guides/planner.md) |
 | `--dashboard` | a [dashboard](../guides/dashboard.md): filter by mode, class, layer and kind |

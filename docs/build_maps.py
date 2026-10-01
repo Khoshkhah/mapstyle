@@ -22,6 +22,8 @@ MAPS = {
     "paths_komoot": dict(mode="walking", paths="komoot"),
     "dashboard": dict(dashboard=True),
     "planner": dict(planner=True),
+    "theme_google": dict(theme="google"),
+    "theme_grey": dict(theme="grey"),
 }
 
 if __name__ == "__main__":

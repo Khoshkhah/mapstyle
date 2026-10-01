@@ -51,6 +51,7 @@ m.save("cycling.html")        # m.html is the page as a string; in Jupyter m dis
 |---|---|
 | `mode` | `all` (default), `driving`, `walking`, `cycling`: which network stands out |
 | `paths` | `google` (default), `osm`, `komoot`, `cyclosm`: how paths look |
+| `theme` | `osm` (default), `google` (clean), `grey` (quiet, for data on top): the whole map's colours; a theme is a short YAML in `src/mapstyle/styles/themes/` |
 | `layers` | `True` (all), a list (`["buildings", "crossings"]`), `False` (roads only) |
 | `planner` / `dashboard` | `True` adds the route planner / makes it a dashboard |
 | `interaction` | `{"crossings": {"clickable": True, "tooltip": True, "popup": False}}` |
