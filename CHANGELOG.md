@@ -6,6 +6,8 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-01
+
 ### Added
 - **Themes:** `theme=` / `--theme` gives the whole map its colours: `osm` (today's, the default),
   `google` (clean: light land, white streets, yellow main roads, light blue water) and `grey` (a

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mapstyle"
-version = "0.1.0"
+version = "0.2.0"
 description = "A whole OpenStreetMap map in one offline HTML page: roads for every travel mode over a full base map, from a duckOSM database"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,4 +47,4 @@ mapstyle = "mapstyle.map:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js", "*.html"]
+mapstyle = ["styles/*.yaml", "styles/themes/*.yaml", "icons/*.svg", "*.js", "*.html"]

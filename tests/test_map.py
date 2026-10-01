@@ -354,3 +354,17 @@ def test_the_planner_has_its_roads_box_and_never_routes_a_restricted_road(monaco
     rm, g = _rm(m.html), load_roads(monaco)               # the page's feature index k = the row
     for mode, graph in rm["graphs"].items():               # restricted in a mode: not in its graph
         assert not set(_access(g, mode).dropna().index) & set(graph["k"]), mode
+
+
+def test_every_data_file_is_in_the_package():
+    """pyproject's package-data covers every non-Python file of src/mapstyle (planner.html and the
+    themes were each missed once: the installed package lacked them)."""
+    import fnmatch
+    import re
+    root = Path(__file__).resolve().parents[1]
+    globs = re.findall(r'"([^"]+)"', re.search(r"^mapstyle = \[(.*)\]$", (root / "pyproject.toml").read_text(), re.M).group(1))
+    pkg = root / "src" / "mapstyle"
+    data = [p.relative_to(pkg).as_posix() for p in pkg.rglob("*")
+            if p.is_file() and p.suffix not in (".py", ".pyc") and "__pycache__" not in p.parts]
+    missing = [f for f in data if not any(fnmatch.fnmatch(f, g) and f.count("/") == g.count("/") for g in globs)]
+    assert data and not missing, missing
