@@ -1,0 +1,94 @@
+site_name: mapstyle
+site_description: A whole OpenStreetMap map in one offline HTML page - roads for every travel mode over a full base map, from a duckOSM database
+site_url: https://khoshkhah.github.io/mapstyle/
+repo_url: https://github.com/Khoshkhah/mapstyle
+repo_name: Khoshkhah/mapstyle
+edit_uri: edit/main/docs/
+copyright: mapstyle · MIT licence · map data © OpenStreetMap contributors
+
+theme:
+  name: material
+  logo: img/logo.svg
+  favicon: img/logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tracking
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Khoshkhah/mapstyle
+
+# Design notes and the work plan stay in the repository, not on the site; so do the build scripts.
+exclude_docs: |
+  design/
+  PLAN.md
+  *.py
+
+nav:
+  - Home: index.md
+  - Get started: get-started.md
+  - Guides:
+      - guides/index.md
+      - Travel modes & path styles: guides/modes.md
+      - The base map: guides/base-map.md
+      - How roads are drawn: guides/roads.md
+      - Route planner: guides/planner.md
+      - Dashboard: guides/dashboard.md
+  - Gallery: gallery.md
+  - Reference:
+      - Python API: reference/python.md
+      - Command line: reference/cli.md
+      - JavaScript API: reference/javascript.md
+      - Styles: reference/styles.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

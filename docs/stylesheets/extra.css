@@ -1,0 +1,41 @@
+/* mapstyle brand: roadstyle's dark slate, with a sea-teal accent (roadstyle's is orange) */
+:root {
+  --md-primary-fg-color: #0f172a;
+  --md-primary-fg-color--light: #1e293b;
+  --md-primary-fg-color--dark: #070a12;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #0f9488;
+  --md-accent-fg-color--transparent: rgba(15, 148, 136, .1);
+  --ms-teal: #0f9488;
+  --ms-orange: #ff6b35;
+}
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0f1422;
+  --md-typeset-a-color: #5fd3c7;
+}
+.md-typeset a { color: var(--md-typeset-a-color, #0b7a70); }
+.md-typeset a:hover { color: var(--ms-teal); }
+.md-tabs { background: #1e293b; }
+
+/* the one-line lead under a page title */
+.md-typeset .lead { font-size: 1.12em; color: var(--md-default-fg-color--light); margin-top: -.4em; }
+
+/* home hero */
+.md-typeset .ms-hero img { border-radius: 12px; box-shadow: 0 4px 22px rgba(0, 0, 0, .22); }
+
+/* live demo maps */
+.md-typeset iframe.ms-demo {
+  width: 100%; height: 520px; border: 0; border-radius: 10px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .18); margin: .4em 0 1em;
+}
+
+/* cards: a little brand colour on the icon, a lift on hover */
+.md-typeset .grid.cards > ul > li { transition: box-shadow .15s, transform .15s; }
+.md-typeset .grid.cards > ul > li:hover { transform: translateY(-2px); }
+.md-typeset .grid.cards .lg { color: var(--ms-teal); }
+
+/* picture grids (gallery, modes, path styles) */
+.md-typeset .ms-shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.md-typeset .ms-shots figure { margin: 0; }
+.md-typeset .ms-shots img { width: 100%; border-radius: 8px; box-shadow: 0 1px 8px rgba(0, 0, 0, .16); }
+.md-typeset .ms-shots figcaption { font-size: .78em; margin-top: .3em; max-width: none; }

@@ -12,7 +12,8 @@ from roadstyle import _settings
 from mapstyle.map import LOOKS, MODES, load_layers, load_roads, main, mode_settings, render_map
 from mapstyle.style import load_style
 
-DUCKOSM = Path(__file__).resolve().parents[2] / "duckOSM"
+DUCKOSM = Path(os.environ.get("DUCKOSM_DIR") or Path(__file__).resolve().parents[2] / "duckOSM")
+DUCKOSM_EXE = Path(os.environ.get("DUCKOSM_EXE") or DUCKOSM / ".venv/bin/duckosm")   # CI: its own checkout
 # classes of walking / cycling networks elsewhere (Tartu, Södermalm) that Monaco lacks
 PATH_CLASSES = {"footway", "path", "steps", "corridor", "platform", "pedestrian", "cycleway",
                 "bridleway", "track", "living_street", "construction"}
@@ -23,9 +24,9 @@ def monaco(tmp_path_factory):
     """``$MAPSTYLE_TEST_DB``, else a Monaco db with features.* built by duckOSM (~10 s)."""
     if os.environ.get("MAPSTYLE_TEST_DB"):
         return os.environ["MAPSTYLE_TEST_DB"]
-    exe = DUCKOSM / ".venv/bin/duckosm"
+    exe = DUCKOSM_EXE
     if not exe.exists():
-        pytest.skip(f"needs duckOSM with its .venv at {DUCKOSM}")
+        pytest.skip(f"needs duckOSM's duckosm at {exe} (DUCKOSM_DIR / DUCKOSM_EXE)")
     out = tmp_path_factory.mktemp("monaco")
     sample = DUCKOSM / "data/sample"
     (out / "monaco.yaml").write_text(
@@ -241,9 +242,9 @@ def test_planner_embeds_the_turn_graph(tmp_path):
 def monaco_mm(monaco, tmp_path_factory):
     """Monaco with duckOSM's walk + drive tables (`duckosm multimodal`, on a copy)."""
     import shutil
-    exe = DUCKOSM / ".venv/bin/duckosm"
+    exe = DUCKOSM_EXE
     if not exe.exists():
-        pytest.skip(f"needs duckOSM with its .venv at {DUCKOSM}")
+        pytest.skip(f"needs duckOSM's duckosm at {exe} (DUCKOSM_DIR / DUCKOSM_EXE)")
     db = tmp_path_factory.mktemp("mm") / "monaco_mm.duckdb"
     shutil.copy(monaco, db)
     subprocess.run([exe, "multimodal", db], cwd=DUCKOSM, check=True, capture_output=True)

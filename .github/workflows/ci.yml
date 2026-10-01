@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      # the tests build a Monaco database with duckOSM, from the extract in its repository
+      - uses: actions/checkout@v4
+        with:
+          repository: Khoshkhah/duckOSM
+          path: duckOSM
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      # osmium: duckOSM's pre-clip of the extract to its boundary; GDAL: its boundary tools
+      - run: sudo apt-get update -q && sudo apt-get install -y -q gdal-bin osmium-tool
+
+      - run: pip install ./duckOSM -e ".[dev]"
+
+      - name: Tests
+        env:
+          DUCKOSM_DIR: ${{ github.workspace }}/duckOSM
+        run: DUCKOSM_EXE="$(which duckosm)" pytest tests/ -q -rs

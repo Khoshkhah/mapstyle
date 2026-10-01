@@ -1,19 +1,28 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mapstyle"
-version = "0.0.1"
-description = "A duckOSM database as a full interactive map (roads per travel mode + base-map layers), drawn by roadstyle"
+version = "0.1.0"
+description = "A whole OpenStreetMap map in one offline HTML page: roads for every travel mode over a full base map, from a duckOSM database"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "Kaveh" }]
-keywords = ["osm", "basemap", "roadstyle", "duckosm", "maplibre", "cartography"]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Kaveh Khoshkhah" }]
+keywords = ["openstreetmap", "osm", "map", "basemap", "maplibre", "cartography", "duckdb", "duckosm", "roadstyle"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
 
 dependencies = [
-    "roadstyle>=0.9.3",   # the page (band_col); installed editable from ../roadstyle
+    "roadstyle>=0.10.0",  # the page (band_col, directed_col, tunnel stretches)
     "duckdb",             # reads the duckOSM db
     "geopandas",
     "pyyaml",             # styles/*.yaml
@@ -23,6 +32,13 @@ dependencies = [
 [project.optional-dependencies]
 tiles = ["roadstyle[tiles]"]   # --tiles / render_map(tiles=True)
 dev = ["pytest"]
+docs = ["mkdocs<2", "mkdocs-material<10"]
+
+[project.urls]
+Homepage = "https://khoshkhah.github.io/mapstyle/"
+Documentation = "https://khoshkhah.github.io/mapstyle/"
+Repository = "https://github.com/Khoshkhah/mapstyle"
+Issues = "https://github.com/Khoshkhah/mapstyle/issues"
 
 [project.scripts]
 mapstyle = "mapstyle.map:main"
@@ -31,4 +47,4 @@ mapstyle = "mapstyle.map:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js"]
+mapstyle = ["styles/*.yaml", "icons/*.svg", "*.js", "*.html"]

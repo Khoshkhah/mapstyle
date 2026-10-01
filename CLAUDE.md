@@ -38,7 +38,7 @@ missing-features case).
   under their street from duckOSM's `walk_type` (roadstyle's `band_col`, a roadstyle feature added
   for this at Kaveh's request); paths and one-way streets drawn as one line, not two lanes,
   from `is_directed` (roadstyle's `directed_col`) (design:
-  `docs/design/mode_styles.md`); base map `blank` (Kaveh's choice; no sea yet); feature layers
+  `docs/design/mode_styles.md`); base map `blank` (Kaveh's choice; the sea is duckOSM's `features.ocean`); feature layers
   from `load_layers(db)` (`styles/layers.yaml`: which `features.<table>` layers, draw order,
   `where`) as one `rs.Overlay` each, styled from `osm_carto.yaml` `features`, plus `layers.js`
   (injected before `</body>`) for what overlays can't draw: colour by `kind`, zoom ranges,

@@ -324,7 +324,8 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
     (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
-    The base map is ``blank`` (duckOSM has no sea yet: PLAN step 3). ``kwargs`` go to roadstyle
+    The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
+    ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 

@@ -1,0 +1,75 @@
+name: Deploy docs
+
+# Build the MkDocs (Material) site, with its live maps, and publish it to GitHub Pages via
+# the GitHub Actions deployment (no gh-pages branch).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "src/mapstyle/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Khoshkhah/duckOSM
+          path: duckOSM
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: sudo apt-get update -q && sudo apt-get install -y -q gdal-bin osmium-tool
+
+      - run: pip install ./duckOSM -e ".[docs]"
+
+      # The live maps (docs/maps/*.html) are built here, not committed: Monaco from duckOSM's
+      # sample extract (the sea comes from Overture Maps), with walk + drive for the planner.
+      - name: Build Monaco and the live maps
+        run: |
+          (cd duckOSM && duckosm build --config config/sample_monaco.yaml && duckosm multimodal monaco.duckdb)
+          python docs/build_maps.py duckOSM/monaco.duckdb
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Build site (strict - fail on any broken link or nav reference)
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

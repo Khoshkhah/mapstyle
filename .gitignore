@@ -7,3 +7,9 @@ __pycache__/
 
 # Generated maps (mapstyle ... -o render/...)
 /render/
+
+# The docs site: built by mkdocs; its live maps by docs/build_maps.py
+/site/
+/docs/maps/
+/build/
+/dist/
