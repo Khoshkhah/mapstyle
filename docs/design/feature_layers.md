@@ -76,9 +76,10 @@ ms.render_map(db, mode="walking", layers=True)    # True = every layers.yaml lay
 - `features.*`, a table or a column missing → that layer is skipped with a logged hint, never an
   error (Södermalm has no `features.*`: roads only, as today).
 - The default base map is `blank` on every page (Kaveh, 2026-09-30): the features *are* the base
-  map. Known gap: duckOSM has no sea (`water_polygons` holds lakes and basins; the sea is only
-  implied by coastline lines), so on `blank` a coast's sea is land-coloured until duckOSM builds sea
-  polygons (PLAN step 3). The raster maps (`voyager_nolabels` first) stay in the switcher.
+  map. The sea is duckOSM's `features.ocean` (Overture Maps' ocean polygons, `options.sea`;
+  duckOSM `docs/design/sea.md`), drawn first, in the water colour; a db built before it has no
+  `ocean` table, so its coast's sea stays land-coloured. The raster maps (`voyager_nolabels`
+  first) stay in the switcher.
 - `load_layers(db, names=None)` → `{name: FeatureCollection}` for dashboards that want the data.
 
 ### 4. Size

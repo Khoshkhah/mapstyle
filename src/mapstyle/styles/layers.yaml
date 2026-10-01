@@ -10,6 +10,7 @@
 #   centroid  true = use the polygon centroid (a point from an area, e.g. the parking "P")
 #   bearing   true = carry the road bearing (oriented crossings)
 layers:
+  - {name: ocean,           table: ocean,            kind: polygon, show: true}   # the sea (duckOSM sea: overture), under everything
   - {name: landcover,       table: land,             kind: polygon, show: true}
   # institutional / sport GROUNDS (school, university, hospital, sports_centre, prison, kindergarten,
   # construction, bridge deck) — coloured area fills in OSM-Carto. Merged INTO landcover so the one

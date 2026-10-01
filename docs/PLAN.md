@@ -83,13 +83,10 @@ and its own JS on the page's `window.map` (MapLibre).
       drive (today a separate `duckosm multimodal` run; the page says so when they're missing).
 - [ ] Delete `route_map.py`, `scripts/route_map_stress.py` and `docs/design/route_map.md` once
       `duckosm route-map` calls mapstyle (`render_map(planner=True)`).
-- [ ] **Extract the sea:** duckOSM builds no sea (OSM has only `natural=coastline` lines, land on
-      their left), so on mapstyle's `blank` base map a coast's sea is land-coloured. Clip the precomputed
-      sea polygons (osmdata.openstreetmap.de "water polygons", built from the world coastline; what
-      openstreetmap-carto uses) to the area into `features.water_polygons` (`kind = 'sea'`). Building
-      them from the extract's own coastline lines is the offline alternative, but fragile (open ends
-      at the clip edge, one gap floods the land; a prototype got Monaco right and Stockholm county
-      wrong). `design/feature_layers.md` §3.
+- [x] **Extract the sea:** done 2026-09-30: duckOSM's `features.ocean` from Overture Maps' ocean
+      polygons (built from OSM's coastline; DuckDB reads only the area's part from S3, ~2 s, no
+      906 MB download of osmdata's water polygons), `options.sea: overture`; mapstyle draws it
+      first. Design: duckOSM `docs/design/sea.md`.
 - [ ] `viz` extra → `mapstyle`; `duckosm viz` and `duckosm route-map` call mapstyle; docs (Draw a
       map, Route).
 

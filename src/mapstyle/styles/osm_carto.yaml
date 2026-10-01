@@ -33,6 +33,7 @@ roads:
 # Landcover fills / outlines / textures key by the feature's `kind`; `default` catches the rest.
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
+    ocean:       {fill: "#aad3df", outline: null,      opacity: 1.0}   # the sea, as water
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
     buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9,  min_zoom: 15}
     parking:     {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7,  min_zoom: 15}
