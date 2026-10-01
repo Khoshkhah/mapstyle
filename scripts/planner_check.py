@@ -22,7 +22,8 @@ JS = """async ([zoom, n, offscreen]) => {
     await new Promise((r) => map.once('idle', r));
     rmRoute(a, b);
     const t = document.getElementById('rm-result').innerText.split('\\n')[0];
-    const key = (window.rmLast && window.rmLast.res && t.includes('·')) ? 'ok' : t.slice(0, 50);
+    const key = (window.rmLast && window.rmLast.res && t.includes('·')) ? 'ok'
+      : window.rmLast && window.rmLast.error ? 'no road within the radius' : t.slice(0, 50);
     out[key] = (out[key] || 0) + 1;
   }
   return out;
@@ -36,7 +37,7 @@ async def main(path, n):
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         await pg.goto("file://" + os.path.abspath(path))
-        await pg.wait_for_function("window.rmLast && window.rmLast.res", timeout=600000)
+        await pg.wait_for_function("window.rmLast && (window.rmLast.res || window.rmLast.error)", timeout=600000)
         await pg.wait_for_timeout(800)
         choices = await pg.evaluate("[...document.querySelectorAll('#rm-mode option')].map(o => o.text)")
         print(os.path.basename(path), "menu:", choices, "| note:", await pg.evaluate("document.getElementById('rm-note').innerText"))

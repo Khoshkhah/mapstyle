@@ -1,5 +1,11 @@
 # The route planner moves into mapstyle
 
+**Update 2026-10-01:** the planner routes between the two **points** now, as duckOSM's
+`route_points()` / `route_multimodal_points()` (`../duckOSM/docs/design/point_routing.md`): an
+off-road walk within a radius (a panel setting, shown as a circle), the first and last edges by the
+part travelled, the exact line drawn, total time and distance with their split. Checked against
+duckOSM on 160 random point pairs (40 per mode).
+
 **Status:** approved 2026-09-30 and implemented (`render_map(planner=True)`, `mapstyle --planner`,
 `src/mapstyle/planner.html` ported from duckOSM commit `dbbbe3e`). **roadstyle and duckOSM are not
 changed.**

@@ -90,6 +90,9 @@ To put your own script on the page: `m = ms.render_map(...)`, then write
 - `planner=True` can't be combined with `dashboard=True` (both use the side panel) or `tiles=True`
   (it snaps to roads in the page): `ValueError`.
 - No **Walk + drive** in the planner without `duckosm multimodal DB` first (the page says so).
+- The planner routes between the two **points**: a marker joins the roads within "Off-road up to …
+  m" (default 50) by a walk; none in reach -> "no road within R m". Scripted:
+  `rmRoute([lon, lat], [lon, lat])`, then `window.rmLast` = `{modes, res}` or `{modes, error}`.
 - A db built with `--no-features` (or by an old duckOSM) draws roads only (logged hint); one built
   offline has no sea (the coast's water is land-coloured).
 - `palette` and `settings` aren't `render_map` keywords: the mode sets them. Change the look in
