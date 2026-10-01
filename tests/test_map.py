@@ -73,17 +73,17 @@ def test_komoot_walking_draws_paths_solid_with_a_halo():
 
 
 def test_one_way_streets_are_not_drawn_as_two_lanes(monaco, monkeypatch):
-    """A one-way street's walking-only reverse edge doesn't make it a two-way road: twoway only
-    where both directions are open to cars or bikes (Kaveh: Rue du Castelleretto)."""
+    """A one-way street's walking-only reverse edge doesn't make it a two-way road: only edges open
+    to cars or bikes are directed (Kaveh: Rue du Castelleretto)."""
     seen = {}
     from types import SimpleNamespace
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
     render_map(monaco, layers=False)
     g = seen["g"].set_index("edge_id")
-    assert seen["twoway_col"] == "twoway"
-    assert not g.loc["441704187184649227", "twoway"] and not g.loc["5990211243552773545", "twoway"]
-    assert g.loc[g.highway == "footway", "twoway"].sum() == 0                      # paths: one line
-    assert g.loc[g.driving & (g.highway == "residential"), "twoway"].sum() > 100    # real two-way streets
+    assert seen["directed_col"] == "is_directed"
+    assert g.loc["441704187184649227", "is_directed"] and not g.loc["5990211243552773545", "is_directed"]
+    assert g.loc[g.highway == "footway", "is_directed"].sum() == 0                 # paths: one line
+    assert g.loc[g.driving, "is_directed"].all()                                   # every driving edge
 
 
 def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
