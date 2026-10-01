@@ -25,8 +25,11 @@ _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 def load_roads(db):
     """One row per ``edge_id`` over the db's mode networks, with ``driving`` / ``walking`` /
-    ``cycling`` flags and duckOSM's ``walk_type`` (sidewalk, crossing, footpath, …; the walking
-    network's, when the build has it). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
+    ``cycling`` flags (the mode can use it) and duckOSM's ``walk_type`` (sidewalk, crossing,
+    footpath, …; the walking network's, when the build has it). The roads a mode may not use
+    (``<mode>.private_edges``) are rows too, with ``access_driving`` / ``access_walking`` /
+    ``access_cycling``: ``private`` or ``bus`` where that mode keeps it there, else null
+    (docs/design/private_and_bus.md). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
     2**53. Rows are in ``edge_id`` order, so a page's feature ids are the same on every render."""
     import duckdb
     import geopandas as gpd
@@ -41,18 +44,25 @@ def load_roads(db):
             raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
         wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
                                         "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
+        cols = "edge_id, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
+        priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
+                                          "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
         union = " UNION ALL ".join(
-            f"SELECT edge_id, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry, "
-            f"{'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode FROM {m}.edges" for m in modes)
+            [f"SELECT {cols}, {'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode, "
+             f"NULL AS pmode, NULL AS access FROM {m}.edges" for m in modes]
+            + [f"SELECT {cols}, NULL AS walk_type, NULL AS mode, '{m}' AS pmode, access "
+               f"FROM {m}.private_edges" for m in sorted(priv)])
+        # several rows per edge (modes, private_edges): a usable mode's first, so the same every time
         df = con.execute(f"""
             SELECT CAST(edge_id AS VARCHAR) AS edge_id,
-                   CAST(any_value(osm_id) AS VARCHAR) AS osm_id,
-                   any_value(highway) AS highway, COALESCE(any_value(name), '') AS name,
-                   any_value(bridge) AS bridge, any_value(tunnel) AS tunnel,
-                   any_value(layer) AS layer, bool_or(oneway) AS oneway,
+                   CAST(first(osm_id ORDER BY mode IS NULL, mode, pmode) AS VARCHAR) AS osm_id,
+                   first(highway ORDER BY mode IS NULL, mode, pmode) AS highway, COALESCE(first(name ORDER BY mode IS NULL, mode, pmode), '') AS name,
+                   first(bridge ORDER BY mode IS NULL, mode, pmode) AS bridge, first(tunnel ORDER BY mode IS NULL, mode, pmode) AS tunnel,
+                   first(layer ORDER BY mode IS NULL, mode, pmode) AS layer, bool_or(oneway) AS oneway,
                    any_value(walk_type) AS walk_type,
-                   {", ".join(f"bool_or(mode = '{m}') AS {m}" for m in MODES)},
-                   ST_AsWKB(any_value(geometry)) AS wkb
+                   {", ".join(f"COALESCE(bool_or(mode = '{m}'), false) AS {m}" for m in MODES)},
+                   {", ".join(f"max(CASE WHEN pmode = '{m}' THEN access END) AS access_{m}" for m in MODES)},
+                   ST_AsWKB(first(geometry ORDER BY mode IS NULL, mode, pmode)) AS wkb
             FROM ({union}) GROUP BY edge_id ORDER BY CAST(edge_id AS BIGINT)""").df()   # stable rows: the page's ids
     finally:
         con.close()
@@ -151,6 +161,19 @@ def load_layers(db, names=None):
 
 def _kind(name):
     return next(s["kind"] for s in load_style("layers")["layers"] if s["name"] == name)
+
+
+def _access(roads, mode):
+    """The page's ``access`` per road (docs/design/private_and_bus.md): in one mode, its
+    restriction there (``private`` / ``bus``) when that mode can't use it; on the ``all`` map,
+    ``bus`` for a bus road or lane for cars (though bikes may use it), ``private`` when no mode
+    can use it; else null."""
+    if mode in MODES:
+        return roads[f"access_{mode}"].where(~roads[mode])
+    acc = roads[[f"access_{m}" for m in MODES]]
+    nobody = ~roads[list(MODES)].any(axis=1) & acc.notna().any(axis=1)
+    return roads["access_driving"].where(roads["access_driving"] == "bus",
+                                         acc.bfill(axis=1).iloc[:, 0].where(nobody))
 
 
 def _is_directed(roads):
@@ -264,13 +287,15 @@ def planner_data(db, roads):
             raise ValueError(f"{db}: no mode with edges + edge_graph to route on")
         k_of = {int(e): k for k, e in enumerate(roads["edge_id"])}
         ends = {}                                   # edge_id -> (source, target, length_m, junction)
-        for m in MODES:
-            if (m, "edges") in have:
+        for tb in ("edges", "private_edges"):          # private_edges: drawn, never routed
+            for m in MODES:
+                if (m, tb) not in have:
+                    continue
                 jn = "junction" if con.execute(
                     "SELECT count(*) FROM information_schema.columns WHERE table_schema = ? "
-                    "AND table_name = 'edges' AND column_name = 'junction'", [m]).fetchone()[0] else "NULL"
+                    "AND table_name = ? AND column_name = 'junction'", [m, tb]).fetchone()[0] else "NULL"
                 for e, s, t, ln, j in con.execute(
-                        f"SELECT edge_id, source, target, length_m, {jn} FROM {m}.edges").fetchall():
+                        f"SELECT edge_id, source, target, length_m, {jn} FROM {m}.{tb}").fetchall():
                     ends.setdefault(e, (s, t, ln, j))
         node_ids = sorted({x for s, t, *_ in ends.values() for x in (s, t)})
         n_of = {n: i for i, n in enumerate(node_ids)}
@@ -348,7 +373,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
     overlays, config = feature_overlays(fcs, interaction, style)
-    kw = {"name": f"{Path(db).stem} ({mode}, {paths}" + ("" if theme in (None, "osm") else f", {theme}") + ")", "tooltip": ["edge_id", "osm_id", "highway", "name"],
+    roads["access"] = _access(roads, mode)
+    roads = roads.drop(columns=[f"access_{m}" for m in MODES])
+    kw = {"name": f"{Path(db).stem} ({mode}, {paths}" + ("" if theme in (None, "osm") else f", {theme}") + ")",
+          "tooltip": ["edge_id", "osm_id", "highway", "name", "access"],
           "copy_field": "edge_id", "overlays": overlays}
     if load_style("modes")[mode].get("lanes") is False:        # one centred line per road
         kw.update(offset_frac=0, width_frac=1)
@@ -362,7 +390,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     if planner:
         roads["k"] = range(len(roads))                          # the feature index the graphs point to
         html += (_HERE / "planner.html").read_text().replace("__RM__", _json(planner_data(db, roads)))
-        kw.update(name=f"{Path(db).stem}: route planner", filter_control=False)
+        kw.update(name=f"{Path(db).stem}: route planner")
     render = rs.render_edges
     if dashboard:
         n = roads[list(MODES)].sum(axis=1)

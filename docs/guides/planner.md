@@ -38,6 +38,9 @@ restrictions count), with the same answers as duckOSM's `route_points()` and
 **Walk + drive** needs duckOSM's multimodal tables: run `duckosm multimodal monaco.duckdb` once. Without
 them the planner offers the three other modes and says why.
 
+The page has the **ROADS** box (road classes, bridges, tunnels, private roads, bus lanes) and the
+**LAYERS** box: hiding a class hides it on the map, not from the routing.
+
 The planner page is the full mapstyle map, with the walking network in front by default so a walking
 leg shows; `mode=` picks another. It can't be combined with `dashboard=True` (both use the side
 panel) or `tiles=True` (the planner snaps to the roads in the page).

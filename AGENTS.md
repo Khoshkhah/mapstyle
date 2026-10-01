@@ -52,7 +52,9 @@ missing-features case).
   `scripts/planner_check.py`). Re-extract it when duckOSM's planner changes. `layers.js` is on
   every page, folds the Roads / Layers boxes (Layers under Roads; unseen until placed), and also defines mapstyle's `rs*` functions (`rsSetModes`, `rsSetKinds`,
   `rsSetInteraction`; README's JavaScript table); `dashboard=True` renders roadstyle's
-  `render_report` + `dashboard.js` (design: `docs/design/dashboard.md`).
+  `render_report` + `dashboard.js` (design: `docs/design/dashboard.md`). Private roads and bus lanes
+  (`private_edges`): `load_roads`' `access_<mode>`, the page's `access` by mode (`_access`), drawn
+  and toggled by `layers.js` (`rsSetAccess`; design: `docs/design/private_and_bus.md`).
 - `patterns.py` (landcover texture tiles), `icons/*.svg` (point icons), `style.py` (`load_style`).
 
 ## Docs site, CI, agent files

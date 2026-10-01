@@ -69,7 +69,8 @@ Data only: `ms.load_roads(db)` (GeoDataFrame, one row per `edge_id`, `driving` /
 Every page is a roadstyle page: `rsQuery(p => bool)` returns feature ids, then `rsFilter(ids)`,
 `rsColor(ids, "#hex")`, `rsSetClasses([...])`, `rsSetOverlay("buildings", false)`, event
 `rs:select`; `window.map` is the MapLibre map. mapstyle adds `rsSetModes(["walking"])`,
-`rsSetKinds("landcover", ["park"])`, `rsSetInteraction("crossings", {tooltip: true})` and their
+`rsSetKinds("landcover", ["park"])`, `rsSetInteraction("crossings", {tooltip: true})`,
+`rsSetAccess("private" | "bus", on)` (roads you may not use, drawn grey / blue) and their
 `rsGet*`, and `RS_KINDS`. Wait for `ms:ready` before calling them:
 
 ```js

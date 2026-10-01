@@ -42,7 +42,8 @@ def monaco(tmp_path_factory):
 def test_load_roads(monaco):
     g = load_roads(monaco)
     assert g["edge_id"].is_unique and isinstance(g["edge_id"].iloc[0], str)
-    assert g[list(MODES)].any(axis=1).all()
+    acc = g[[f"access_{m}" for m in MODES]]
+    assert (g[list(MODES)].any(axis=1) | acc.notna().any(axis=1)).all()   # usable, or private / bus
     assert g["walking"].sum() > g["driving"].sum()          # footways and steps
     # the same order on every call (the page's feature ids are row numbers): edge_id order
     assert list(load_roads(monaco)["edge_id"]) == list(g["edge_id"])
@@ -322,3 +323,34 @@ def test_cli_theme(monaco, tmp_path, capsys):
     out = tmp_path / "grey.html"
     main([str(monaco), "--theme", "grey", "--no-layers", "-o", str(out)])
     assert out.exists() and "blank_grey" in out.read_text()
+
+
+# ---- private roads and bus lanes (docs/design/private_and_bus.md) -------------------------------
+
+def test_private_and_bus_roads_are_rows_with_their_restriction_per_mode(monaco):
+    g = load_roads(monaco).set_index("edge_id")
+    lane = g.loc["1964280132851416298"]                  # Boulevard des Moulins' contraflow bus lane
+    assert lane["access_driving"] == "bus" and not lane["driving"] and lane["cycling"]
+    assert (g["access_driving"] == "bus").sum() == 18 and (g["access_driving"] == "private").sum() == 196
+
+
+def test_the_pages_access_follows_its_mode(monaco):
+    from mapstyle.map import _access
+    g = load_roads(monaco)
+    counts = {m: _access(g, m).value_counts().to_dict() for m in ("all", "driving", "walking")}
+    assert counts["driving"] == {"private": 196, "bus": 18}
+    assert counts["all"] == {"private": 152, "bus": 18}           # private: no mode can use it
+    assert counts["walking"] == {"private": 154}
+    html = render_map(monaco, layers=False).html
+    assert "Private roads" in html and "rsSetAccess" in html
+
+
+def test_the_planner_has_its_roads_box_and_never_routes_a_restricted_road(monaco):
+    from mapstyle.map import _access
+    m = render_map(monaco, planner=True, layers=False)
+    import json
+    flt = json.JSONDecoder().raw_decode(m.html.split("const FILTER = ", 1)[1])[0]
+    assert flt["on"]                                               # the Roads box (roadstyle's)
+    rm, g = _rm(m.html), load_roads(monaco)               # the page's feature index k = the row
+    for mode, graph in rm["graphs"].items():               # restricted in a mode: not in its graph
+        assert not set(_access(g, mode).dropna().index) & set(graph["k"]), mode

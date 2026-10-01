@@ -32,6 +32,9 @@
     c ? on.add(m) : on.delete(m);
     rsSetModes(on.size === modes.length ? null : [...on]);
   }, n));
+  // the roads you may not use (private, bus): shown / hidden like a mode (layers.js rsSetAccess)
+  for (const [k, label] of [["private", "private roads"], ["bus", "bus lanes"]])
+    if ((window.RS_ACCESS || {})[k]) box.appendChild(check(label, true, (c) => rsSetAccess(k, c), RS_ACCESS[k]));
   host.insertBefore(box, ovs);
 
   // ---- popup off also keeps a layer out of the panel's read-out --------------------------------

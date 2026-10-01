@@ -3,8 +3,9 @@
 //    overlay can't draw: colour by `kind`, zoom ranges, dashes, textures, icons. Every layer added
 //    here is pushed into the overlay's `layers`, so rsSetOverlay / the Layers control hide it too.
 // 2. The rs* functions mapstyle adds, defined like roadstyle's own (and only where the page has
-//    none yet): rsSetModes / rsGetModes, rsSetKinds / rsGetKinds / RS_KINDS,
-//    rsSetInteraction / rsGetInteraction.
+//    none yet): rsSetModes / rsGetModes, rsSetAccess / rsGetAccess / RS_ACCESS, rsSetKinds /
+//    rsGetKinds / RS_KINDS, rsSetInteraction / rsGetInteraction; and the colour and Roads-box rows
+//    of the roads you may not use (private, bus).
 // 3. The Roads and Layers boxes: both folded at the start, Layers under Roads and foldable like it.
 // 3. (below) the Roads and Layers boxes: folded at the start, Layers under Roads; map.py keeps both
 //    unseen until they are placed, so neither jumps (a fallback shows them after 8 s regardless).
@@ -13,7 +14,8 @@ setTimeout(() => placeBoxes(), 8000);
 // poll, like roadstyle's own page code: `window.map` is the container <div> until the map is built,
 // and `load` / `idle` can fire before this runs or not at all (offline, failed tile requests)
 const MS = __MS__, map = window.map;
-if (!(map && typeof map.getSource === "function" && map.isStyleLoaded())) return setTimeout(start, 100);
+if (!(map && typeof map.getSource === "function" && map.isStyleLoaded() &&
+      window.rsQuery && rsQuery(() => true).length)) return setTimeout(start, 100);   // the roads loaded too
 placeBoxes();
 // keep roadstyle's hover / select `case` around a new base colour
 const swap = (e, v) => Array.isArray(e) && e[0] === "case" ? e.slice(0, -1).concat([v]) : v;
@@ -30,14 +32,40 @@ const fire = (type, detail) => document.dispatchEvent(new CustomEvent(type, {det
 const byLabel = {};
 const overlay = (l) => typeof l === "number" ? (window.RS_OVERLAYS || [])[l] : byLabel[l];
 
-// ---- rsSetModes: the roads any of these modes can use (the driving / walking / cycling flags) ----
+// ---- rsSetModes: the roads any of these modes can use (the driving / walking / cycling flags), and
+// rsSetAccess: show / hide the roads you may not use (`access`: private, bus); one rsFilter for both
 let modes = null;
+const hiddenAccess = new Set();
+const roadFilter = () => {
+  const ok = (p) => (modes == null || modes.some((m) => p[m] === true || p[m] === "true")) &&
+    !(p.access && hiddenAccess.has(p.access));
+  rsFilter(modes == null && !hiddenAccess.size ? null : rsQuery(ok));
+};
 define("rsSetModes", (list) => {
   modes = list == null ? null : Array.from(list);
-  rsFilter(modes == null ? null : rsQuery((p) => modes.some((m) => p[m] === true || p[m] === "true")));
+  roadFilter();
   fire("rs:filterchange", {modes: modes && modes.slice()});
 });
 define("rsGetModes", () => modes && modes.slice());
+define("rsSetAccess", (kind, on) => {
+  on ? hiddenAccess.delete(kind) : hiddenAccess.add(kind);
+  roadFilter();
+  const box = document.getElementById("ms-flt-" + kind); if (box) box.checked = !!on;
+  fire("rs:filterchange", {access: kind, visible: !!on});
+});
+define("rsGetAccess", () => Object.fromEntries(ACCESS.map(([k]) => [k, !hiddenAccess.has(k)])));
+
+// ---- roads you may not use (duckOSM's private_edges; docs/design/private_and_bus.md): their own
+// colour as the BASE of every road fill (so rsColor and the colour options still paint over them),
+// again after each recolouring, and a row each in the Roads box after Bridges / Tunnels
+const ACCESS = [["private", "#c8c8c8", "Private roads"], ["bus", "#9db8d9", "Bus lanes"]];
+const isAccess = (v) => ["==", ["get", "access"], v];
+const withAccess = (e) => Array.isArray(e) && e[0] === "case"
+  ? (JSON.stringify(e[1]) === JSON.stringify(isAccess(ACCESS[0][0])) ? e : e.slice(0, -1).concat([withAccess(e[e.length - 1])]))
+  : ["case", ...ACCESS.flatMap(([k, c]) => [isAccess(k), c]), e];
+const paintAccess = () => map.getStyle().layers.forEach((l) => {
+  if (l.type === "line" && /^roads-.*fill/.test(l.id)) map.setPaintProperty(l.id, "line-color", withAccess(map.getPaintProperty(l.id, "line-color")));
+});
 
 const run = async () => {
   await Promise.all(Object.entries(MS.images).map(loadImage));
@@ -126,6 +154,23 @@ const run = async () => {
   });
   define("rsGetKinds", (label) => { const ov = overlay(label), k = ov && kinds[ov.label]; return k ? k.slice() : null; });
   if (!("RS_KINDS" in window)) window.RS_KINDS = MS.kinds;
+  const restricted = ACCESS.filter(([k]) => rsQuery((p) => p.access === k).length);
+  if (restricted.length) {
+    paintAccess();
+    document.addEventListener("rs:colorchange", paintAccess);
+    const body = document.querySelector(".flt-ctrl .flt-body");
+    restricted.forEach(([k, c, label], i) => {
+      if (!body) return;
+      const lab = document.createElement("label"), cb = document.createElement("input"), sw = document.createElement("span");
+      if (i === 0) lab.style.cssText = "margin-top:4px;padding-top:4px;border-top:1px solid #ddd";
+      cb.type = "checkbox"; cb.checked = true; cb.id = "ms-flt-" + k;
+      cb.onchange = () => rsSetAccess(k, cb.checked);
+      sw.className = "flt-sw"; sw.style.background = c;
+      lab.append(cb, sw, document.createTextNode(" " + label));
+      body.appendChild(lab);
+    });
+  }
+  window.RS_ACCESS = Object.fromEntries(restricted.map(([k]) => [k, rsQuery((p) => p.access === k).length]));
   fire("ms:ready", {});
 };
 run();

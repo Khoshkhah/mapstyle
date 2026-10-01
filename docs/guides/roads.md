@@ -44,6 +44,17 @@ The OpenStreetMap `layer`, `bridge` and `tunnel` tags decide what passes over wh
 
 The **Bridges** and **Tunnels** rows in the **ROADS** box hide them.
 
+## Roads you may not use
+
+duckOSM keeps the roads a mode may not use apart (`private_edges`): private roads (driveways, gated
+streets) and, for cars, bus-only roads and bus lanes. They are on the map in their own colour,
+**grey** for private and **muted blue** for bus, each with a row in the **ROADS** box
+(**Private roads**, **Bus lanes**) to hide or show them. They are never part of a route.
+
+Which roads count depends on the map's mode: on a driving map, those cars may not use (as duckOSM's
+driving map); on the map of every mode, bus lanes (even where bikes may use them) and the private
+roads no mode can use. Your own colours (`rsColor`) paint over them.
+
 ## Where it comes from
 
 This drawing is [roadstyle](https://khoshkhah.github.io/roadstyle/)'s (0.10 and later), fed by

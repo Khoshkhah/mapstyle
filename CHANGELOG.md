@@ -13,7 +13,15 @@ All notable changes to **mapstyle** are documented here. The format is based on
   transform for every colour of the `osm` look, and the colours that differ. Your own colours
   (`rsColor`, colour options, the planner's route) are never themed.
 
+- **Private roads and bus lanes** (duckOSM's `private_edges`): drawn grey and muted blue, with
+  **Private roads** / **Bus lanes** rows in the Roads box and switches on the dashboard; which ones
+  depend on the map's mode. `load_roads` reads them (`access_driving` / `_walking` / `_cycling`);
+  `rsSetAccess(kind, on)`, `rsGetAccess()`, `RS_ACCESS`. Never routed or snapped to.
+- **The route planner has the Roads box** (classes, bridges, tunnels, private roads, bus lanes).
+
 ### Fixed
+- `layers.js` waits for the roads to be loaded, not only the map style (the restricted-road rows
+  could miss them).
 - An empty colour or texture list (a theme can empty one) no longer breaks the page.
 
 ## [0.1.0] — 2026-10-01
