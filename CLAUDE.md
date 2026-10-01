@@ -46,7 +46,7 @@ missing-features case).
   `planner=True` adds `planner.html` (the route planner, from duckOSM's `route_map.py`, with the
   graphs from `planner_data`; design: `docs/design/route_planner.md`; browser check:
   `scripts/planner_check.py`). Re-extract it when duckOSM's planner changes. `layers.js` is on
-  every page and also defines mapstyle's `rs*` functions (`rsSetModes`, `rsSetKinds`,
+  every page, moves / folds the Layers box under Roads, and also defines mapstyle's `rs*` functions (`rsSetModes`, `rsSetKinds`,
   `rsSetInteraction`; README's JavaScript table); `dashboard=True` renders roadstyle's
   `render_report` + `dashboard.js` (design: `docs/design/dashboard.md`).
 - `patterns.py` (landcover texture tiles), `icons/*.svg` (point icons), `style.py` (`load_style`).

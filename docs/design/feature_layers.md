@@ -80,6 +80,9 @@ ms.render_map(db, mode="walking", layers=True)    # True = every layers.yaml lay
   duckOSM `docs/design/sea.md`), drawn first, in the water colour; a db built before it has no
   `ocean` table, so its coast's sea stays land-coloured. The raster maps (`voyager_nolabels`
   first) stay in the switcher.
+- The *Layers* control (roadstyle's overlay box) sits under *Roads* in the top-left stack and folds
+  like it (Kaveh, 2026-09-30; `layers.js` moves and folds roadstyle's box, roadstyle unchanged). A
+  page without that stack (the planner) keeps it bottom-right, foldable.
 - `load_layers(db, names=None)` → `{name: FeatureCollection}` for dashboards that want the data.
 
 ### 4. Size

@@ -122,4 +122,23 @@ const run = async () => {
   fire("ms:ready", {});
 };
 run();
+
+// ---- 3. The Layers control: collapsible like Roads, and under it in the top-left stack -----------
+// (Kaveh, 2026-09-30). roadstyle draws it as a fixed box at the bottom right with no collapse; this
+// only folds and moves that box (a page with no Roads stack, the planner, keeps it in place).
+// Panel pages have none: their layers sit in the Roads card.
+const ovBox = document.querySelector(".ov-ctrl"), stack = document.getElementById("rs-tl");
+if (ovBox && !ovBox.dataset.ms) {
+  ovBox.dataset.ms = "1";
+  const hd = ovBox.querySelector(".ov-hd"), body = ovBox.querySelector(".ov-body");
+  if (stack) Object.assign(ovBox.style, {position: "static", maxHeight: "none", overflow: "auto", minHeight: "0"});
+  Object.assign(hd.style, {cursor: "pointer", userSelect: "none"});
+  hd.textContent = "Layers ▾";
+  hd.onclick = () => {
+    const open = body.style.display === "none";
+    body.style.display = open ? "" : "none";
+    hd.textContent = "Layers " + (open ? "▾" : "▸");
+  };
+  if (stack) stack.appendChild(ovBox);
+}
 })();
