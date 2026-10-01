@@ -27,7 +27,7 @@ def load_roads(db):
     """One row per ``edge_id`` over the db's mode networks, with ``driving`` / ``walking`` /
     ``cycling`` flags and duckOSM's ``walk_type`` (sidewalk, crossing, footpath, …; the walking
     network's, when the build has it). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
-    2**53."""
+    2**53. Rows are in ``edge_id`` order, so a page's feature ids are the same on every render."""
     import duckdb
     import geopandas as gpd
 
@@ -53,7 +53,7 @@ def load_roads(db):
                    any_value(walk_type) AS walk_type,
                    {", ".join(f"bool_or(mode = '{m}') AS {m}" for m in MODES)},
                    ST_AsWKB(any_value(geometry)) AS wkb
-            FROM ({union}) GROUP BY edge_id""").df()
+            FROM ({union}) GROUP BY edge_id ORDER BY CAST(edge_id AS BIGINT)""").df()   # stable rows: the page's ids
     finally:
         con.close()
     geom = gpd.GeoSeries.from_wkb(df.pop("wkb").map(bytes), crs="EPSG:4326")

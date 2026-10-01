@@ -44,6 +44,9 @@ def test_load_roads(monaco):
     assert g["edge_id"].is_unique and isinstance(g["edge_id"].iloc[0], str)
     assert g[list(MODES)].any(axis=1).all()
     assert g["walking"].sum() > g["driving"].sum()          # footways and steps
+    # the same order on every call (the page's feature ids are row numbers): edge_id order
+    assert list(load_roads(monaco)["edge_id"]) == list(g["edge_id"])
+    assert list(g["edge_id"].astype("int64")) == sorted(g["edge_id"].astype("int64"))
 
 
 @pytest.mark.parametrize("paths", list(load_style("paths")))
