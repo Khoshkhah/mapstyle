@@ -6,6 +6,13 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **Casing at junctions of `layer`-tagged paths.** A road with a `layer` tag and no bridge / tunnel
+  tag was drawn over the roads it joins, which broke their casing (a gap and a stub), so connected
+  roads looked unconnected. Its band now comes from the graph: over / under a road it really crosses
+  (no shared node), else ground. `load_roads` has a new `level_band` column
+  (`docs/design/layer_bands.md`).
+
 ## [0.2.0] — 2026-10-01
 
 ### Added

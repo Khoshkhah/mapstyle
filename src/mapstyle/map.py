@@ -44,7 +44,7 @@ def load_roads(db):
             raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
         wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
                                         "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
-        cols = "edge_id, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
+        cols = "edge_id, source, target, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
         priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
                                           "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
         union = " UNION ALL ".join(
@@ -53,8 +53,10 @@ def load_roads(db):
             + [f"SELECT {cols}, NULL AS walk_type, NULL AS mode, '{m}' AS pmode, access "
                f"FROM {m}.private_edges" for m in sorted(priv)])
         # several rows per edge (modes, private_edges): a usable mode's first, so the same every time
-        df = con.execute(f"""
-            SELECT CAST(edge_id AS VARCHAR) AS edge_id,
+        con.execute(f"""
+            CREATE TEMP TABLE r AS
+            SELECT CAST(edge_id AS VARCHAR) AS edge_id, edge_id AS eid,
+                   any_value(source) AS s, any_value(target) AS t,
                    CAST(first(osm_id ORDER BY mode IS NULL, mode, pmode) AS VARCHAR) AS osm_id,
                    first(highway ORDER BY mode IS NULL, mode, pmode) AS highway, COALESCE(first(name ORDER BY mode IS NULL, mode, pmode), '') AS name,
                    first(bridge ORDER BY mode IS NULL, mode, pmode) AS bridge, first(tunnel ORDER BY mode IS NULL, mode, pmode) AS tunnel,
@@ -62,8 +64,21 @@ def load_roads(db):
                    any_value(walk_type) AS walk_type,
                    {", ".join(f"COALESCE(bool_or(mode = '{m}'), false) AS {m}" for m in MODES)},
                    {", ".join(f"max(CASE WHEN pmode = '{m}' THEN access END) AS access_{m}" for m in MODES)},
-                   ST_AsWKB(first(geometry ORDER BY mode IS NULL, mode, pmode)) AS wkb
-            FROM ({union}) GROUP BY edge_id ORDER BY CAST(edge_id AS BIGINT)""").df()   # stable rows: the page's ids
+                   first(geometry ORDER BY mode IS NULL, mode, pmode) AS geom
+            FROM ({union}) GROUP BY edge_id""")
+        # level_band: the band of a road with a layer tag but no bridge / tunnel tag, from the graph
+        # (docs/design/layer_bands.md): over / under a road it really crosses (lines cross, no shared
+        # node), else ground. Other roads: null (roadstyle's own rule).
+        df = con.execute("""
+            WITH lv AS (SELECT *, COALESCE(TRY_CAST(layer AS INTEGER), 0) AS l FROM r),
+            lb AS (SELECT a.eid,
+                     CASE WHEN a.l > 0 AND bool_or(o.l >= 0 AND o.l < a.l) THEN 1
+                          WHEN a.l < 0 AND bool_or(o.l >= 0) THEN -1 ELSE 0 END AS level_band
+                   FROM lv a LEFT JOIN lv o ON o.eid <> a.eid AND ST_Intersects(a.geom, o.geom)
+                        AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t) AND ST_Crosses(a.geom, o.geom)
+                   WHERE a.l <> 0 AND a.bridge IS NULL AND a.tunnel IS NULL GROUP BY a.eid, a.l)
+            SELECT r.* EXCLUDE (eid, s, t, geom), lb.level_band, ST_AsWKB(r.geom) AS wkb
+            FROM r LEFT JOIN lb USING (eid) ORDER BY r.eid""").df()   # stable rows: the page's ids
     finally:
         con.close()
     geom = gpd.GeoSeries.from_wkb(df.pop("wkb").map(bytes), crs="EPSG:4326")
@@ -406,7 +421,8 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # Paths only: duckOSM also marks a car road "sidewalk" when you walk along its own sidewalk,
     # and that road must stay with the other streets (708 road edges in Monaco).
     path = roads["highway"].isin(PATH_CLASSES)
-    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
+    # Other roads with a layer tag only: the graph decides (level_band, layer_bands.md)
+    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path).fillna(roads["level_band"])
     kw["band_col"] = "band"
     # duckOSM stores every path, and a one-way street's walking-only reverse, as a reverse edge too:
     # roadstyle draws a pair as two lanes only when both edges are directed (directed_col,

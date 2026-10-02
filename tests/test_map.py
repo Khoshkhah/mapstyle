@@ -105,10 +105,22 @@ def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
     foot = g.highway == "footway"
     assert set(g.loc[foot & (g.walk_type == "crossing"), "band"]) == {1}
     assert set(g.loc[foot & (g.walk_type == "sidewalk"), "band"]) == {-1}
-    assert g.loc[~g.walk_type.isin(["crossing", "sidewalk"]), "band"].isna().all()
+    other = ~g.walk_type.isin(["crossing", "sidewalk"])
+    assert g.loc[other, "band"].astype("float").equals(g.loc[other, "level_band"].astype("float"))
     # a car road duckOSM marks "sidewalk" (you walk on its sidewalk) stays with the streets
     road = (g.walk_type == "sidewalk") & g.highway.isin(["residential", "secondary", "primary"])
     assert road.sum() > 100 and g.loc[road, "band"].isna().all()
+
+
+def test_level_band_comes_from_the_graph(monaco):
+    """A plain `layer` road (no bridge / tunnel tag) is ground unless it really crosses a road
+    (docs/design/layer_bands.md); every other road is left to roadstyle (null)."""
+    g = load_roads(monaco)
+    plain = (g["layer"].fillna("0") != "0") & g["bridge"].isna() & g["tunnel"].isna()
+    assert g.loc[~plain, "level_band"].isna().all() and g.loc[plain, "level_band"].notna().all()
+    assert set(g.loc[plain, "level_band"]) == {-1, 0, 1} and (g.loc[plain, "level_band"] == 0).sum() > 100
+    # a footway tagged layer=1 that only passes over tunnels and joins ground footways: ground
+    assert g.set_index("edge_id").loc["4070595946847136678", "level_band"] == 0
 
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):
