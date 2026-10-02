@@ -17,6 +17,7 @@ HALF_WIDTH_M = {"motorway": 6, "trunk": 5.5, "primary": 4.5, "secondary": 4, "te
                 "unclassified": 3, "living_street": 3, "service": 2, "pedestrian": 2.5, "footway": 1,
                 "path": 1, "cycleway": 1, "steps": 1, "corridor": 1}
 MIN_PIECE_M = 2.0       # a ground piece shorter than this joins the stretch beside it
+OVERLAP_M = 0.3         # neighbouring pieces overlap by this much each: two square ends that only touch leave a hairline
 
 def _truthy(col):
     return f"({col} IS NOT NULL AND lower(CAST({col} AS VARCHAR)) NOT IN ('', 'no', 'false', '0'))"
@@ -137,8 +138,10 @@ def with_pieces(roads, pieces, tunnels):
         sx, sy = _scales(ga)
         gm = _metric(ga, sx, sy)
         rows = []
-        for m0, m1, band in parts:
-            line = affinity.scale(substring(gm, m0, m1), xfact=1 / sx, yfact=1 / sy, origin=(0, 0))
+        last = len(parts) - 1
+        for n, (m0, m1, band) in enumerate(parts):
+            a, b = max(0.0, m0 - OVERLAP_M) if n else m0, min(gm.length, m1 + OVERLAP_M) if n < last else m1
+            line = affinity.scale(substring(gm, a, b), xfact=1 / sx, yfact=1 / sy, origin=(0, 0))
             rows.append((line, band))
         own = roads.at[i, "_band"]
         for n, (line, band) in enumerate(rows):

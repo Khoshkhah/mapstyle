@@ -131,11 +131,12 @@ def test_roads_with_a_level_are_cut_into_pieces(monaco, monkeypatch):
                 & ~g["walk_type"].isin(["crossing", "sidewalk"])]
     assert len(stretch) > 5 and stretch["_cap"].all()                       # a stretch ends square
     assert set(stretch["_band"]) == {-1, 1}
-    # the pieces of one edge add up to the edge (lengths in degrees: the same factor for all of one edge's pieces)
+    # the pieces of one edge cover the edge, overlapping a little at each cut (lengths in degrees)
     cut = g[g["edge_id"].isin(g.loc[g["_piece"], "edge_id"])].groupby("edge_id")
     whole = base.set_index("edge_id").geometry.length
     for eid, rows in list(cut)[:200]:
-        assert abs(rows.geometry.length.sum() - whole[eid]) < 1e-3 * whole[eid] + 1e-9
+        extra = (len(rows) - 1) * 2 * 0.3 / 80000                  # each cut overlaps 0.3 m each side (degrees, upper bound)
+        assert whole[eid] - 1e-9 <= rows.geometry.length.sum() <= whole[eid] + extra + 1e-9
     off = {}
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: off.update(g=g) or SimpleNamespace(_tpl="</body>"))
     render_map(monaco, layers=False, pieces=False)

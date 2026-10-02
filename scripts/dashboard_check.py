@@ -25,7 +25,7 @@ async def main(path):
         ev = pg.evaluate
         idle = "() => new Promise(r => { map.once('idle', r); map.triggerRepaint(); })"
         ov = await ev("() => Object.fromEntries(RS_OVERLAYS.map(o => [o.label, o.source]))")
-        await ev("() => map.jumpTo({center: [7.4215, 43.737], zoom: 16.5})"); await ev(idle)
+        await ev("() => { map.jumpTo({center: [7.4215, 43.737], zoom: 16.5}); }"); await ev(idle)
 
         # modes: walking only -> no drawn road that walking can't use
         await ev("() => rsSetModes(['walking'])"); await ev(idle)
@@ -43,7 +43,7 @@ async def main(path):
         # interaction: click a building with the popup on, then off
         # a point inside a building with no road within roadstyle's 4 px pick box (buildings sit
         # under the roads, so a road that close takes the click)
-        await ev("() => map.jumpTo({center: [7.4215, 43.737], zoom: 18})"); await ev(idle)
+        await ev("() => { map.jumpTo({center: [7.4215, 43.737], zoom: 18}); }"); await ev(idle)
         pt = await ev("""() => { const ids = map.getStyle().layers.map(l => l.id).filter(i => i.startsWith('%s'));
             const r = map.getCanvas().getBoundingClientRect();
             for (const f of map.queryRenderedFeatures({layers: ids})) {
