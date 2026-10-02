@@ -25,8 +25,8 @@ def _truthy(col):
 
 def crossing_pairs(con, union):
     """``(a, b, highway of b)`` edge-id pairs: ``a`` is a road to cut (a plain ``layer`` road or a tunnel) and ``b`` a
-    road it really crosses (the lines cross, no node in common) at a level that makes ``a`` go over or under it.
-    Also the roads to cut, with their level."""
+    road at a level that makes ``a`` go over or under it, with no node in common and within about 20 m (``_pieces_of``
+    keeps those whose drawn roads cross or overlap). Also the roads to cut, with their level."""
     con.execute(f"""
         CREATE TEMP TABLE e0 AS
         SELECT edge_id AS eid, any_value(source) AS s, any_value(target) AS t, any_value(layer) AS layer,
@@ -41,8 +41,8 @@ def crossing_pairs(con, union):
         FROM e0""")
     pairs = con.execute("""
         SELECT CAST(a.eid AS VARCHAR) AS a, CAST(o.eid AS VARCHAR) AS b, o.hw AS hw
-        FROM lv a JOIN lv o ON o.eid <> a.eid AND ST_Intersects(a.g, o.g)
-             AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t) AND ST_Crosses(a.g, o.g)
+        FROM lv a JOIN lv o ON o.eid <> a.eid AND ST_DWithin(a.g, o.g, 0.0002)
+             AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t)
         WHERE NOT a.is_bridge AND (a.is_tunnel OR a.l <> 0)
           AND CASE WHEN a.l > 0 THEN o.l >= 0 AND o.l < a.l ELSE o.l >= 0 END""").df()
     cut = con.execute("SELECT CAST(eid AS VARCHAR) AS eid, l, is_tunnel FROM lv "
@@ -60,24 +60,23 @@ def _metric(geom, sx, sy):
     return affinity.scale(geom, xfact=sx, yfact=sy, origin=(0, 0))
 
 
-def _pieces_of(ga, others, band, clearance=CLEARANCE_M):
-    """``[(m0, m1, band)]`` in metres along ``ga`` (a lon/lat line): ground except the stretches around the crossings
-    with ``others`` (lon/lat lines with their class)."""
+def _pieces_of(ga, others, band, highway=None, clearance=CLEARANCE_M):
+    """``[(m0, m1, band)]`` in metres along ``ga`` (a lon/lat line of class ``highway``): ground except the stretches
+    where its drawn road crosses or overlaps the drawn road of one of ``others`` (lon/lat lines with their class: no
+    node in common, so they are not connected, only drawn over each other), plus the clearance."""
     sx, sy = _scales(ga)
     gm = _metric(ga, sx, sy)
     total = gm.length
     spans = []
     for gb, hw in others:
-        inter = gm.intersection(_metric(gb, sx, sy))
-        if inter.is_empty:
+        near = gm.intersection(_metric(gb, sx, sy).buffer(HALF_WIDTH_M.get(hw, 3) + HALF_WIDTH_M.get(highway, 1)))
+        if near.is_empty:
             continue
-        pts = [p for g in getattr(inter, "geoms", [inter]) for p in (g.boundary.geoms if g.geom_type == "LineString" and g.length else [g])
-               if not p.is_empty]
+        pts = [p for g in getattr(near, "geoms", [near]) for p in (g.boundary.geoms if g.length else [g]) if not p.is_empty]
         ts = [gm.project(p) for p in pts if p.geom_type == "Point"]
         if not ts:
             continue
-        d = clearance + HALF_WIDTH_M.get(hw, 3)
-        spans.append((min(ts) - d, max(ts) + d))
+        spans.append((min(ts) - clearance, max(ts) + clearance))
     spans.sort()
     merged = []
     for s0, s1 in spans:
@@ -114,7 +113,7 @@ def level_pieces(con, union, geoms, highways):
     for eid, lvl in zip(cut["eid"], cut["l"]):
         if eid not in geoms:
             continue
-        out[eid] = _pieces_of(geoms[eid], by_a.get(eid, []), 1 if lvl > 0 else -1)
+        out[eid] = _pieces_of(geoms[eid], by_a.get(eid, []), 1 if lvl > 0 else -1, highways.get(eid))
     return out, {eid for eid, t in zip(cut["eid"], cut["is_tunnel"]) if t}
 
 

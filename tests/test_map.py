@@ -156,8 +156,12 @@ def test_pieces_of_one_road():
     cross = lambda x: (LineString([(7.0 + x * kx, 43.7 - 20 * ky), (7.0 + x * kx, 43.7 + 20 * ky)]), "residential")  # noqa: E731
     mid = _pieces_of(road, [cross(30)], 1)
     assert [b for _, _, b in mid] == [0, 1, 0] and mid[0][1] == mid[1][0] and mid[1][1] == mid[2][0]
-    assert abs(mid[1][0] - (30 - 7)) < 1.5 and abs(mid[1][1] - (30 + 7)) < 1.5          # 4 m + half a residential street
+    assert abs(mid[1][0] - (30 - 4 - 3)) < 1.5 and abs(mid[1][1] - (30 + 4 + 3)) < 1.5   # the drawn road + 4 m each side
     assert [b for _, _, b in _pieces_of(road, [cross(3)], -1)] == [-1, 0]               # near the start: no ground piece there
+    near = (LineString([(7.0 + 20 * kx, 43.7 + 4 * ky), (7.0 + 40 * kx, 43.7 + 4 * ky)]), "residential")   # 4 m beside it, never touching
+    assert [b for _, _, b in _pieces_of(road, [near], 1, "pedestrian")] == [0, 1, 0]      # drawn roads overlap: a stretch, like a crossing
+    far = (LineString([(7.0 + 20 * kx, 43.7 + 12 * ky), (7.0 + 40 * kx, 43.7 + 12 * ky)]), "residential")  # 12 m beside it: apart
+    assert [b for _, _, b in _pieces_of(road, [far], 1, "pedestrian")] == [0]
     assert [b for _, _, b in _pieces_of(road, [cross(20), cross(30)], 1)] == [0, 1, 0]  # one stretch
     assert _pieces_of(road, [], 1) == [(0.0, mid[-1][1], 0)]
 
