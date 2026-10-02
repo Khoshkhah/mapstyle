@@ -101,26 +101,64 @@ def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
     render_map(monaco, layers=False)
     g = seen["g"]
-    assert seen["band_col"] == "band"
+    assert seen["band_col"] == "_band" and seen["cap_col"] == "_cap"
     foot = g.highway == "footway"
-    assert set(g.loc[foot & (g.walk_type == "crossing"), "band"]) == {1}
-    assert set(g.loc[foot & (g.walk_type == "sidewalk"), "band"]) == {-1}
-    other = ~g.walk_type.isin(["crossing", "sidewalk"])
-    assert g.loc[other, "band"].astype("float").equals(g.loc[other, "level_band"].astype("float"))
+    assert set(g.loc[foot & (g.walk_type == "crossing"), "_band"]) == {1}
+    assert set(g.loc[foot & (g.walk_type == "sidewalk"), "_band"]) == {-1}
+    # a road with a level (a layer tag, a tunnel) gets a band from its pieces; every other road none
+    plain = g["layer"].fillna("0").isin(["0", ""]) & g["bridge"].isna() & g["tunnel"].isna() & ~g["_piece"]
+    other = ~g.walk_type.isin(["crossing", "sidewalk"]) & plain
+    assert g.loc[other, "_band"].isna().all()
     # a car road duckOSM marks "sidewalk" (you walk on its sidewalk) stays with the streets
     road = (g.walk_type == "sidewalk") & g.highway.isin(["residential", "secondary", "primary"])
-    assert road.sum() > 100 and g.loc[road, "band"].isna().all()
+    assert road.sum() > 100 and g.loc[road & plain, "_band"].isna().all()
 
 
-def test_level_band_comes_from_the_graph(monaco):
-    """A plain `layer` road (no bridge / tunnel tag) is ground unless it really crosses a road
-    (docs/design/layer_bands.md); every other road is left to roadstyle (null)."""
-    g = load_roads(monaco)
-    plain = (g["layer"].fillna("0") != "0") & g["bridge"].isna() & g["tunnel"].isna()
-    assert g.loc[~plain, "level_band"].isna().all() and g.loc[plain, "level_band"].notna().all()
-    assert set(g.loc[plain, "level_band"]) == {-1, 0, 1} and (g.loc[plain, "level_band"] == 0).sum() > 100
-    # a footway tagged layer=1 that only passes over tunnels and joins ground footways: ground
-    assert g.set_index("edge_id").loc["4070595946847136678", "level_band"] == 0
+def test_roads_with_a_level_are_cut_into_pieces(monaco, monkeypatch):
+    """docs/design/levels_plan.md R4: a plain-layer road or a tunnel is ground except where it really crosses a road;
+    the stretch is a square-ended piece in its own band, the rest ground. The first piece keeps the edge's row (the
+    planner's feature index), the others are appended with ``_piece``."""
+    seen = {}
+    from types import SimpleNamespace
+    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(monaco, layers=False)
+    g, base = seen["g"], load_roads(monaco)
+    n = len(base)
+    assert list(g["edge_id"].iloc[:n]) == list(base["edge_id"]) and not g["_piece"].iloc[:n].any()   # same rows, same order
+    assert g["_piece"].iloc[n:].all() and len(g) > n
+    assert set(g.loc[g["_piece"], "edge_id"]) <= set(base["edge_id"])
+    stretch = g[g["_band"].isin([-1, 1]) & g["layer"].notna() & g["tunnel"].isna() & g["bridge"].isna()
+                & ~g["walk_type"].isin(["crossing", "sidewalk"])]
+    assert len(stretch) > 5 and stretch["_cap"].all()                       # a stretch ends square
+    assert set(stretch["_band"]) == {-1, 1}
+    # the pieces of one edge add up to the edge (lengths in degrees: the same factor for all of one edge's pieces)
+    cut = g[g["edge_id"].isin(g.loc[g["_piece"], "edge_id"])].groupby("edge_id")
+    whole = base.set_index("edge_id").geometry.length
+    for eid, rows in list(cut)[:200]:
+        assert abs(rows.geometry.length.sum() - whole[eid]) < 1e-3 * whole[eid] + 1e-9
+    off = {}
+    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: off.update(g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(monaco, layers=False, pieces=False)
+    assert len(off["g"]) == n and not off["g"]["_cap"].any()
+
+
+def test_pieces_of_one_road():
+    """The cut of one road: ground, the stretch around a crossing, ground; a crossing near an end takes that end;
+    two crossings close together are one stretch; none is one ground piece."""
+    import math
+
+    from shapely.geometry import LineString
+
+    from mapstyle.levels import _pieces_of
+    kx, ky = 1 / (111320 * math.cos(math.radians(43.7))), 1 / 110574          # degrees per metre at 43.7 N
+    road = LineString([(7.0, 43.7), (7.0 + 60 * kx, 43.7)])                    # 60 m east
+    cross = lambda x: (LineString([(7.0 + x * kx, 43.7 - 20 * ky), (7.0 + x * kx, 43.7 + 20 * ky)]), "residential")  # noqa: E731
+    mid = _pieces_of(road, [cross(30)], 1)
+    assert [b for _, _, b in mid] == [0, 1, 0] and mid[0][1] == mid[1][0] and mid[1][1] == mid[2][0]
+    assert abs(mid[1][0] - (30 - 7)) < 1.5 and abs(mid[1][1] - (30 + 7)) < 1.5          # 4 m + half a residential street
+    assert [b for _, _, b in _pieces_of(road, [cross(3)], -1)] == [-1, 0]               # near the start: no ground piece there
+    assert [b for _, _, b in _pieces_of(road, [cross(20), cross(30)], 1)] == [0, 1, 0]  # one stretch
+    assert _pieces_of(road, [], 1) == [(0.0, mid[-1][1], 0)]
 
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):

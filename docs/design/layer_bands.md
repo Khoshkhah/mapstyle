@@ -1,6 +1,6 @@
 # Level of a road: from the graph, not the `layer` tag
 
-**Status:** approved by Kaveh 2026-10-02 (plain-`layer` roads only; the join is fine) and implemented (`load_roads`' `level_band`, `render_map`'s `band`). roadstyle is not changed.
+**Status:** superseded by `levels_plan.md` (pieces, same day); first approved by Kaveh 2026-10-02 (plain-`layer` roads only; the join is fine) and implemented (`load_roads`' `level_band`, `render_map`'s `band`). roadstyle is not changed.
 
 ## Problem
 

@@ -6,12 +6,17 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
-### Fixed
-- **Casing at junctions of `layer`-tagged paths.** A road with a `layer` tag and no bridge / tunnel
-  tag was drawn over the roads it joins, which broke their casing (a gap and a stub), so connected
-  roads looked unconnected. Its band now comes from the graph: over / under a road it really crosses
-  (no shared node), else ground. `load_roads` has a new `level_band` column
-  (`docs/design/layer_bands.md`).
+### Changed
+- **A road with a level is drawn at ground level except where it passes over or under a road**
+  (`docs/design/levels_plan.md`). A road with a `layer` tag and no bridge tag, and a tunnel, is cut for
+  drawing into ground pieces and the stretch that really crosses another road (lines cross, no
+  shared node, a level apart), 4 m clear of that road's drawn width. The stretch is a square-ended
+  piece in its own band (roadstyle's `band_col`, `cap_col`), so every joint is at ground level and
+  its casings merge: no ring or broken casing where a raised path, a plaza edge or a tunnel meets
+  ground roads. The database and `edge_id` are unchanged; the extra pieces are appended rows marked
+  `_piece`. `render_map(pieces=False)` turns it off; the dashboard and planner count and follow
+  edges, not pieces. Needs a roadstyle with `cap_col` (square ends are round on an older one).
+  Replaces the first attempt (`level_band`, a band per whole edge, `layer_bands.md`).
 
 ## [0.2.0] — 2026-10-01
 

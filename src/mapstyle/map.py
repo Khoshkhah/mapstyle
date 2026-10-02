@@ -23,6 +23,42 @@ _HERE = Path(__file__).parent
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 
+def _roads_union(con, db):
+    """The SQL that stacks every mode's ``edges`` (and ``private_edges``) with ``walk_type`` / ``mode`` / ``pmode`` /
+    ``access`` columns; loads the spatial extension on ``con``."""
+    con.execute("INSTALL spatial; LOAD spatial;")
+    have = {r[0] for r in con.execute(
+        "SELECT table_schema FROM information_schema.tables WHERE table_name = 'edges'").fetchall()}
+    modes = [m for m in MODES if m in have]
+    if not modes:
+        raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
+    wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
+                                    "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
+    cols = "edge_id, source, target, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
+    priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
+                                      "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
+    return " UNION ALL ".join(
+        [f"SELECT {cols}, {'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode, "
+         f"NULL AS pmode, NULL AS access FROM {m}.edges" for m in modes]
+        + [f"SELECT {cols}, NULL AS walk_type, NULL AS mode, '{m}' AS pmode, access "
+           f"FROM {m}.private_edges" for m in sorted(priv)])
+
+
+def load_pieces(db, roads):
+    """``({edge_id: [(m0, m1, band)]}, tunnel edge ids)``: how each road with a level is cut for drawing
+    (``mapstyle.levels``, docs/design/levels_plan.md): ground except where it really passes over or under a road."""
+    import duckdb
+
+    from mapstyle.levels import level_pieces
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        union = _roads_union(con, db)
+        geoms = dict(zip(roads["edge_id"], roads.geometry))
+        return level_pieces(con, union, geoms, dict(zip(roads["edge_id"], roads["highway"])))
+    finally:
+        con.close()
+
+
 def load_roads(db):
     """One row per ``edge_id`` over the db's mode networks, with ``driving`` / ``walking`` /
     ``cycling`` flags (the mode can use it) and duckOSM's ``walk_type`` (sidewalk, crossing,
@@ -36,22 +72,7 @@ def load_roads(db):
 
     con = duckdb.connect(str(db), read_only=True)
     try:
-        con.execute("INSTALL spatial; LOAD spatial;")
-        have = {r[0] for r in con.execute(
-            "SELECT table_schema FROM information_schema.tables WHERE table_name = 'edges'").fetchall()}
-        modes = [m for m in MODES if m in have]
-        if not modes:
-            raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
-        wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
-                                        "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
-        cols = "edge_id, source, target, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
-        priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
-                                          "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
-        union = " UNION ALL ".join(
-            [f"SELECT {cols}, {'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode, "
-             f"NULL AS pmode, NULL AS access FROM {m}.edges" for m in modes]
-            + [f"SELECT {cols}, NULL AS walk_type, NULL AS mode, '{m}' AS pmode, access "
-               f"FROM {m}.private_edges" for m in sorted(priv)])
+        union = _roads_union(con, db)
         # several rows per edge (modes, private_edges): a usable mode's first, so the same every time
         con.execute(f"""
             CREATE TEMP TABLE r AS
@@ -66,19 +87,8 @@ def load_roads(db):
                    {", ".join(f"max(CASE WHEN pmode = '{m}' THEN access END) AS access_{m}" for m in MODES)},
                    first(geometry ORDER BY mode IS NULL, mode, pmode) AS geom
             FROM ({union}) GROUP BY edge_id""")
-        # level_band: the band of a road with a layer tag but no bridge / tunnel tag, from the graph
-        # (docs/design/layer_bands.md): over / under a road it really crosses (lines cross, no shared
-        # node), else ground. Other roads: null (roadstyle's own rule).
         df = con.execute("""
-            WITH lv AS (SELECT *, COALESCE(TRY_CAST(layer AS INTEGER), 0) AS l FROM r),
-            lb AS (SELECT a.eid,
-                     CASE WHEN a.l > 0 AND bool_or(o.l >= 0 AND o.l < a.l) THEN 1
-                          WHEN a.l < 0 AND bool_or(o.l >= 0) THEN -1 ELSE 0 END AS level_band
-                   FROM lv a LEFT JOIN lv o ON o.eid <> a.eid AND ST_Intersects(a.geom, o.geom)
-                        AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t) AND ST_Crosses(a.geom, o.geom)
-                   WHERE a.l <> 0 AND a.bridge IS NULL AND a.tunnel IS NULL GROUP BY a.eid, a.l)
-            SELECT r.* EXCLUDE (eid, s, t, geom), lb.level_band, ST_AsWKB(r.geom) AS wkb
-            FROM r LEFT JOIN lb USING (eid) ORDER BY r.eid""").df()   # stable rows: the page's ids
+            SELECT r.* EXCLUDE (eid, s, t, geom), ST_AsWKB(r.geom) AS wkb FROM r ORDER BY r.eid""").df()   # stable rows: the page's ids
     finally:
         con.close()
     geom = gpd.GeoSeries.from_wkb(df.pop("wkb").map(bytes), crs="EPSG:4326")
@@ -358,7 +368,7 @@ def planner_data(db, roads):
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", **kwargs):
+               paths=PATHS, theme="osm", pieces=True, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -369,7 +379,9 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
     (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
-    (docs/design/themes.md).
+    (docs/design/themes.md). ``pieces``: cut a road with a level (a ``layer`` tag, a tunnel) into pieces so it
+    is at ground level except where it really passes over or under a road (docs/design/levels_plan.md);
+    False draws each edge whole at the level roadstyle gives it.
     The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
     ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
@@ -421,9 +433,14 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # Paths only: duckOSM also marks a car road "sidewalk" when you walk along its own sidewalk,
     # and that road must stay with the other streets (708 road edges in Monaco).
     path = roads["highway"].isin(PATH_CLASSES)
-    # Other roads with a layer tag only: the graph decides (level_band, layer_bands.md)
-    roads["band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path).fillna(roads["level_band"])
-    kw["band_col"] = "band"
+    roads["_band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
+    kw["band_col"], kw["cap_col"] = "_band", "_cap"
+    # a road with a level (a layer tag, a tunnel) is ground except where it really passes over or under a road: cut
+    # into pieces for drawing, square-ended (docs/design/levels_plan.md; roadstyle's cap_col)
+    roads["_cap"] = False
+    if pieces:
+        from mapstyle.levels import with_pieces
+        roads = with_pieces(roads, *load_pieces(db, roads))
     # duckOSM stores every path, and a one-way street's walking-only reverse, as a reverse edge too:
     # roadstyle draws a pair as two lanes only when both edges are directed (directed_col,
     # twin_ends.md)

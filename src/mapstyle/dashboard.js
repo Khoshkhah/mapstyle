@@ -21,12 +21,26 @@
     ".ms-all{font-size:11px;margin:2px 0}.ms-all a{margin-right:8px;cursor:pointer;color:#555}" +
     ".ms-float{position:fixed;left:10px;bottom:30px;z-index:5;max-height:60vh;overflow-y:auto;" +
     "background:#fff;padding:8px 10px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);font:13px system-ui}"));
+  // ---- a road cut into pieces is one edge: the report counts rows, so count the first piece only ---
+  // (docs/design/levels_plan.md; the extra pieces carry _piece)
+  (function recount(n) {
+    const kv = [...document.querySelectorAll(".rp-kpi")].find((k) => /edges/.test(k.textContent));
+    const wrap = document.getElementById("rp-cls");
+    if (!kv || !wrap || !wrap.querySelector(".rp-ct")) return n > 0 && setTimeout(() => recount(n - 1), 300);
+    const real = rsQuery((p) => !p._piece), props = rsGetProps(real), col = window.RS_CLASS_COL, cnt = {};
+    props.forEach((p) => { const c = p[col]; if (c != null && c !== "") cnt[c] = (cnt[c] || 0) + 1; });
+    kv.querySelector(".rp-kv").textContent = fmt(real.length);
+    wrap.querySelectorAll("label.rp-chk").forEach((lab) => {
+      const ct = lab.querySelector(".rp-ct"); if (!ct) return;
+      ct.textContent = fmt(cnt[lab.textContent.replace(ct.textContent, "").trim()] || 0);
+    });
+  })(20);
   const ovs = document.getElementById("rp-ovs");
   const host = ovs ? ovs.parentNode : document.body.appendChild(el("div", "ms-float"));
 
   // ---- Modes: the roads any ticked mode can use ------------------------------------------------
   const modes = ["driving", "walking", "cycling"]
-    .map((m) => [m, rsQuery((p) => p[m] === true || p[m] === "true").length]).filter(([, n]) => n);
+    .map((m) => [m, rsQuery((p) => !p._piece && (p[m] === true || p[m] === "true")).length]).filter(([, n]) => n);
   const on = new Set(modes.map(([m]) => m)), box = el("div", null, '<div class="rp-grp">Modes</div>');
   for (const [m, n] of modes) box.appendChild(check(m, true, (c) => {
     c ? on.add(m) : on.delete(m);

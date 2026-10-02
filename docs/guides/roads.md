@@ -28,12 +28,15 @@ The OpenStreetMap `layer`, `bridge` and `tunnel` tags decide what passes over wh
 
 - **Bridges** are drawn over the roads they cross, with square deck ends.
 - **Tunnels** are ordinary roads with a tunnel style: a dashed outline and light dashes on a faded
-  fill. A tunnel goes under the roads only where it really passes under one (within 4 m, along the
-  whole of a shallow crossing); its mouths join their street like any road continuing, with no
-  dead-end cap.
-- **A road with only a `layer` tag** acts the same: one that passes over or under nothing is drawn
-  with the ground roads, so a tunnel approach tagged `layer=-1` still joins the road it meets. A
-  raised walkway is drawn over a street only where it crosses it, clear of the street's drawn width.
+  fill. A tunnel is at ground level, so its mouths join their street like any road continuing; it
+  goes under the roads only where it really passes under one (4 m clear of the street's drawn width).
+- **A road with only a `layer` tag** acts the same: it is at ground level, so a tunnel approach
+  tagged `layer=-1`, or a walkway that starts at a path, still joins the road it meets, and it is
+  drawn over (or under) a street only where it really crosses it.
+- **How that is drawn.** A road with a level is cut, for drawing only, into pieces: ground pieces,
+  and the stretch that passes over or under another road, with square ends so the pieces meet
+  without a ring. The database and the `edge_id` are unchanged; a click on any piece is the same
+  edge. `render_map(pieces=False)` draws each edge whole instead.
 - **Crossings** (`footway=crossing`) are drawn over their street, **mapped sidewalks** under it.
 - **Slip roads** (`*_link`) are drawn under the streets they join.
 
@@ -59,4 +62,5 @@ roads no mode can use. Your own colours (`rsColor`) paint over them.
 
 This drawing is [roadstyle](https://khoshkhah.github.io/roadstyle/)'s (0.10 and later), fed by
 mapstyle with what it knows from duckOSM: which edges are directed (`directed_col`), and which paths
-are crossings or sidewalks (`band_col`, from duckOSM's `walk_type`).
+are crossings or sidewalks (`band_col`, from duckOSM's `walk_type`), and which stretches of a road
+pass over or under another (`band_col` again, with `cap_col` for their square ends).
