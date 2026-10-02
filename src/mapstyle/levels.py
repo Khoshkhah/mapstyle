@@ -17,6 +17,7 @@ HALF_WIDTH_M = {"motorway": 6, "trunk": 5.5, "primary": 4.5, "secondary": 4, "te
                 "unclassified": 3, "living_street": 3, "service": 2, "pedestrian": 2.5, "footway": 1,
                 "path": 1, "cycleway": 1, "steps": 1, "corridor": 1}
 MIN_PIECE_M = 2.0       # a ground piece shorter than this joins the stretch beside it
+END_M = 4.0            # a joint end keeps a ground piece at least this long (the round end of the road meeting it needs it)
 OVERLAP_M = 0.3         # neighbouring pieces overlap by this much each: two square ends that only touch leave a hairline
 
 def _truthy(col):
@@ -45,7 +46,7 @@ def crossing_pairs(con, union):
              AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t)
         WHERE NOT a.is_bridge AND (a.is_tunnel OR a.l <> 0)
           AND CASE WHEN a.l > 0 THEN o.l >= 0 AND o.l < a.l ELSE o.l >= 0 END""").df()
-    cut = con.execute("SELECT CAST(eid AS VARCHAR) AS eid, l, is_tunnel FROM lv "
+    cut = con.execute("SELECT CAST(eid AS VARCHAR) AS eid, l, is_tunnel, s, t FROM lv "
                       "WHERE NOT is_bridge AND (is_tunnel OR l <> 0)").df()
     return pairs, cut
 
@@ -76,15 +77,23 @@ def _pieces_of(ga, others, band, highway=None, clearance=CLEARANCE_M):
         ts = [gm.project(p) for p in pts if p.geom_type == "Point"]
         if not ts:
             continue
-        spans.append((min(ts) - clearance, max(ts) + clearance))
+        spans.append((min(ts) - clearance, max(ts) + clearance, min(ts), max(ts)))
     spans.sort()
     merged = []
-    for s0, s1 in spans:
+    for s0, s1, r0, r1 in spans:
         s0, s1 = max(0.0, s0), min(total, s1)
         if merged and s0 <= merged[-1][1] + MIN_PIECE_M:
             merged[-1][1] = max(merged[-1][1], s1)
+            merged[-1][3] = max(merged[-1][3], r1)
         else:
-            merged.append([s0, s1])
+            merged.append([s0, s1, r0, r1])
+    if merged:                  # a road meeting the end keeps a ground piece there, unless the crossing is right at it
+        first, last = merged[0], merged[-1]
+        if first[0] < END_M:
+            first[0] = max(first[0], min(END_M, first[2] - 0.5))
+        if total - last[1] < END_M:
+            last[1] = min(last[1], max(total - END_M, last[3] + 0.5))
+    merged = [[a, b] for a, b, *_ in merged]
     out, at = [], 0.0
     for s0, s1 in merged:
         if s0 - at >= MIN_PIECE_M:
@@ -101,8 +110,8 @@ def _pieces_of(ga, others, band, highway=None, clearance=CLEARANCE_M):
 
 
 def level_pieces(con, union, geoms, highways):
-    """``({edge_id: [(m0, m1, band), ...]}, tunnel edge ids)`` for every road to cut, in order along the edge: ground
-    pieces and the stretches that go over (band 1) or under (band -1) a road. ``geoms`` / ``highways``: ``{edge_id: ...}`` of the
+    """``({edge_id: [(m0, m1, band), ...]}, tunnel edge ids, edge ids to end square)`` for every road to cut, in order
+    along the edge: ground pieces and the stretches that go over (band 1) or under (band -1) a road. ``geoms`` / ``highways``: ``{edge_id: ...}`` of the
     db's roads (lon/lat lines, classes). A road that crosses nothing is one ground piece."""
     pairs, cut = crossing_pairs(con, union)
     by_a = {a: [] for a in cut["eid"]}
@@ -114,10 +123,23 @@ def level_pieces(con, union, geoms, highways):
         if eid not in geoms:
             continue
         out[eid] = _pieces_of(geoms[eid], by_a.get(eid, []), 1 if lvl > 0 else -1, highways.get(eid))
-    return out, {eid for eid, t in zip(cut["eid"], cut["is_tunnel"]) if t}
+    # a stretch that reaches the node (a crossing right at the mouth) leaves no ground piece there: the roads that
+    # meet it there end square, or their round end would show as a ring over the lower stretch
+    nodes = set()
+    for eid, sn, tn in zip(cut["eid"], cut["s"], cut["t"]):
+        parts = out.get(eid)
+        if parts and len(parts) and parts[0][2] != 0:
+            nodes.add(int(sn))
+        if parts and parts[-1][2] != 0:
+            nodes.add(int(tn))
+    square = set()
+    if nodes:
+        ids = ", ".join(str(n) for n in nodes)
+        square = {str(e) for (e,) in con.execute(f"SELECT eid FROM lv WHERE s IN ({ids}) OR t IN ({ids})").fetchall()}
+    return out, {eid for eid, t in zip(cut["eid"], cut["is_tunnel"]) if t}, square - set(out)
 
 
-def with_pieces(roads, pieces, tunnels):
+def with_pieces(roads, pieces, tunnels, square=()):
     """The roads as drawn: each edge in ``pieces`` becomes its first piece (same row, so the feature index the
     planner's graphs point to is unchanged) and its other pieces are appended after the last edge, with
     ``_piece`` set. Columns ``_band`` (the piece's band, else the edge's own) and ``_cap`` (square ends: a stretch
@@ -127,7 +149,7 @@ def with_pieces(roads, pieces, tunnels):
 
     roads = roads.copy()
     roads["_piece"] = False
-    roads["_cap"] = False
+    roads["_cap"] = roads["edge_id"].isin(square)             # roads meeting a stretch at a node end square
     extra = []
     for i, eid in zip(roads.index, roads["edge_id"]):
         parts = pieces.get(eid)

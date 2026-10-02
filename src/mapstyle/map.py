@@ -45,7 +45,7 @@ def _roads_union(con, db):
 
 
 def load_pieces(db, roads):
-    """``({edge_id: [(m0, m1, band)]}, tunnel edge ids)``: how each road with a level is cut for drawing
+    """``({edge_id: [(m0, m1, band)]}, tunnel edge ids, edge ids to end square)``: how each road with a level is cut for drawing
     (``mapstyle.levels``, docs/design/levels_plan.md): ground except where it really passes over or under a road."""
     import duckdb
 
