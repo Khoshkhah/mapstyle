@@ -144,7 +144,7 @@ def stats(edges, p, violated, pairs, info):
     print("edges by level span:", dict(sorted(span.items())))
 
 
-if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv:
+if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
     near = "--near" in sys.argv
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 60.0
     edges, pairs = load(sys.argv[1], near)
@@ -262,7 +262,7 @@ def run_intervals(db, near=False, with_same=True, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv:
+if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_intervals(sys.argv[1], near="--near" in sys.argv, with_same="--same" in sys.argv, time_limit=tl)
 
@@ -318,7 +318,7 @@ def run_pure(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv:
+if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_pure(sys.argv[1], tl)
 
@@ -358,5 +358,65 @@ def run_pure_compact(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--compact" in sys.argv:
+if __name__ == "__main__" and "--compact" in sys.argv and "--all" not in sys.argv:
     run_pure_compact(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)
+
+
+def solve_pure_all(edges, pairs, same, time_limit=120.0, workers=8, init=None, init_dropped=(), best=None):
+    """Kaveh's model with ALL the pairs that must not intersect: the overpass pairs (higher tag later), and the crossings of
+    the same tag (either edge first). Every such pair that intersects costs 1. With ``best``: a second stage that keeps
+    the penalty <= best and makes the intervals as short as possible."""
+    from ortools.sat.python import cp_model
+    m = cp_model.CpModel()
+    a = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    b = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    for e in edges:
+        m.Add(a[e] <= b[e])
+    for x, y in join_pairs(edges):
+        m.Add(a[x] <= b[y])
+        m.Add(a[y] <= b[x])
+    v = []
+    for i, (u, l) in enumerate(pairs):
+        q = m.NewBoolVar(f"v{i}")
+        v.append(q)
+        m.Add(b[l] + 1 <= a[u]).OnlyEnforceIf(q.Not())
+    for i, (x, y) in enumerate(same):
+        q, o = m.NewBoolVar(f"w{i}"), m.NewBoolVar(f"o{i}")
+        v.append(q)
+        m.Add(b[y] + 1 <= a[x]).OnlyEnforceIf([q.Not(), o])
+        m.Add(b[x] + 1 <= a[y]).OnlyEnforceIf([q.Not(), o.Not()])
+    if best is None:
+        if init:
+            for e, (s, t, *_) in edges.items():
+                lo, hi = sorted((init.get(s, 0), init.get(t, 0)))
+                m.AddHint(a[e], max(LO, min(HI, lo)))
+                m.AddHint(b[e], max(LO, min(HI, hi)))
+        m.Minimize(sum(v))
+    else:
+        m.Add(sum(v) <= best)
+        m.Minimize(sum(b[e] - a[e] for e in edges))
+    sv = cp_model.CpSolver()
+    sv.parameters.max_time_in_seconds = time_limit
+    sv.parameters.num_workers = workers
+    status = sv.Solve(m)
+    info = {"status": sv.StatusName(status), "objective": sv.ObjectiveValue(), "bound": sv.BestObjectiveBound(),
+            "seconds": round(sv.WallTime(), 1)}
+    return ({e: (sv.Value(a[e]), sv.Value(b[e])) for e in edges}, int(round(sum(sv.Value(q) for q in v))), info)
+
+
+def run_pure_all(db, time_limit=120.0):
+    import node_levels as nl
+    edges, pairs = load(db, near=True)
+    same = load_same(db)
+    p0, left0, dropped0 = nl.solve({e: v[:3] for e, v in edges.items()}, pairs)
+    out, given, info = solve_pure_all(edges, pairs, same, time_limit, init=p0)
+    print(f"stage 1: overpass/near pairs {len(pairs)}, same-level crossings {len(same)}, given up {given}; {info}")
+    out2, given2, info2 = solve_pure_all(edges, pairs, same, time_limit, best=given)
+    print(f"stage 2: given up {given2}; {info2}")
+    levels = sorted({v for ab in out2.values() for v in ab})
+    print(f"distinct numbers {len(levels)}; edges by length:", dict(sorted(__import__('collections').Counter(b_ - a_ for a_, b_ in out2.values()).items())))
+    return edges, pairs, out2, given2
+
+
+if __name__ == "__main__" and "--all" in sys.argv:
+    run_pure_all(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)

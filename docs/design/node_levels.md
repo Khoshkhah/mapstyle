@@ -132,24 +132,29 @@ pairs the heuristic dropped.
 | overpass pairs given up | **8, proved the minimum** (status OPTIMAL, 0.7 s). The heuristic gave up 16, my node form 9. |
 | the intervals it returns | **11,855 of the 12,941 edges have the whole range** [−10, 10] (casing first of all, fill last of all) |
 
-The count is the best possible, but the intervals are useless for drawing: nothing in the model prefers short intervals, so
-every edge with no constraint takes the whole range. An edge whose casing is under everything and whose fill is over
-everything would be drawn over every unrelated road it overlaps.
+The count is the best possible. The intervals look odd (almost every edge has the whole range) but they are **usable**: an
+edge with the whole range has its casing drawn first and its fill last, which is how the ordinary ground roads are drawn
+anyway; only the edges with constraints get shorter intervals. (I first wrote that this result was useless for drawing;
+that was wrong, I had not drawn it.) The range [−10, 10] is Kaveh's choice so that the heuristic's node levels, which are
+negative for tunnels and positive for raised roads, can be used directly as the starting hint.
 
-**A second stage that is not in your model (asked, not decided).** Keep the 8, and among the solutions with at most 8
-overpasses given up, make the sum of the interval lengths `Σ_e (b_e − a_e)` as small as possible (`solve_pure_compact`).
-Result: **OPTIMAL in 11.7 s**, total length 591: **12,392 edges have a single point (a = b), 507 have length 1, 42 have
-length 2**; 6 distinct numbers are used. Only the order of the numbers matters, not their value.
+Drawn at the eight places, with the solution of this model as it is (middle) and with an optional second stage (right):
+the same pictures. The second stage keeps the 8 and then makes the intervals as short as possible (`solve_pure_compact`,
+OPTIMAL in 11.7 s, 12,388 edges with a single point, 6 distinct numbers). It is **not needed**.
 
-Drawn at the eight places (live site, my earlier node form, this model with the second stage):
+![p0](node_levels/pure1_0.jpg)
+![p1](node_levels/pure1_1.jpg)
+![p2](node_levels/pure1_2.jpg)
+![p3](node_levels/pure1_3.jpg)
 
-![p0](node_levels/pure_0.jpg)
-![p1](node_levels/pure_1.jpg)
-![p2](node_levels/pure_2.jpg)
-![p3](node_levels/pure_3.jpg)
+Clean at seven of the eight places; `5066803562804960394` / `3639438131486059958` is still wrong: that pair is not an
+overpass pair in this run, so nothing constrains it.
 
-It looks like the node form at these places: clean at seven, and `5066803562804960394` / `3639438131486059958` still wrong
-(that pair is not an overpass pair, so nothing constrains it).
+**With all the pairs** (the 1,882 overpass crossings, the 3,785 possible crossings whose drawn widths overlap, and the 344
+crossings of the same tag with either edge first), every such pair that intersects costing 1 (`solve_pure_all`):
+the minimum number of pairs that must be given up is **324 of 6,011 (5.4%), proved optimal in 2.8 s**. A second stage for
+short intervals found no solution within 100 s. So the possible crossings, taken together, cannot all be satisfied with
+the shared-node intersections.
 
 **Earlier runs with extra objective terms of mine** (a penalty on interval length, a pull to the tags, a count of levels,
 and a weight on same-level crossings) gave worse and unstable results: with the range [0, 60], 13 pairs given up and 292
