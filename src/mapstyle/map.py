@@ -310,7 +310,9 @@ def planner_data(db, roads):
         modes = [m for m in MODES if (m, "edges") in have and (m, "edge_graph") in have]
         if not modes:
             raise ValueError(f"{db}: no mode with edges + edge_graph to route on")
-        k_of = {int(e): k for k, e in enumerate(roads["edge_id"])}
+        k_of = {}                                   # a road cut into pieces has several rows: the first one is the road
+        for k, e in enumerate(roads["edge_id"]):
+            k_of.setdefault(int(e), k)
         ends = {}                                   # edge_id -> (source, target, length_m, junction)
         for tb in ("edges", "private_edges"):          # private_edges: drawn, never routed
             for m in MODES:
