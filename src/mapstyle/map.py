@@ -201,6 +201,14 @@ def _access(roads, mode):
                                          acc.bfill(axis=1).iloc[:, 0].where(nobody))
 
 
+def _walk_reverse_first(roads):
+    """``roads`` with a one-way street's walking-only reverse edge first: it lies on the street's own edge, and what is drawn
+    last is on top and gets the click (and Street View's heading); the street's edge must win, not its reverse."""
+    rev = (~roads["driving"] & ~roads["cycling"] & ~roads["highway"].isin(PATH_CLASSES)
+           & roads["osm_id"].isin(roads.loc[roads["driving"] | roads["cycling"], "osm_id"]))
+    return roads.iloc[(~rev).to_numpy().argsort(kind="stable")].reset_index(drop=True)
+
+
 def _is_directed(roads):
     """Per edge: a direction of travel of its own, i.e. a road (not a path) open to cars or bikes.
     False = undirected: a footway stored both ways, a one-way street's walking-only reverse edge."""
@@ -398,6 +406,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     palette, settings = mode_settings(mode, paths, theme)
     style, th, _ = load_theme(theme)
     roads = load_roads(db)
+    roads = _walk_reverse_first(roads)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
