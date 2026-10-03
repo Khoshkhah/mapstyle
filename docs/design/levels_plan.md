@@ -207,6 +207,13 @@ If you say no, I revert it.
 
 Not rule changes: the dashboard's edge counts (pieces are not edges) and a hang fixed in `scripts/dashboard_check.py`.
 
+## Approach B (a level for each node)
+
+A second approach, without cutting, is in `node_levels.md`: a heuristic and an optimization version solved with a solver, tested
+on Monaco and at your reported places. It is a prototype; nothing in the library uses it. Its result so far: clean at
+seven of the eight places with the overpass crossings only, wrong at `5066…` / `3639…`, and worse with more pairs. See
+that document for the formula, the pair lists and the pictures.
+
 ## Decisions for Kaveh
 
 1. **Square ends for the pieces** (needed, or R4 only moves the ring):

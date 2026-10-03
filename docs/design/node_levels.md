@@ -101,7 +101,7 @@ the test; not a dependency of mapstyle).
 - `N`: the nodes. `E`: the edges, `e = (s_e, t_e)`, with a level tag `lvl_e` (the `layer` if nonzero, else a bridge 1,
   else a tunnel -1, else 0) and a length `len_e` in metres. `nodes(e) = {s_e, t_e}`.
 - `P`: the overpass pairs `q = (U_q, L_q)`: two edges whose lines cross, with no node in common and different tags.
-  `U_q` is the one with the higher tag.
+  `U_q` is the one with the higher tag. (The first runs had only these pairs: see "What pairs the solver was given".)
 - `pref_n`: the level the tags suggest for node `n`: the tag level nearest 0 among the edges at `n` (so 0 if a ground
   edge touches it), clamped to `[-K, K]`.
 - `c_e = max(1, round(len_e / 5))`: what one level step costs on edge `e` (a long edge costs more, so a step lands on a
@@ -135,7 +135,28 @@ close to the tags as possible.
 
 **Solver settings:** CP-SAT, 8 workers, time limit 60 s (a 90 s run also tried). It does not prove optimality in that time.
 
-### Result on Monaco
+### What pairs the solver was given, and what it was not
+
+Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
+crossing pairs it is OK too: a list of *possible* crossings is good; it is better than considering all pairs."
+In Monaco there are:
+
+| Kind of pair | Count | In the first runs | Later runs |
+|---|---|---|---|
+| lines cross, no shared node, **different** level tags (overpass) | 1,882 | yes | yes |
+| lines cross, no shared node, **same** level tag (a zebra, a missing junction) | 344 | **no** | yes: `S_q`, either edge may be on top |
+| no crossing, no shared node, different tags, drawn widths overlap (the 1.3 m case) | 3,785 (76 touch or overlap exactly) | **no** | yes, as overpass pairs ("possible crossings") |
+| share a node **and** cross somewhere else | 105 | no | **no**: the model cannot say it (see below) |
+
+**Same-level crossings (`S_q`).** Each gets a boolean `o_q` ("a is on top") and a give-up variable `w_q`:
+`w_q = 0 and o_q  implies  p_a - p_b >= 1` for every node pair, `w_q = 0 and not o_q  implies  p_b - p_a >= 1`; cost
+`W1S * w_q` with `W1S = 300` (less than an overpass: these are often data errors).
+
+**Why 105 pairs cannot be given.** Two edges that share a node must have intersecting intervals (that is how they
+merge), and two edges that cross in their middle must have disjoint intervals. Both cannot hold. In the model a
+node-sharing pair is simply "connected". Such an edge needs the cutting of Approach A.
+
+### Result on Monaco, crossing pairs only
 
 | | heuristic | solver, crossing pairs | solver, crossing + "drawn widths overlap" pairs |
 |---|---|---|---|
@@ -148,7 +169,39 @@ The solver is better than the heuristic on both counts, but it is not proven opt
 Adding the "drawn widths overlap" pairs (the C1 rule of `levels_plan.md`) makes the problem much harder: three times
 the pairs and many conflicts. As a node-level problem it does not look usable as it stands.
 
-### Drawn at your places: live site, heuristic, solver (crossing pairs)
+### Result with the pairs added
+
+| | heuristic | solver, overpass crossings | solver, + same-level crossings | solver, + same-level + possible crossings (all candidates) |
+|---|---|---|---|---|
+| overpass pairs | 1,882 | 1,882 | 1,882 | 5,667 |
+| same-level pairs | not used | not used | 344 | 344 |
+| overpass pairs given up | 16 (dropped) | 9 | 9 | 338 to 341 (6%) |
+| same-level pairs given up | | | 0 | 4 to 12 |
+| edges that span 1 or more levels | 1,048 | 766 | 1,209 | 1,729 (13.4%) |
+| node levels used | -2 .. 2 | -3 .. 2 | -3 .. 2 | -4 .. 4 |
+| solver, time and result | none | 60 s, objective 26,761, bound 23,565 | 100 s, objective 32,846, bound 23,560 | 120 s, objective 393,404, bound 359,988 |
+
+Adding the same-level crossings costs about 440 more edges that span a level and gives up no pair. Adding the
+possible crossings multiplies the pairs by three, the solver gives up 6% of the overpasses, and a seventh of the edges
+span levels.
+
+### Drawn at your places: live site, solver with crossing pairs, solver with all candidate pairs
+
+![c0](node_levels/cand_0.jpg)
+![c1](node_levels/cand_1.jpg)
+![c2](node_levels/cand_2.jpg)
+![c3](node_levels/cand_3.jpg)
+
+- **The extra pairs did not fix `5066803562804960394` / `3639438131486059958`.** Even though the pair is now a
+  constraint, the pedestrian band is still drawn under the tunnel: the solver gave that pair up (it is among the 338
+  to 341).
+- **They made another place worse.** At the tunnel crossing, with all candidate pairs, a pedestrian band
+  (Promenade Honoré II) is drawn as a grey area: its casing is in a higher level than its fill is drawn, because that
+  edge now spans three levels.
+- **So the best result so far is the solver with the overpass crossings only**, which is clean at seven of the eight
+  places, and the same wrong place.
+
+### Drawn at your places: live site, heuristic, solver (overpass crossing pairs only)
 
 ![a](node_levels/opt_0.jpg)
 ![b](node_levels/opt_1.jpg)
@@ -173,9 +226,10 @@ the pairs and many conflicts. As a node-level problem it does not look usable as
 ## Weaknesses found
 
 1. **Only crossings are constrained.** A tunnel that runs next to a band without the lines crossing (1.3 m apart,
-   `5066…` / `3639…`) is "free", so it can be drawn over the band. It needs the same extension as C1 in
-   `levels_plan.md`: pairs whose **drawn widths overlap** count as crossings. That is a rule change and needs your
-   permission in either approach.
+   `5066…` / `3639…`) is "free", so it can be drawn over the band. Adding the pairs whose drawn widths overlap (the
+   C1 rule of `levels_plan.md`, a rule change that needs your permission in either approach) was tested: it did not
+   fix that pair and made another place worse.
+   Also, 105 pairs share a node and cross elsewhere: the model cannot express them.
 2. **Cycles** (16 pairs for the heuristic, 9 for the solver) cannot be solved by levels. They need a fallback (the
    cutting of Approach A for those few edges).
 3. **A blob** (round end of an edge shown over another edge's casing) at two places with the heuristic; the solver's

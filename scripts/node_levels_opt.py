@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-W1, W2, W3, K = 1000, 10, 1, 4
+W1, W1S, W2, W3, K = 1000, 300, 10, 1, 4      # W1S: a same-level crossing (either may be on top)
 
 
 def preferences(edges):
@@ -27,7 +27,7 @@ def preferences(edges):
     return pref
 
 
-def solve_opt(edges, pairs, time_limit=60.0, workers=8, init=None, init_dropped=()):
+def solve_opt(edges, pairs, time_limit=60.0, workers=8, init=None, init_dropped=(), same=()):
     """``edges``: ``{eid: (s, t, lvl, length_m)}``; ``pairs``: ``[(upper, lower)]``. ``init``: node levels to start from
     (the heuristic's, ``node_levels.solve``) and ``init_dropped`` its dropped pairs. Returns ``(p, violated, info)``."""
     from ortools.sat.python import cp_model
@@ -44,6 +44,15 @@ def solve_opt(edges, pairs, time_limit=60.0, workers=8, init=None, init_dropped=
             for nl in edges[l][:2]:
                 m.Add(p[nu] - p[nl] >= 1).OnlyEnforceIf(q.Not())
         terms.append(W1 * q)
+    vs = []                       # same-level crossings: disjoint in either order, o_q picks which edge is on top
+    for i, (a, b) in enumerate(same):
+        q, o = m.NewBoolVar(f"w{i}"), m.NewBoolVar(f"o{i}")
+        vs.append((q, o))
+        for na in edges[a][:2]:
+            for nb in edges[b][:2]:
+                m.Add(p[na] - p[nb] >= 1).OnlyEnforceIf([q.Not(), o])
+                m.Add(p[nb] - p[na] >= 1).OnlyEnforceIf([q.Not(), o.Not()])
+        terms.append(W1S * q)
     for e, (s, t, lv, ln) in edges.items():
         if s == t:
             continue
@@ -60,6 +69,11 @@ def solve_opt(edges, pairs, time_limit=60.0, workers=8, init=None, init_dropped=
         gone = set(init_dropped)
         for q, pr in zip(v, pairs):
             m.AddHint(q, 1 if pr in gone else 0)
+        for (q, o), (a, b) in zip(vs, same):
+            up = all(init.get(x, 0) > init.get(y, 0) for x in edges[a][:2] for y in edges[b][:2])
+            dn = all(init.get(y, 0) > init.get(x, 0) for x in edges[a][:2] for y in edges[b][:2])
+            m.AddHint(q, 0 if (up or dn) else 1)
+            m.AddHint(o, 1 if up else 0)
     m.Minimize(sum(terms))
     sv = cp_model.CpSolver()
     sv.parameters.max_time_in_seconds = time_limit
@@ -69,7 +83,24 @@ def solve_opt(edges, pairs, time_limit=60.0, workers=8, init=None, init_dropped=
             "seconds": round(sv.WallTime(), 1)}
     levels = {n: sv.Value(p[n]) for n in nodes}
     violated = [pairs[i] for i, q in enumerate(v) if sv.Value(q)]
+    info["same_given_up"] = sum(sv.Value(q) for q, _ in vs)
     return levels, violated, info
+
+
+def load_same(db):
+    """The crossings with no shared node and the SAME level tag (a zebra, a missing junction): either edge may be on top."""
+    import duckdb
+
+    import node_levels as nl
+    from mapstyle.map import _roads_union
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        nl.edge_table(con, _roads_union(con, db))
+        return [(str(a), str(b)) for a, b in con.execute("""
+            SELECT a.eid, o.eid FROM lv a JOIN lv o ON a.eid < o.eid AND ST_Intersects(a.g, o.g) AND a.l = o.l
+                 AND a.s NOT IN (o.s, o.t) AND a.t NOT IN (o.s, o.t) AND ST_Crosses(a.g, o.g)""").fetchall()]
+    finally:
+        con.close()
 
 
 def load(db, near=False):
@@ -120,5 +151,7 @@ if __name__ == "__main__":
     import node_levels as nl
     p0, left0, dropped0 = nl.solve({e: v[:3] for e, v in edges.items()}, pairs)
     print(f"heuristic start: dropped {len(dropped0)}, violated {len(left0)}")
-    p, violated, info = solve_opt(edges, pairs, tl, init=p0, init_dropped=dropped0 + left0)
+    same = load_same(sys.argv[1]) if "--same" in sys.argv else []
+    p, violated, info = solve_opt(edges, pairs, tl, init=p0, init_dropped=dropped0 + left0, same=same)
+    print(f"same-level crossings given: {len(same)}, given up: {info.get('same_given_up')}")
     stats(edges, p, violated, pairs, info)
