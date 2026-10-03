@@ -388,6 +388,25 @@ edge that goes from level 0 to level −3 (or −2) is, near its ground end, at 
 options are the ones already known: cut such an edge into pieces for drawing (Approach A), split it in the data (duckOSM could
 cut a way where it leaves the ground), or accept the 3 in Monaco as wrong.
 
+### Approach A's cutting for the 3 failures (Kaveh, 2026-10-02: "use A for those 3 failure cases")
+
+Prototype `scripts/node_levels_cut.py`, one interval per road, range [−20, 20], the 561 overpass pairs as hard constraints. For each
+conflict, cut the edge that **changes level along itself** (the lower road of the conflict that is joined to a road whose level differs by
+2 or more) into pieces at its crossing with the upper road, and solve again. The pieces share the new cut nodes (so they are
+connected: their intervals must intersect) and only the piece that crosses the upper road has to be under it.
+
+My first rule, cutting the lower road of the pair the solver releases, cut the primary tunnel and did not help: the tunnel is not
+the edge that changes level. Two details matter: the cut must always leave a piece next to the node (even a short one) as long as
+it does not cross the other road's **line**, and the cut positions must follow the road's own direction.
+
+| Conflict | Cut | Result |
+|---|---|---|
+| 1 and 2: footway `3278703636467343940` joined to the pedestrian street | the footway is cut into pieces: one next to the entrance node, the piece under the tunnels, the rest | **resolved**: no conflict is left |
+| 3: two staircases `4988690792929201909` / `2205756913946906067` | the steps cut after the crossing | **not resolved**: the crossing of the 5 m footway with the steps is within 0.3 m of the steps' node, so no piece can be separated from the node |
+
+So with the cutting, the problem has **1 conflict left in Monaco instead of 3**: a 5 m footway crossing the top of a staircase inside a
+station entrance, where nothing wrong is visible on the map. The prototype adds 3 pieces to the 6,594 roads.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
