@@ -144,7 +144,7 @@ def stats(edges, p, violated, pairs, info):
     print("edges by level span:", dict(sorted(span.items())))
 
 
-if __name__ == "__main__" and "--intervals" not in sys.argv:
+if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv:
     near = "--near" in sys.argv
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 60.0
     edges, pairs = load(sys.argv[1], near)
@@ -166,8 +166,8 @@ if __name__ == "__main__" and "--intervals" not in sys.argv:
 #   other pairs                            : free
 # The node levels of the heuristic are only the starting hint.
 # ---------------------------------------------------------------------------------------------------------------
-LEVELS = 60            # the ends are integers in [0, LEVELS]
-GROUND = 20            # the value the tags suggest for level 0 (room for tunnels below, bridges above)
+LO, HI = -10, 10       # the ends are integers in [LO, HI]
+GROUND = 0             # the value the tags suggest for level 0
 
 
 def join_pairs(edges):
@@ -189,8 +189,8 @@ def solve_intervals(edges, pairs, same=(), time_limit=120.0, workers=8, init=Non
     """``edges``: ``{eid: (s, t, lvl, length_m)}``. Returns ``({eid: (a, b)}, violated overpass pairs, info)``."""
     from ortools.sat.python import cp_model
     m = cp_model.CpModel()
-    a = {e: m.NewIntVar(0, LEVELS, "") for e in edges}
-    b = {e: m.NewIntVar(0, LEVELS, "") for e in edges}
+    a = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    b = {e: m.NewIntVar(LO, HI, "") for e in edges}
     for e in edges:
         m.Add(a[e] <= b[e])
     joins = join_pairs(edges)
@@ -210,22 +210,22 @@ def solve_intervals(edges, pairs, same=(), time_limit=120.0, workers=8, init=Non
         m.Add(b[y] + 1 <= a[x]).OnlyEnforceIf([q.Not(), o])
         m.Add(b[x] + 1 <= a[y]).OnlyEnforceIf([q.Not(), o.Not()])
         terms.append(W1S * q)
-    top, bottom = m.NewIntVar(0, LEVELS, "top"), m.NewIntVar(0, LEVELS, "bottom")
+    top, bottom = m.NewIntVar(LO, HI, "top"), m.NewIntVar(LO, HI, "bottom")
     for e, (s, t, lv, ln) in edges.items():
         m.Add(b[e] <= top)
         m.Add(a[e] >= bottom)
         terms.append(max(1, round(ln / 5)) * W2 * (b[e] - a[e]))
         g = GROUND + max(-K, min(K, lv))
         for var in (a[e], b[e]):
-            d = m.NewIntVar(0, LEVELS, "")
+            d = m.NewIntVar(0, HI - LO, "")
             m.AddAbsEquality(d, var - g)
             terms.append(W3 * d)
     terms.append(5 * (top - bottom))                      # few levels in all
     if init:                                              # the heuristic's node levels: the starting hint only
         for e, (s, t, *_) in edges.items():
             lo, hi = sorted((init.get(s, 0), init.get(t, 0)))
-            m.AddHint(a[e], max(0, min(LEVELS, GROUND + lo)))
-            m.AddHint(b[e], max(0, min(LEVELS, GROUND + hi)))
+            m.AddHint(a[e], max(LO, min(HI, GROUND + lo)))
+            m.AddHint(b[e], max(LO, min(HI, GROUND + hi)))
         gone = set(init_dropped)
         for q, pr in zip(v, pairs):
             m.AddHint(q, 1 if pr in gone else 0)
@@ -262,6 +262,101 @@ def run_intervals(db, near=False, with_same=True, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--intervals" in sys.argv:
+if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_intervals(sys.argv[1], near="--near" in sys.argv, with_same="--same" in sys.argv, time_limit=tl)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Kaveh's model, nothing else (2026-10-02): "the only constraints are the range of the intervals and that the intervals
+# intersect for all edges that share a node; the penalty is only on overpasses."
+#   variables   a_e <= b_e in [LO, HI]  for every edge;  v_q in {0, 1} for every overpass pair
+#   constraints edges sharing a node: a_x <= b_y and a_y <= b_x
+#               overpass (U over L), unless v_q = 1:  b_L + 1 <= a_U
+#   objective   minimise  sum_q v_q
+# ---------------------------------------------------------------------------------------------------------------
+def solve_pure(edges, pairs, time_limit=120.0, workers=8, init=None, init_dropped=()):
+    from ortools.sat.python import cp_model
+    m = cp_model.CpModel()
+    a = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    b = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    for e in edges:
+        m.Add(a[e] <= b[e])
+    joins = join_pairs(edges)
+    for x, y in joins:
+        m.Add(a[x] <= b[y])
+        m.Add(a[y] <= b[x])
+    v = []
+    for i, (u, l) in enumerate(pairs):
+        q = m.NewBoolVar(f"v{i}")
+        v.append(q)
+        m.Add(b[l] + 1 <= a[u]).OnlyEnforceIf(q.Not())
+    if init:
+        for e, (s, t, *_) in edges.items():
+            lo, hi = sorted((init.get(s, 0), init.get(t, 0)))
+            m.AddHint(a[e], max(LO, min(HI, lo)))
+            m.AddHint(b[e], max(LO, min(HI, hi)))
+        gone = set(init_dropped)
+        for q, pr in zip(v, pairs):
+            m.AddHint(q, 1 if pr in gone else 0)
+    m.Minimize(sum(v))
+    sv = cp_model.CpSolver()
+    sv.parameters.max_time_in_seconds = time_limit
+    sv.parameters.num_workers = workers
+    status = sv.Solve(m)
+    info = {"status": sv.StatusName(status), "objective": sv.ObjectiveValue(), "bound": sv.BestObjectiveBound(),
+            "seconds": round(sv.WallTime(), 1), "join_pairs": len(joins)}
+    return ({e: (sv.Value(a[e]), sv.Value(b[e])) for e in edges}, [pairs[i] for i, q in enumerate(v) if sv.Value(q)], info)
+
+
+def run_pure(db, time_limit=120.0):
+    import node_levels as nl
+    edges, pairs = load(db)
+    p0, left0, dropped0 = nl.solve({e: v[:3] for e, v in edges.items()}, pairs)
+    out, violated, info = solve_pure(edges, pairs, time_limit, init=p0, init_dropped=dropped0 + left0)
+    interval_stats(edges, out, violated, pairs, info)
+    return edges, pairs, out, violated
+
+
+if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv:
+    tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
+    run_pure(sys.argv[1], tl)
+
+
+def solve_pure_compact(edges, pairs, best, time_limit=120.0, workers=8, init=None):
+    """Second stage, NOT part of Kaveh's model (asked about, not decided): keep sum v_q <= ``best`` (the optimum of the
+    first stage) and, among those solutions, make the intervals as short as possible (sum of b_e - a_e)."""
+    from ortools.sat.python import cp_model
+    m = cp_model.CpModel()
+    a = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    b = {e: m.NewIntVar(LO, HI, "") for e in edges}
+    for e in edges:
+        m.Add(a[e] <= b[e])
+    for x, y in join_pairs(edges):
+        m.Add(a[x] <= b[y])
+        m.Add(a[y] <= b[x])
+    v = []
+    for i, (u, l) in enumerate(pairs):
+        q = m.NewBoolVar(f"v{i}")
+        v.append(q)
+        m.Add(b[l] + 1 <= a[u]).OnlyEnforceIf(q.Not())
+    m.Add(sum(v) <= best)
+    m.Minimize(sum(b[e] - a[e] for e in edges))
+    sv = cp_model.CpSolver()
+    sv.parameters.max_time_in_seconds = time_limit
+    sv.parameters.num_workers = workers
+    status = sv.Solve(m)
+    info = {"status": sv.StatusName(status), "objective": sv.ObjectiveValue(), "bound": sv.BestObjectiveBound(),
+            "seconds": round(sv.WallTime(), 1)}
+    return ({e: (sv.Value(a[e]), sv.Value(b[e])) for e in edges}, [pairs[i] for i, q in enumerate(v) if sv.Value(q)], info)
+
+
+def run_pure_compact(db, time_limit=120.0):
+    edges, pairs = load(db)
+    out, violated, info = solve_pure_compact(edges, pairs, 8, time_limit)
+    interval_stats(edges, out, violated, pairs, info)
+    return edges, pairs, out, violated
+
+
+if __name__ == "__main__" and "--compact" in sys.argv:
+    run_pure_compact(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)

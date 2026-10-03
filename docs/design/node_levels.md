@@ -94,71 +94,67 @@ Kaveh, 2026-10-02: "make it as an optimization problem and solve it by a solver 
 initialization". Prototype: `scripts/node_levels_opt.py`, solver OR-Tools CP-SAT (installed outside the repository for
 the test; not a dependency of mapstyle).
 
-### Kaveh's formulation: a free interval for each edge (the model to use)
+### Kaveh's model (the one to use): free intervals, intersection for shared nodes, penalty only on overpasses
 
-Kaveh, 2026-10-02: "we didn't assign intervals only between −4 and +4. The numbers of the intervals are large. The
-numbers are not related to the node levels. The node levels were your idea, and I told you to use them as the
-initialization, not to bound the problem by them." My first solver model (below, "My first version") did exactly that
-mistake: a number for each node, limited to −4 … 4, with the edge intervals derived from them. This is the model as
-Kaveh described it (`solve_intervals` in `scripts/node_levels_opt.py`).
+Kaveh, 2026-10-02: "we didn't assign intervals only between −4 and +4 ... the node levels were your idea, and I told you
+to use them as the initialization, not to bound the problem by them", then "instead of [0, 60] make it [−10, 10]", and
+"**the only constraints are the range of the intervals and that the intervals intersect for all edges that share a node;
+the penalty is only on overpasses**." This is that model, with nothing else (`solve_pure` in
+`scripts/node_levels_opt.py`).
 
 **Variables**
 
 ```
-a_e, b_e  ∈ {0, 1, …, 60}   a_e ≤ b_e      for every edge e     (a_e: the time of the casing, b_e: the time of the fill;
-                                                                  the casing is at 2·a_e and the fill at 2·b_e + 1)
-v_q       ∈ {0, 1}                           for every overpass pair q   (1 = this pair is given up)
-w_q, o_q  ∈ {0, 1}                           for every same-level crossing q  (given up; which edge is on top)
-top, bottom ∈ {0, …, 60}                     the highest b and the lowest a
+a_e, b_e  ∈ {−10, …, 10},  a_e ≤ b_e     for every edge e    (a_e: the time of the casing, b_e: the time of the fill;
+                                                                the casing is at 2·a_e and the fill at 2·b_e + 1)
+v_q       ∈ {0, 1}                        for every overpass pair q = (U over L)   (1 = this pair is given up)
 ```
-
-There are **no node variables**.
 
 **Constraints**
 
 ```
-(1) edges x, y that share a node (hard):           a_x ≤ b_y   and   a_y ≤ b_x        [62,626 pairs in Monaco]
-(2) overpass q = (U over L): no shared node, the lines cross, different level tags:
-                                                   v_q = 0  ⇒  b_L + 1 ≤ a_U
-(3) same-level crossing q = {x, y}:                w_q = 0  ⇒  ( o_q = 1 ⇒ b_y + 1 ≤ a_x )  and  ( o_q = 0 ⇒ b_x + 1 ≤ a_y )
-(4) every edge e:                                  b_e ≤ top   and   bottom ≤ a_e
-(5) every other pair of edges:                     free
+(1) every two edges x, y that share a node (hard):     a_x ≤ b_y   and   a_y ≤ b_x          [62,626 pairs in Monaco]
+(2) every overpass pair q = (U over L), unless given up: v_q = 0  ⇒  b_L + 1 ≤ a_U           [1,882 pairs in Monaco]
 ```
 
-**Objective** (minimize)
+An overpass pair is two edges whose lines cross, with no shared node and different level tags; U is the one with the higher tag.
+Every other pair of edges is free.
 
-```
-1000 · Σ_q v_q   +   300 · Σ_q w_q   +   10 · Σ_e c_e · (b_e − a_e)   +   1 · Σ_e ( |a_e − g_e| + |b_e − g_e| )   +   5 · (top − bottom)
-```
+**Objective:** minimize  `Σ_q v_q`  (the number of overpasses given up).
 
-with c_e = max(1, round(length_e / 5)) and g_e = 20 + (the level tag of e), 20 standing for the ground. **The last three
-terms are mine, not Kaveh's**: they keep intervals short (long ones on long edges cost more), near the tags, and the
-whole in few levels. Kaveh's own problem is only (1), (2), (3), (5).
+**Start (a hint only, not a bound):** a_e = min(p_s, p_t), b_e = max(p_s, p_t) from the heuristic's node levels; v_q = 1 for the
+pairs the heuristic dropped.
 
-**Start (a hint only, not a bound):** a_e = 20 + min(p_s, p_t), b_e = 20 + max(p_s, p_t) from the heuristic's node levels,
-and v_q = 1 for the pairs the heuristic dropped.
+**Result on Monaco** (OR-Tools CP-SAT, 8 workers; the intervals are the numbers a_e, b_e):
 
-**Result on Monaco** (OR-Tools CP-SAT, 8 workers, 120 s, all 1,882 overpass pairs and 344 same-level crossings):
+| | result |
+|---|---|
+| overpass pairs given up | **8, proved the minimum** (status OPTIMAL, 0.7 s). The heuristic gave up 16, my node form 9. |
+| the intervals it returns | **11,855 of the 12,941 edges have the whole range** [−10, 10] (casing first of all, fill last of all) |
 
-| | node form (my first version) | interval form (this model) |
-|---|---|---|
-| overpass pairs given up | 9 | 13 |
-| same-level crossings given up | 0 | 292 of 344 |
-| edges with an interval longer than one point | 1,209 | 928 |
-| distinct level numbers used | 6 | 5 (−2 … 2) |
-| proof | gap to the bound about 25% | objective 147,376, bound 17,763: **far from proven** |
+The count is the best possible, but the intervals are useless for drawing: nothing in the model prefers short intervals, so
+every edge with no constraint takes the whole range. An edge whose casing is under everything and whose fill is over
+everything would be drawn over every unrelated road it overlaps.
 
-So the free-interval model is bigger (62,626 hard pairs) and the solver found a worse solution in the same time, and gave
-up most same-level crossings, because their weight (300) is below the cost of separating them. The two models are the same
-problem only when the interval numbers are free; my node form restricted them.
+**A second stage that is not in your model (asked, not decided).** Keep the 8, and among the solutions with at most 8
+overpasses given up, make the sum of the interval lengths `Σ_e (b_e − a_e)` as small as possible (`solve_pure_compact`).
+Result: **OPTIMAL in 11.7 s**, total length 591: **12,392 edges have a single point (a = b), 507 have length 1, 42 have
+length 2**; 6 distinct numbers are used. Only the order of the numbers matters, not their value.
 
-Drawn at the eight places (live site, node form, interval form): the two solver forms look alike; the interval form does
-not fix `5066…` / `3639…` either.
+Drawn at the eight places (live site, my earlier node form, this model with the second stage):
 
-![i0](node_levels/int_0.jpg)
-![i1](node_levels/int_1.jpg)
-![i2](node_levels/int_2.jpg)
-![i3](node_levels/int_3.jpg)
+![p0](node_levels/pure_0.jpg)
+![p1](node_levels/pure_1.jpg)
+![p2](node_levels/pure_2.jpg)
+![p3](node_levels/pure_3.jpg)
+
+It looks like the node form at these places: clean at seven, and `5066803562804960394` / `3639438131486059958` still wrong
+(that pair is not an overpass pair, so nothing constrains it).
+
+**Earlier runs with extra objective terms of mine** (a penalty on interval length, a pull to the tags, a count of levels,
+and a weight on same-level crossings) gave worse and unstable results: with the range [0, 60], 13 pairs given up and 292
+of 344 same-level crossings given up; with [−10, 10] and 150 s, 13 given up and 4 same-level; the same run with 120 s, 13
+and 296, with a far larger gap to the bound. Your model without them is solved to the proven optimum in under a second.
 
 ### My first version: a level for each node, bounded (superseded)
 
