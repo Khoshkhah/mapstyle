@@ -47,7 +47,13 @@ def test_load_roads(monaco):
     assert g["walking"].sum() > g["driving"].sum()          # footways and steps
     # the same order on every call (the page's feature ids are row numbers): edge_id order
     assert list(load_roads(monaco)["edge_id"]) == list(g["edge_id"])
-    assert list(g["edge_id"].astype("int64")) == sorted(g["edge_id"].astype("int64"))
+    # edge_id order, except a one-way street's walking-only reverse edges first: they lie on the street's own edge, which must
+    # be drawn over them and win the click (and Street View)
+    from mapstyle.map import PATH_CLASSES as _MAP_PATHS
+    und = ~g["driving"] & ~g["cycling"] & ~g["highway"].isin(_MAP_PATHS) & g["osm_id"].isin(g.loc[g["driving"] | g["cycling"], "osm_id"])
+    assert und.any() and und.iloc[:und.sum()].all()
+    for part in (g[und], g[~und]):
+        assert list(part["edge_id"].astype("int64")) == sorted(part["edge_id"].astype("int64"))
 
 
 @pytest.mark.parametrize("paths", list(load_style("paths")))

@@ -66,7 +66,7 @@ def load_roads(db):
     (``<mode>.private_edges``) are rows too, with ``access_driving`` / ``access_walking`` /
     ``access_cycling``: ``private`` or ``bus`` where that mode keeps it there, else null
     (docs/design/private_and_bus.md). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
-    2**53. Rows are in ``edge_id`` order, so a page's feature ids are the same on every render."""
+    2**53. Rows are in ``edge_id`` order (a one-way street's walking-only reverse edges first), so a page's feature ids are the same on every render."""
     import duckdb
     import geopandas as gpd
 
@@ -92,7 +92,12 @@ def load_roads(db):
     finally:
         con.close()
     geom = gpd.GeoSeries.from_wkb(df.pop("wkb").map(bytes), crs="EPSG:4326")
-    return gpd.GeoDataFrame(df, geometry=geom)
+    roads = gpd.GeoDataFrame(df, geometry=geom)
+    # an undirected edge (a one-way street's walking-only reverse) lies on the street's own directed edge: it goes first, so it is
+    # drawn under it and the click (and Street View) get the directed edge
+    und = ~roads["driving"] & ~roads["cycling"] & ~roads["highway"].isin(PATH_CLASSES) \
+        & roads["osm_id"].isin(roads.loc[roads["driving"] | roads["cycling"], "osm_id"])
+    return roads.iloc[(~und).to_numpy().argsort(kind="stable")].reset_index(drop=True)
 
 
 def mode_settings(mode, paths=PATHS, theme="osm"):
