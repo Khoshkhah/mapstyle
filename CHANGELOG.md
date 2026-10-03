@@ -6,6 +6,8 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-03
+
 ### Added
 - **The drawing order of the roads is solved** (`render_map(order=True)`, the default; `docs/design/node_levels.md`,
   `mapstyle.node_levels`). Each road gets an interval: where its casing and its fill are drawn. Roads that
