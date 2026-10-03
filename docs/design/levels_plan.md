@@ -209,10 +209,7 @@ Not rule changes: the dashboard's edge counts (pieces are not edges) and a hang 
 
 ## Approach B (a level for each node)
 
-The drawing order that replaces the cutting by default is in `node_levels.md`.
-on Monaco and at your reported places. It is a prototype; nothing in the library uses it. Its result so far: clean at
-seven of the eight places with the overpass crossings only, wrong at `5066…` / `3639…`, and worse with more pairs. See
-that document for the formula, the pair lists and the pictures.
+The drawing order that replaces this cutting by default is described in `node_levels.md`.
 
 ## Decisions for Kaveh
 
