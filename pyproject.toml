@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "roadstyle>=0.10.0",  # the page (band_col, directed_col, tunnel stretches)
+    "roadstyle>=0.12.0",  # the page (casing_level_col / fill_level_col, band_col, directed_col, cap_col)
     "duckdb",             # reads the duckOSM db
     "geopandas",
     "pyyaml",             # styles/*.yaml
