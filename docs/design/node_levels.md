@@ -289,7 +289,7 @@ the size and both lanes of a two-way road are drawn in the same order.
 | same-level crossings | 344 | 86 |
 | minimum given up (proved optimal) | **8** | **3** (0.2 s) |
 
-(The two counts are of different things: 8 directed pairs, 3 road pairs.) Drawn at the eight places the two give
+(The two counts are of different things: 8 directed pairs, 3 road pairs. The input of the prototypes is now deterministic: 7 edge ids have the same end nodes but different geometries in different mode tables, and an arbitrary pick made the road count change between runs; `node_levels.py` now picks the same way as `load_roads`.) Drawn at the eight places the two give
 **identical pictures, pixel for pixel**. So the per-road form is the one to build.
 
 ### Range [−20, 20], and the per-road form alone (Kaveh, 2026-10-02: "let's try −20..20", "run for only one interval per road")
@@ -321,6 +321,28 @@ One interval per road, range [−20, 20], OR-Tools CP-SAT, both runs proved opti
 So with the true crossings there are **3 road pairs** (about 2 visible errors). Not counted in the 3, because the model does not
 cover them: the 105 pairs that share a node and also cross, the 76 that only touch or overlap, and the possible crossings
 (92 more road pairs when they are included), such as `5066803562804960394` / `3639438131486059958`.
+
+### All overpass pairs as hard constraints (Kaveh, 2026-10-02: "put those penalties as constraints and then run it")
+
+One interval per road, range [−20, 20], the true crossings only (561 overpass pairs and 86 same-level crossings), every one of
+them a **hard** constraint, no penalty (`solve_hard`, `--hard` in `scripts/node_levels_opt.py`).
+
+**Result: INFEASIBLE** (0.26 s): no assignment of intervals satisfies all of them. CP-SAT, asked for a conflicting set (an
+unsatisfiable core through assumptions), found **3 conflicts, each of 2 pairs**; releasing one pair of each makes the problem
+feasible. So 3 pairs have to go, the same number as the minimum found with penalties.
+
+| # | The two overpass pairs that cannot both hold |
+|---|---|
+| 1 | pedestrian `5421095854252657624` over primary tunnel `8691687783733863412`, **and** that tunnel over footway tunnel `3278703636467343940` |
+| 2 | pedestrian `5421095854252657624` over primary tunnel `5832769262716690314`, **and** that tunnel over footway tunnel `3278703636467343940` |
+| 3 | footway `1046203032802764183` over steps `4988690792929201909`, **and** footway `4292897746675328858` over steps `2205756913946906067` |
+
+**Why they conflict.** In 1 and 2: pedestrian over tunnel over footway means the pedestrian is wholly above the footway, so
+their intervals must be disjoint; but the pedestrian and the footway tunnel **share a node**, so their intervals must intersect.
+Both cannot hold. It is the case of a path that goes over a tunnel and then comes down to a level below it. In 3 the two
+footways and the two steps are connected crosswise, with the same contradiction. These are the places where a single interval
+for an edge cannot describe the real situation (an edge or its neighbour would have to be above the tunnel in one place and below
+it in another), so cutting the edge, as in Approach A, would be the way out for exactly these few.
 
 ### What pairs the solver was given, and what it was not
 

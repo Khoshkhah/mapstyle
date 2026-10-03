@@ -12,8 +12,9 @@ def edge_table(con, union):
     t = lambda c: f"({c} IS NOT NULL AND lower(CAST({c} AS VARCHAR)) NOT IN ('', 'no', 'false', '0'))"  # noqa: E731
     con.execute(f"""
         CREATE TEMP TABLE e0 AS
-        SELECT edge_id AS eid, any_value(source) AS s, any_value(target) AS t, any_value(layer) AS layer,
-               any_value(bridge) AS bridge, any_value(tunnel) AS tunnel, any_value(geometry) AS g
+        SELECT edge_id AS eid, first(source ORDER BY mode IS NULL, mode, pmode) AS s, first(target ORDER BY mode IS NULL, mode, pmode) AS t,
+               first(layer ORDER BY mode IS NULL, mode, pmode) AS layer, first(bridge ORDER BY mode IS NULL, mode, pmode) AS bridge,
+               first(tunnel ORDER BY mode IS NULL, mode, pmode) AS tunnel, first(geometry ORDER BY mode IS NULL, mode, pmode) AS g
         FROM ({union}) GROUP BY edge_id""")
     con.execute(f"""
         CREATE TEMP TABLE lv AS

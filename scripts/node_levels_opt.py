@@ -144,7 +144,7 @@ def stats(edges, p, violated, pairs, info):
     print("edges by level span:", dict(sorted(span.items())))
 
 
-if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
+if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv and "--hard" not in sys.argv:
     near = "--near" in sys.argv
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 60.0
     edges, pairs = load(sys.argv[1], near)
@@ -264,7 +264,7 @@ def run_intervals(db, near=False, with_same=True, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
+if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv and "--hard" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_intervals(sys.argv[1], near="--near" in sys.argv, with_same="--same" in sys.argv, time_limit=tl)
 
@@ -320,7 +320,7 @@ def run_pure(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
+if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv and "--hard" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_pure(sys.argv[1], tl)
 
@@ -360,7 +360,7 @@ def run_pure_compact(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--compact" in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
+if __name__ == "__main__" and "--compact" in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv and "--hard" not in sys.argv:
     run_pure_compact(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)
 
 
@@ -422,7 +422,7 @@ def run_pure_all(db, time_limit=120.0):
     return edges, pairs, out2, given2
 
 
-if __name__ == "__main__" and "--all" in sys.argv and "--links" not in sys.argv:
+if __name__ == "__main__" and "--all" in sys.argv and "--links" not in sys.argv and "--hard" not in sys.argv:
     run_pure_all(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)
 
 
@@ -463,5 +463,83 @@ def run_links(db, time_limit=60.0):
     return edges, links, lk, out, given
 
 
-if __name__ == "__main__" and "--links" in sys.argv:
+if __name__ == "__main__" and "--links" in sys.argv and "--hard" not in sys.argv:
     run_links(sys.argv[1])
+
+
+def solve_hard(items, pairs, same, time_limit=60.0, workers=8, max_rounds=40):
+    """Kaveh's request (2026-10-02): the overpass pairs and the same-level crossings as HARD constraints, no penalty.
+    Feasibility problem: variables a_e <= b_e in [LO, HI]; edges sharing a node intersect; every overpass (U over L):
+    b_L + 1 <= a_U; every same-level crossing: disjoint in either order. If infeasible, CP-SAT gives a conflicting set of
+    pairs (an unsatisfiable core, via assumptions); one pair of it is released and the problem solved again, until it is
+    feasible. Returns (status of the first solve, [core sizes], [released pairs], intervals or None)."""
+    from ortools.sat.python import cp_model
+    released, cores, first_status = [], [], None
+    for rnd in range(max_rounds):
+        m = cp_model.CpModel()
+        a = {e: m.NewIntVar(LO, HI, "") for e in items}
+        b = {e: m.NewIntVar(LO, HI, "") for e in items}
+        for e in items:
+            m.Add(a[e] <= b[e])
+        for x, y in join_pairs(items):
+            m.Add(a[x] <= b[y])
+            m.Add(a[y] <= b[x])
+        lits, names = [], []
+        gone = set(released)
+        for u, l in pairs:
+            if (u, l) in gone:
+                continue
+            q = m.NewBoolVar("")
+            m.Add(b[l] + 1 <= a[u]).OnlyEnforceIf(q)
+            lits.append(q)
+            names.append(("over", u, l))
+        for x, y in same:
+            if (x, y) in gone:
+                continue
+            q, o = m.NewBoolVar(""), m.NewBoolVar("")
+            m.Add(b[y] + 1 <= a[x]).OnlyEnforceIf([q, o])
+            m.Add(b[x] + 1 <= a[y]).OnlyEnforceIf([q, o.Not()])
+            lits.append(q)
+            names.append(("same", x, y))
+        m.AddAssumptions(lits)
+        sv = cp_model.CpSolver()
+        sv.parameters.max_time_in_seconds = time_limit
+        sv.parameters.num_workers = workers
+        st = sv.Solve(m)
+        if first_status is None:
+            first_status = (sv.StatusName(st), round(sv.WallTime(), 2))
+        if st in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return first_status, cores, released, {e: (sv.Value(a[e]), sv.Value(b[e])) for e in items}
+        core = sv.SufficientAssumptionsForInfeasibility()
+        idx = {lit.Index(): i for i, lit in enumerate(lits)}
+        members = [names[idx[c]] for c in core if c in idx]
+        cores.append(members)
+        if not members:
+            return first_status, cores, released, None
+        kind, u, l = members[0]
+        released.append((u, l))
+    return first_status, cores, released, None
+
+
+def run_hard_roads(db, time_limit=60.0):
+    import node_levels as nl
+    edges, pairs = load(db, near=False)
+    same = load_same(db)
+    lk = link_map(db)
+    roads = {}
+    for e, v in edges.items():
+        roads.setdefault(lk.get(e, e), v)
+    rp = sorted({(lk.get(u, u), lk.get(l, l)) for u, l in pairs if lk.get(u, u) != lk.get(l, l)})
+    rs = sorted({tuple(sorted((lk.get(x, x), lk.get(y, y)))) for x, y in same if lk.get(x, x) != lk.get(y, y)})
+    print(f"roads {len(roads)}, overpass pairs {len(rp)}, same-level crossings {len(rs)}, range [{LO}, {HI}]", flush=True)
+    status, cores, released, out = solve_hard(roads, rp, rs, time_limit)
+    print("all pairs as hard constraints:", status)
+    print("conflicting sets found (sizes):", [len(c) for c in cores])
+    for c in cores:
+        print("  conflict:", c)
+    print("pairs released until feasible:", len(released), released)
+    return roads, rp, rs, status, cores, released, out
+
+
+if __name__ == "__main__" and "--hard" in sys.argv:
+    run_hard_roads(sys.argv[1])
