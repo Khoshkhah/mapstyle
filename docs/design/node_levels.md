@@ -94,6 +94,30 @@ Kaveh, 2026-10-02: "make it as an optimization problem and solve it by a solver 
 initialization". Prototype: `scripts/node_levels_opt.py`, solver OR-Tools CP-SAT (installed outside the repository for
 the test; not a dependency of mapstyle).
 
+### The variables in plain words
+
+Think of **floors**. Every node (a point where edges meet) gets a floor number: 0 is the ground, 1 is above it, −1 is
+below it.
+
+| Name | In plain words |
+|---|---|
+| `p_n` | the floor number of node `n`: what the solver finds |
+| `v_q` | one yes/no for each overpass: "did we give up on it?" (0 is good, 1 is bad) |
+| `w_q`, `o_q` | the same for a crossing at the same level: "given up?" and "which edge is on top?" |
+| `d_e` | how many floors edge `e` climbs between its two ends (0: both ends on the same floor) |
+| `r_n` | how far node `n` is from the floor its tags suggest |
+
+**The rule.** If road U must pass over road L (they cross and share no node), then every node of U must be on a higher
+floor than every node of L; otherwise `v_q = 1`, which costs a lot.
+
+**What the solver wants:** (1) as few overpasses given up as possible; (2) edges flat, few floors climbed, above all on
+long edges; (3) nodes on the floor their tags suggest.
+
+**Example.** A raised path R is joined to a ground path P at node `a`, and R crosses a street G. The street's nodes are
+on floor 0, so R's nodes, `a` included, must be on floor 1. P runs from `a` (floor 1) to its far node (floor 0), so
+**P is the edge that climbs one floor**; R and G stay flat. Drawn: P's casing goes with floor 0 and its fill with
+floor 1, so P merges with the ground roads at its far end and with R at `a`.
+
 ### The formula, exactly as given to the solver
 
 **Sets and data**
