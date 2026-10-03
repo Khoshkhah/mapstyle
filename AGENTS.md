@@ -55,6 +55,9 @@ missing-features case).
   `render_report` + `dashboard.js` (design: `docs/design/dashboard.md`). Private roads and bus lanes
   (`private_edges`): `load_roads`' `access_<mode>`, the page's `access` by mode (`_access`), drawn
   and toggled by `layers.js` (`rsSetAccess`; design: `docs/design/private_and_bus.md`).
+- `node_levels.py` — the drawing order of the roads (`render_map(order=True)`: an interval per road, solved with OR-Tools or a
+  heuristic, then roadstyle's `casing_level_col` / `fill_level_col`; design: `docs/design/node_levels.md`). `levels.py` is the older
+  cutting into pieces (`pieces=True, order=False`).
 - `patterns.py` (landcover texture tiles), `icons/*.svg` (point icons), `style.py` (`load_style`).
 
 ## Docs site, CI, agent files

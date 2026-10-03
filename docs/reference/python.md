@@ -17,10 +17,11 @@ writes the HTML file, `.html` is the page as a string, and in Jupyter it shows i
 | Argument | Default | |
 |---|---|---|
 | `db` | | path of a duckOSM `.duckdb` file |
-| `mode` | `"all"` (`"walking"` with `planner=True`) | which network stands out: `all`, `driving`, `walking`, `cycling` ([guide](../guides/modes.md)) |
+| `mode` | `"all"` | which network stands out: `all`, `driving`, `walking`, `cycling` ([guide](../guides/modes.md)) |
 | `layers` | `True` | the base-map layers: `True` = all, a list of names, or `False` = roads only ([guide](../guides/base-map.md)) |
 | `paths` | `"google"` | how paths look: `google`, `osm`, `komoot`, `cyclosm` |
 | `theme` | `"osm"` | the whole map's colours: `osm`, `google`, `grey`, or a file of yours ([guide](../guides/themes.md)) |
+| `order` | `True` | draw the roads in a solved order: no ring at a joint of different levels, an overpass over its road (`pip install mapstyle[solver]` for the exact solution; not with `tiles=True`) |
 | `planner` | `False` | add the [route planner](../guides/planner.md) |
 | `dashboard` | `False` | make it a [dashboard](../guides/dashboard.md) |
 | `interaction` | `None` | how a layer opens: `{"crossings": {"clickable": True, "tooltip": True, "popup": False}}` |

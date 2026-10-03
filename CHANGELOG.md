@@ -6,7 +6,18 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **The drawing order of the roads is solved** (`render_map(order=True)`, the default; `docs/design/node_levels.md`,
+  `mapstyle.node_levels`). Each road gets an interval: where its casing and its fill are drawn. Roads that
+  share a node have intersecting intervals (no ring at a joint), and a road that passes over another without
+  a shared node is drawn after it. Solved exactly with OR-Tools when installed (`pip install mapstyle[solver]`),
+  else by a heuristic; the county of Stockholm takes 11 s. Needs a roadstyle with `casing_level_col` /
+  `fill_level_col`. `order=False` gives roadstyle's bands; `tiles=True` is not supported yet.
+- The planner: labelled Start / End markers, their positions, swap, a panel in cards; its default look is `all`.
+
 ### Changed
+- A one-way street's walking-only reverse edge comes before the street's own edge in `load_roads`, so a click, Street View and the planner get the directed edge.
+- (Older, now opt-in with `pieces=True, order=False`.)
 - **A road with a level is drawn at ground level except where it passes over or under a road**
   (`docs/design/levels_plan.md`). A road with a `layer` tag and no bridge tag, and a tunnel, is cut for
   drawing into ground pieces and the stretch that really crosses another road (lines cross, no
