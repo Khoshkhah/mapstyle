@@ -277,9 +277,20 @@ direction". So the unit is the **link, which is one directed edge**: each direct
 gets its own interval. (Lane level would be a separate interval for each lane inside a link; that is not done.) All the
 runs in this document are at this level: 12,941 intervals in Monaco, and **8 overpass pairs given up** at the minimum.
 
-I first misread "link" as a road with both of its directions. An experiment under that wrong reading (merging the two
-directions, `link_map` and `run_links` in `scripts/node_levels_opt.py`: 6,594 intervals, 561 overpass pairs, 86 same-level
-crossings, 3 given up) is **not used**.
+**An option Kaveh allowed (2026-10-02: "if it helps you, you can set one for each road no matter the directions"):** one
+interval for each **road**, with both directions sharing it (`link_map` and `run_links` in `scripts/node_levels_opt.py`:
+the directed edges with the same two end nodes and the same line, reversed, form one road). It helps: the problem is half
+the size and both lanes of a two-way road are drawn in the same order.
+
+| Monaco | one interval per directed edge | one interval per road |
+|---|---|---|
+| items that get an interval | 12,941 | **6,594** |
+| overpass pairs (different tags) | 1,882 | 561 |
+| same-level crossings | 344 | 86 |
+| minimum given up (proved optimal) | **8** | **3** (0.2 s) |
+
+(The two counts are of different things: 8 directed pairs, 3 road pairs.) Drawn at the eight places the two give
+**identical pictures, pixel for pixel**. So the per-road form is the one to build.
 
 ### What pairs the solver was given, and what it was not
 
