@@ -384,7 +384,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     e.g. ``{"landcover": {"clickable": True}}``. ``planner=True`` adds the route planner
     (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
-    (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
+    (all, driving, walking, cycling); default all (the planner too: in the walking look a road's two directions are one line, so only one can be clicked).
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
     (docs/design/themes.md). ``order``: give each road the position in the drawing order of its casing and of its fill
     (``mapstyle.node_levels``, docs/design/node_levels.md; roadstyle's ``casing_level_col`` / ``fill_level_col``), so that connected
@@ -395,7 +395,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 
-    mode = mode or ("walking" if planner else "all")
+    mode = mode or "all"
     if planner and kwargs.get("tiles"):
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
     if planner and dashboard:
@@ -480,7 +480,7 @@ def main(argv=None):
     ap.add_argument("db", help="a duckOSM .duckdb")
     ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
     ap.add_argument("--mode", choices=LOOKS,
-                    help="which network stands out (default: all, walking with --planner)")
+                    help="which network stands out (default: all)")
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
     ap.add_argument("--paths", default=PATHS, choices=tuple(load_style("paths")),
                     help=f"how walking / cycling paths look (default: {PATHS})")
@@ -495,7 +495,7 @@ def main(argv=None):
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
-    mode = a.mode or ("walking" if a.planner else "all")
+    mode = a.mode or "all"
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
     render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,

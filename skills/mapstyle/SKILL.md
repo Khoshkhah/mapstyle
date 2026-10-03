@@ -36,7 +36,7 @@ building: it needs the network.
 ```bash
 mapstyle monaco.duckdb                          # -> monaco_all.html
 mapstyle monaco.duckdb --mode walking --paths komoot -o walk.html
-mapstyle monaco.duckdb --planner                # route planner (default mode: walking)
+mapstyle monaco.duckdb --planner                # route planner (default mode: all)
 mapstyle monaco.duckdb --dashboard              # side panel: filters, colour by mode
 mapstyle region.duckdb --tiles                  # big areas: roads as vector tiles in the page
 ```

@@ -39,7 +39,7 @@ ms.render_map(db, planner=True)                 # the full map + the planner pan
 ms.render_map(db, mode="cycling", planner=True) # the cycling look
 ```
 ```bash
-mapstyle monaco.duckdb --planner                # -> monaco_walking.html
+mapstyle monaco.duckdb --planner                # -> monaco_planner.html
 ```
 
 The planner page is the mapstyle page (mode style, feature layers, every roadstyle keyword) plus

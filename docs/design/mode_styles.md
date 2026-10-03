@@ -18,7 +18,7 @@
   route recolours a solid line completely, a dotted one only in its dots.
 - Fixed on the way: a class the base palette lacks (pedestrian) inherited footway's dash and drew
   as broken grey blocks; see-through car roads showed their dark casing (now mixed with white).
-- The planner's default stays `walking` (a walking leg must show).
+- The planner's default is `all` (was `walking`, 2026-10-02): in the walking look every road is one centred line, so a two-way road's two directions overlap and only one can be clicked. The route is drawn by the planner over any look, so a walking leg shows.
 - **Order at junctions** (Kaveh, 2026-09-30): the walking look no longer lifts every path above
   every road (`z_order` 9.5): that cut through junctions, and a path's halo vanished under the road
   it crossed. Instead, by duckOSM's `walk_type`, a `crossing` (the zebra) draws entirely over the
