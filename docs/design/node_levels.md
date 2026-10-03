@@ -174,6 +174,31 @@ pair in P that is satisfied, φ_L < κ_U, so the intervals are disjoint and U is
 
 **Solver settings.** OR-Tools CP-SAT, 8 workers, a time limit of 60 to 150 s. It does not prove optimality in that time.
 
+### The same problem written with an interval for each edge
+
+Kaveh's first formulation has an interval [c_e, f_e] for each edge (c_e: the time of the casing, f_e: the time of the
+fill, c_e ≤ f_e). The solver was given the form with a level for each **node** instead, because the two are the same
+problem:
+
+- All edges at a node must pairwise intersect. Intervals have this property: a family of intervals that pairwise
+  intersect has a **common point**. That point is the node's level p_n, so p_n lies inside the interval of every edge
+  at the node.
+- The smallest intervals that contain the levels of their two nodes are c_e = min(p_(s_e), p_(t_e)) and
+  f_e = max(p_(s_e), p_(t_e)). A smaller interval never breaks an intersection at a node and never creates an
+  intersection with a road it must be disjoint from, so nothing is lost by taking the smallest.
+
+With the interval variables written out, the model is:
+
+```
+variables     p_n, c_e, f_e (integers),  v_q ∈ {0,1}
+constraints   c_e ≤ p_(s_e) ≤ f_e   and   c_e ≤ p_(t_e) ≤ f_e          for every edge e
+              v_q = 0  ⇒  f_L + 1 ≤ c_U                                  for every overpass q = (U, L)
+objective     minimize  W1 · Σ_q v_q  +  W2 · Σ_e cost_e · (f_e − c_e)  +  W3 · Σ_n |p_n − pref_n|
+```
+
+Its answer is the same as the node form's, because f_e − c_e = d_e at the best choice. An interval variable that is
+free (larger than the span of the node levels) would only be useful to push two edges apart on purpose.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
