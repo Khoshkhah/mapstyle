@@ -108,7 +108,6 @@ the penalty is only on overpasses**." This is that model, with nothing else (`so
 a_e, b_e  ∈ {−10, …, 10},  a_e ≤ b_e     for every edge e    (a_e: the time of the casing, b_e: the time of the fill;
                                                                 the casing is at 2·a_e and the fill at 2·b_e + 1)
 v_q       ∈ {0, 1}                        for every overpass pair q = (U over L)   (1 = this pair is given up)
-w_q, o_q  ∈ {0, 1}                        for every same-level crossing q = {x, y}  (w: given up; o: x is before y)
 ```
 
 **Constraints**
@@ -116,16 +115,14 @@ w_q, o_q  ∈ {0, 1}                        for every same-level crossing q = {x
 ```
 (1) every two edges x, y that share a node (hard):     a_x ≤ b_y   and   a_y ≤ b_x          [62,626 pairs in Monaco]
 (2) every overpass pair q = (U over L), unless given up: v_q = 0  ⇒  b_L + 1 ≤ a_U           [1,882 pairs in Monaco]
-(3) every same-level crossing q = {x, y}, unless given up:  w_q = 0  ⇒  ( o_q = 1 ⇒ b_y + 1 ≤ a_x )  and  ( o_q = 0 ⇒ b_x + 1 ≤ a_y )
-                                                                                         [344 pairs in Monaco; either edge may be first]
 ```
 
 An overpass pair is two edges whose lines cross, with no shared node and different level tags; U is the one with the higher tag.
-A same-level crossing is two edges whose lines cross, with no shared node and the **same** tag. Every other pair is free.
-(The first run of the model, 8 given up, had only (1) and (2); the run with (3) added gave 8 again. All the road-level runs, the 3
-and the hard-constraint run, have (3).)
+Every other pair is free. **Same-level crossings (two crossing edges with the same tag) are not in the model**: Kaveh, 2026-10-02:
+"I told you only overpass pair". I had added them on my own, with "either edge may be first"; I removed them again and re-ran:
+the results are the same (8, 3, and the same 3 conflicts), see below.
 
-**Objective:** minimize  `Σ_q v_q + Σ_q w_q`  (the number of overpasses and same-level crossings given up).
+**Objective:** minimize  `Σ_q v_q`  (the number of overpasses given up).
 
 **Start (a hint only, not a bound):** a_e = min(p_s, p_t), b_e = max(p_s, p_t) from the heuristic's node levels; v_q = 1 for the
 pairs the heuristic dropped.
@@ -310,7 +307,7 @@ One interval per road, range [−20, 20], OR-Tools CP-SAT, both runs proved opti
 
 | pairs given to the solver | roads | overpass pairs | same-level crossings | given up (minimum) | time | distinct numbers used |
 |---|---|---|---|---|---|---|
-| the true crossings only | 6,594 | 561 | 86 | **3** | 0.2 s | 9 |
+| the overpass pairs only (561; the 86 same-level crossings are not in the model, the result is 3 with or without them) | 6,594 | 561 | not used | **3** | 0.2 s | 9 |
 | the true crossings + the possible crossings (drawn widths overlap) | 6,594 | 1,719 | 86 | **92** (5.1% of 1,805) | 0.7 s | 17 |
 
 ### The 3 road pairs that must be given up (one interval per road, range [−20, 20], true crossings)
@@ -329,7 +326,7 @@ cover them: the 105 pairs that share a node and also cross, the 76 that only tou
 
 ### All overpass pairs as hard constraints (Kaveh, 2026-10-02: "put those penalties as constraints and then run it")
 
-One interval per road, range [−20, 20], the true crossings only (561 overpass pairs and 86 same-level crossings), every one of
+One interval per road, range [−20, 20], the 561 overpass pairs only, every one of
 them a **hard** constraint, no penalty (`solve_hard`, `--hard` in `scripts/node_levels_opt.py`).
 
 **Result: INFEASIBLE** (0.26 s): no assignment of intervals satisfies all of them. CP-SAT, asked for a conflicting set (an
