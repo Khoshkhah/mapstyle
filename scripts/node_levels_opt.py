@@ -403,6 +403,8 @@ def solve_pure_all(edges, pairs, same, time_limit=120.0, workers=8, init=None, i
     status = sv.Solve(m)
     info = {"status": sv.StatusName(status), "objective": sv.ObjectiveValue(), "bound": sv.BestObjectiveBound(),
             "seconds": round(sv.WallTime(), 1)}
+    allq = list(pairs) + [tuple(x) for x in same]
+    info["violated"] = [allq[i] for i, q in enumerate(v) if sv.Value(q)] if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) else []
     return ({e: (sv.Value(a[e]), sv.Value(b[e])) for e in edges}, int(round(sum(sv.Value(q) for q in v))), info)
 
 

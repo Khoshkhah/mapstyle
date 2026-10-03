@@ -305,6 +305,20 @@ One interval per road, range [−20, 20], OR-Tools CP-SAT, both runs proved opti
 | the true crossings only | 6,594 | 561 | 86 | **3** | 0.2 s | 9 |
 | the true crossings + the possible crossings (drawn widths overlap) | 6,594 | 1,719 | 86 | **92** (5.1% of 1,805) | 0.7 s | 17 |
 
+### The 3 road pairs that must be given up (one interval per road, range [−20, 20], true crossings)
+
+| # | Place | Upper road over lower road | What is drawn |
+|---|---|---|---|
+| 1 | 7.41948, 43.73827 (a station) | footway `4292897746675328858` (level 0) over steps tunnel `2205756913946906067` (−2) | nothing wrong is visible |
+| 2 | 7.41786, 43.73362 (Allée …) | pedestrian `5421095854252657624` (0) over primary tunnel `5832769262716690314` (−2) | **wrong**: the orange tunnel is drawn over the pedestrian band |
+| 3 | 7.41778, 43.73354 | primary tunnel `8691687783733863412` (−2) over footway tunnel `3278703636467343940` (−3) | the orange tunnel overlaps the band beside it; the footway tunnel itself is not visible |
+
+![three](node_levels/three.jpg)
+
+So with the true crossings there are **3 road pairs** (about 2 visible errors). Not counted in the 3, because the model does not
+cover them: the 105 pairs that share a node and also cross, the 76 that only touch or overlap, and the possible crossings
+(92 more road pairs when they are included), such as `5066803562804960394` / `3639438131486059958`.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
