@@ -144,7 +144,7 @@ def stats(edges, p, violated, pairs, info):
     print("edges by level span:", dict(sorted(span.items())))
 
 
-if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
+if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
     near = "--near" in sys.argv
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 60.0
     edges, pairs = load(sys.argv[1], near)
@@ -262,7 +262,7 @@ def run_intervals(db, near=False, with_same=True, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
+if __name__ == "__main__" and "--intervals" in sys.argv and "--pure" not in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_intervals(sys.argv[1], near="--near" in sys.argv, with_same="--same" in sys.argv, time_limit=tl)
 
@@ -318,7 +318,7 @@ def run_pure(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv:
+if __name__ == "__main__" and "--pure" in sys.argv and "--compact" not in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
     run_pure(sys.argv[1], tl)
 
@@ -358,7 +358,7 @@ def run_pure_compact(db, time_limit=120.0):
     return edges, pairs, out, violated
 
 
-if __name__ == "__main__" and "--compact" in sys.argv and "--all" not in sys.argv:
+if __name__ == "__main__" and "--compact" in sys.argv and "--all" not in sys.argv and "--links" not in sys.argv:
     run_pure_compact(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)
 
 
@@ -418,5 +418,46 @@ def run_pure_all(db, time_limit=120.0):
     return edges, pairs, out2, given2
 
 
-if __name__ == "__main__" and "--all" in sys.argv:
+if __name__ == "__main__" and "--all" in sys.argv and "--links" not in sys.argv:
     run_pure_all(sys.argv[1], float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0)
+
+
+def link_map(db):
+    """``{eid: link id}``: a link is a road segment with both of its directions. The two directed edges of a two-way road
+    have the same two end nodes and the same line (reversed); the link id is the smallest edge id of the group."""
+    import duckdb
+
+    import node_levels as nl
+    from mapstyle.map import _roads_union
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        nl.edge_table(con, _roads_union(con, db))
+        rows = con.execute("""
+            SELECT CAST(a.eid AS VARCHAR), CAST(min(o.eid) AS VARCHAR)
+            FROM lv a JOIN lv o ON a.s IN (o.s, o.t) AND a.t IN (o.s, o.t) AND ST_Equals(a.g, o.g)
+            GROUP BY a.eid""").fetchall()
+    finally:
+        con.close()
+    return dict(rows)
+
+
+def run_links(db, time_limit=60.0):
+    import node_levels as nl
+    edges, pairs = load(db, near=False)
+    same = load_same(db)
+    lk = link_map(db)
+    links = {}
+    for e, v in edges.items():
+        links.setdefault(lk.get(e, e), v)
+    lpairs = sorted({(lk.get(u, u), lk.get(l, l)) for u, l in pairs if lk.get(u, u) != lk.get(l, l)})
+    lsame = sorted({tuple(sorted((lk.get(x, x), lk.get(y, y)))) for x, y in same if lk.get(x, x) != lk.get(y, y)})
+    print(f"directed edges {len(edges)} -> links {len(links)}; overpass pairs {len(pairs)} -> {len(lpairs)}; "
+          f"same-level crossings {len(same)} -> {len(lsame)}", flush=True)
+    p0, left0, dropped0 = nl.solve({e: v[:3] for e, v in links.items()}, lpairs)
+    out, given, info = solve_pure_all(links, lpairs, lsame, time_limit, init=p0)
+    print("link level: given up", given, info)
+    return edges, links, lk, out, given
+
+
+if __name__ == "__main__" and "--links" in sys.argv:
+    run_links(sys.argv[1])

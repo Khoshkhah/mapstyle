@@ -270,6 +270,27 @@ objective     minimize  W1 · Σ_q v_q  +  W2 · Σ_e cost_e · (f_e − c_e)  +
 Its answer is the same as the node form's **only if the numbers are free**. In my solver run they were bounded to −4 … 4
 and tied to the node levels, which Kaveh rejected: the model above ("Kaveh's formulation") has free intervals.
 
+### Link level, not lane level
+
+Kaveh, 2026-10-02: "this interval assignment is at the link level, not the lane level." The runs above gave one interval to each
+**directed edge**, so the two lanes of a two-way road could get different intervals. One interval belongs to a **link**: a road
+segment with both of its directions. Both lanes use it.
+
+A link is found as the group of directed edges with the same two end nodes and the same line (reversed): `link_map` in
+`scripts/node_levels_opt.py`; its id is the smallest edge id of the group. The model is the same, with links instead of edges:
+one interval `[a, b]` for each link, the same constraints between links (shared node: intersect; overpass: disjoint, the
+upper later), a pair of links is an overpass pair if any of their edges cross.
+
+| Monaco | directed edges (lanes) | links |
+|---|---|---|
+| items that get an interval | 12,941 | **6,594** |
+| overpass pairs (different tags) | 1,882 | **561** |
+| same-level crossings | 344 | **86** |
+| minimum number of pairs given up (proved) | 8 | **3** (OPTIMAL, 0.2 s) |
+
+The answer for a link is copied to both of its edges, so a two-way road has the same casing and fill order in both
+lanes. Roadstyle needs no change for that: it draws each lane from its own row, which carries the link's interval.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
