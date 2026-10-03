@@ -29,6 +29,16 @@ def run(db, rounds=6):
     geom = {str(e): wkb.loads(bytes(g)) for e, g in con.execute("SELECT eid, ST_AsWKB(g) FROM lv").fetchall()}
     hw = {str(e): h for e, h in con.execute("SELECT edge_id, first(highway) FROM (" + _roads_union(con, db) + ") GROUP BY edge_id").fetchall()}
     con.close()
+    import os
+    from shapely.geometry import Point
+    eps = float(os.environ.get("NL_EPS", "0.3"))        # a crossing this close (m) to an end node of either road is a junction missing a node, not an overpass
+    def near_node(u, l):
+        x = geom[u].intersection(geom[l])
+        pts = [] if x.is_empty else (list(x.geoms) if hasattr(x, "geoms") else [x])
+        return any(min(Point(gg.coords[0]).distance(q), Point(gg.coords[-1]).distance(q)) * 95000 < eps for gg in (geom[u], geom[l]) for q in pts)
+    dropped = [(u, l) for u, l in rp if near_node(u, l)]
+    rp = [(u, l) for u, l in rp if (u, l) not in set(dropped)]
+    print(f"pairs whose crossing is within {eps} m of an end node: {len(dropped)} removed, {len(rp)} kept", flush=True)
     items = dict(roads)
     pairs_now = list(rp)
     g = {r: geom[r] for r in roads}

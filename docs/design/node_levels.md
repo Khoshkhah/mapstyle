@@ -407,6 +407,36 @@ it does not cross the other road's **line**, and the cut positions must follow t
 So with the cutting, the problem has **1 conflict left in Monaco instead of 3**: a 5 m footway crossing the top of a staircase inside a
 station entrance, where nothing wrong is visible on the map. The prototype adds 3 pieces to the 6,594 roads.
 
+### A way to solve all 3 failures (Kaveh, 2026-10-02: "find a good way for solving all 3 failures")
+
+Two rules, tested together in the prototype (`NL_EPS=0.3 scripts/node_levels_cut.py`), one interval per road, range [−20, 20], the
+overpass pairs as **hard** constraints:
+
+**Rule N: a crossing within ε of an end node of either road is not an overpass.** The roads touch there (a junction that is
+missing a node in the data, or a portal), so there is nothing to put one above the other. ε = 0.3 m. Both pairs of conflict 3 have
+their crossing 0.02 m from a node. In Monaco it removes **22 of 561** overpass road pairs (3.9%; 28 at 0.5 m, 60 at 1 m). The
+22 are mostly ground roads, footways and steps crossing a tunnel next to its mouth or a staircase next to its top, one footway on
+level 3 over a primary road, and one footway on level 1 over a footway on level 0.
+
+**Rule C: cut the edge that changes level along itself** (Approach A's cutting), only when a conflict is left: the lower road of the
+conflict that is joined to a road whose level differs by 2 or more is cut at its crossing with the upper road; the cut leaves a
+piece next to the node even when it is short, as long as it does not cross the upper road's line.
+
+| Step | Overpass pairs | Result |
+|---|---|---|
+| all pairs, hard | 561 | INFEASIBLE, 3 conflicts |
+| after rule N (ε = 0.3 m) | 539 | INFEASIBLE, 2 conflicts (the footway under the tunnels) |
+| after rule C: the footway `3278703636467343940` cut into 3 pieces at 0.3 m and 15.7 m | 539 | **OPTIMAL: every overpass pair satisfied, 0 given up** (0.6 s), 6,596 items |
+
+So with the two rules all three failures are solved in Monaco: no pair is given up. Rule N removes the staircase conflict, rule C
+the footway conflict (only 1 road cut, 2 more pieces).
+
+**What this costs, and what is not tested:**
+- Rule N throws 22 pairs away; at a tunnel mouth the road next to it is then free relative to the tunnel. I looked at the kinds
+  of pairs, not at each place on the map.
+- Rule C needs pieces (extra rows for roadstyle) for the few cut roads, as in Approach A; here 1 road in Monaco.
+- Both are **rule changes** and need Kaveh's permission. Not built into the library; not drawn yet.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
