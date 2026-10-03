@@ -292,6 +292,19 @@ the size and both lanes of a two-way road are drawn in the same order.
 (The two counts are of different things: 8 directed pairs, 3 road pairs.) Drawn at the eight places the two give
 **identical pictures, pixel for pixel**. So the per-road form is the one to build.
 
+### Range [−20, 20], and the per-road form alone (Kaveh, 2026-10-02: "let's try −20..20", "run for only one interval per road")
+
+The range is set by the environment variable `NL_RANGE` (default 10). With [−20, 20] the minimum number of pairs given up is
+**the same as with [−10, 10] in every case** (8 directed pairs, 3 road pairs, 324 with all the pairs), so the range is not
+what limits the solution; a wider range only gives the solver more distinct numbers.
+
+One interval per road, range [−20, 20], OR-Tools CP-SAT, both runs proved optimal:
+
+| pairs given to the solver | roads | overpass pairs | same-level crossings | given up (minimum) | time | distinct numbers used |
+|---|---|---|---|---|---|---|
+| the true crossings only | 6,594 | 561 | 86 | **3** | 0.2 s | 9 |
+| the true crossings + the possible crossings (drawn widths overlap) | 6,594 | 1,719 | 86 | **92** (5.1% of 1,805) | 0.7 s | 17 |
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact

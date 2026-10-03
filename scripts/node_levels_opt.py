@@ -166,7 +166,9 @@ if __name__ == "__main__" and "--intervals" not in sys.argv and "--pure" not in 
 #   other pairs                            : free
 # The node levels of the heuristic are only the starting hint.
 # ---------------------------------------------------------------------------------------------------------------
-LO, HI = -10, 10       # the ends are integers in [LO, HI]
+import os
+R_ = int(os.environ.get("NL_RANGE", "10"))
+LO, HI = -R_, R_       # the ends are integers in [LO, HI]  (environment NL_RANGE, default 10)
 GROUND = 0             # the value the tags suggest for level 0
 
 
