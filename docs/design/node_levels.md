@@ -346,6 +346,48 @@ footways and the two steps are connected crosswise, with the same contradiction.
 for an edge cannot describe the real situation (an edge or its neighbour would have to be above the tunnel in one place and below
 it in another), so cutting the edge, as in Approach A, would be the way out for exactly these few.
 
+### The root of the 3 conflicts
+
+Kaveh, 2026-10-02: "find the root of the issue for those 3 failures." The data of each conflict (`scratchpad/rootcause.py`,
+queries on the Monaco db):
+
+**Conflicts 1 and 2** (the same footway, two tunnels)
+
+| Road | OSM way | Tags | Level |
+|---|---|---|---|
+| P: pedestrian street "Allée Lazare Sauvaigo", 67 m | 733196322 | none | 0 |
+| T: primary "Tunnel Dorsale" (two edges, 248 m and 211 m) | 166643410, 120114108 | tunnel, layer −2 | −2 |
+| F: footway, 100 m | 400398287 | tunnel, layer −3 | −3 |
+
+P and F **share the node 6865960165**: the footway F, tagged as a tunnel at layer −3 along its whole length, starts at a node
+of the ground-level street P (an entrance). T crosses P (P over T) and crosses F (T over F). So P > T > F, yet P and F share a
+node and must intersect.
+
+**Conflict 3** (two staircases that cross each other, near 7.41948, 43.73827)
+
+| Road | OSM way | Level | Connected to |
+|---|---|---|---|
+| W1: footway, 5 m | −156780336 | 0 | steps S2 at node 1690189846 |
+| S2: steps, 15 m | 156780336 | −2 (tunnel) | W1 |
+| W2: footway, 5 m | −1416847303 | 0 | steps S1 at node 13019850386 |
+| S1: steps, 14 m | 1416847303 | −2 (tunnel) | W2 |
+
+W1 passes over S1, and W2 passes over S2, but W1 is connected to S2 and W2 to S1.
+
+**The root, the same in all three:** an edge (steps, or a footway in a tunnel) **changes level along itself**. It is tagged with
+one level (−2, −3), but at one end node it is joined to ground-level roads, so there it is at level 0. A single interval has to
+reach from that ground node down to its tag, so it overlaps every level in between:
+
+- in 1 and 2 the footway F reaches from 0 down to −3, and the tunnel T at −2 lies in between and crosses both P and F: F cannot
+  be both "connected to P" and "under T";
+- in 3 each staircase starts at the ground (joined to its footway) and goes down, and the two cross: W1 > S1 with S1 joined to
+  W2, and W2 > S2 with S2 joined to W1, which asks W1 above W2 and W2 above W1.
+
+So it is not a bug of the solver or of the pair list. It is a **property of the data and of the one-interval-per-edge rule**: an
+edge that goes from level 0 to level −3 (or −2) is, near its ground end, at ground level and, under the tunnel, deep. The
+options are the ones already known: cut such an edge into pieces for drawing (Approach A), split it in the data (duckOSM could
+cut a way where it leaves the ground), or accept the 3 in Monaco as wrong.
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact
