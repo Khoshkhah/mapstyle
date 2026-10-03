@@ -1,6 +1,7 @@
 # Dashboard panel: a shorter, grouped Filter
 
-**Status:** proposal, waiting for Kaveh's sign-off (2026-10-02). Nothing is coded.
+**Status:** approved 2026-10-02 (Kaveh: groups by meaning: Nature and water, Buildings and places, Transport; the legend is dropped when
+colouring by class) and implemented in `dashboard.js`. The cards, mode chips and compact summary were added in the same pass.
 roadstyle and duckOSM are not changed: the work is in `dashboard.js` (and its CSS), over roadstyle's report markup.
 
 ## What is wrong now (Monaco, 18 layers)

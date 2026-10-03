@@ -13,6 +13,7 @@ All notable changes to **mapstyle** are documented here. The format is based on
   a shared node is drawn after it. Solved exactly with OR-Tools when installed (`pip install mapstyle[solver]`),
   else by a heuristic; the county of Stockholm takes 11 s. Needs a roadstyle with `casing_level_col` /
   `fill_level_col`. `order=False` gives roadstyle's bands; `tiles=True` is not supported yet.
+- The dashboard panel: Filter in cards (Roads; the layers grouped by meaning, with all / none), one row per layer with a ⚙ for its switches and kinds, the legend dropped when colouring by class (Road type is the legend), modes as chips.
 - The planner: labelled Start / End markers, their positions, swap, a panel in cards; its default look is `all`.
 
 ### Changed

@@ -21,7 +21,7 @@ async def main(path):
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         await pg.goto("file://" + os.path.abspath(path))
-        await pg.wait_for_function("window.rsSetKinds && document.querySelector('.ms-layer')", timeout=600000)
+        await pg.wait_for_function("window.rsSetKinds && document.querySelector('.ms-set')", timeout=600000)
         ev = pg.evaluate
         idle = "() => new Promise(r => { map.once('idle', r); map.triggerRepaint(); })"
         ov = await ev("() => Object.fromEntries(RS_OVERLAYS.map(o => [o.label, o.source]))")
