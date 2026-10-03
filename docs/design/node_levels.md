@@ -296,7 +296,10 @@ the size and both lanes of a two-way road are drawn in the same order.
 
 The range is set by the environment variable `NL_RANGE` (default 10). With [−20, 20] the minimum number of pairs given up is
 **the same as with [−10, 10] in every case** (8 directed pairs, 3 road pairs, 324 with all the pairs), so the range is not
-what limits the solution; a wider range only gives the solver more distinct numbers.
+what limits the solution; a wider range only gives the solver more distinct numbers. Kaveh then asked for [−100, 100]: the same
+minimum again in every case (8, 3, 92 road pairs with the possible crossings, 324), each proved optimal in about a second;
+10 to 21 distinct numbers are used. (The road count was 6,594 in one run and 6,591 in another, 561 and 559 overpass pairs: the
+grouping query is not fully deterministic; I have not traced why. It did not change any result.)
 
 One interval per road, range [−20, 20], OR-Tools CP-SAT, both runs proved optimal:
 
