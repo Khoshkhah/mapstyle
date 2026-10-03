@@ -24,6 +24,47 @@ segment are one road.
   the lower road, with its own casing.
 - Same-level crossings are not in the model.
 
+## The optimization problem
+
+**Data.** `R` = the roads in the problem (the roads near an overpass). `J` = the pairs of roads in `R` that share an end
+node. `P` = the overpass pairs `(u, l)`: `u` is the upper road, `l` the lower one, both in `R`. `B` = the roads in `R` that
+touch a road outside `R`. `LO = -20`, `HI = 20`.
+
+**Variables.**
+
+```
+a[r], b[r]   integers in [LO, HI], for every road r in R      casing position, fill position
+q[p]         0 or 1, for every overpass pair p in P           1 = the pair is given up
+```
+
+**Constraints.**
+
+```
+a[r] <= b[r]                          for every r in R         the casing is not after the fill
+a[x] <= b[y]  and  a[y] <= b[x]       for every (x, y) in J    roads that share a node: intervals intersect
+a[r] <= 0 <= b[r]                     for every r in B         a border road contains 0 (the roads outside are [0, 0])
+b[l] + 1 <= a[u]   if q[(u, l)] = 0   for every (u, l) in P    the upper road starts after the lower one has ended
+```
+
+**Objective, step 1:** minimise the number of overpass pairs given up.
+
+```
+minimise   sum over p in P of q[p]
+```
+
+**Objective, step 2 (the intervals as short as possible, so few positions are used).** With `Q` the optimum of step 1:
+
+```
+sum over p of q[p] <= Q
+minimise   sum over r in R of ( b[r] - a[r] )
+```
+
+The roads outside `R` are `[0, 0]`. A pair given up (`q = 1`) is then looked at by the two fixes below.
+
+The solver is OR-Tools CP-SAT, started from the heuristic's intervals (`AddHint`), 8 workers, 60 s per problem. The
+heuristic gives each node a level so that every node of an upper road is above every node of the lower road it crosses
+(pairs inside a cycle are dropped), then each road gets `[min, max]` of the levels of its two end nodes.
+
 ## How it is solved
 
 1. **Candidates:** a grid on the roads' boxes, then the exact test (`ST_Crosses`), give the overpass pairs.
