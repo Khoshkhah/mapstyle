@@ -1,9 +1,10 @@
 # Approach B: a level for each node (no cutting)
 
-**Status:** proposal and **prototype only**, for Kaveh's decision. Nothing in the library uses it. It is the second
-approach next to the cutting of `levels_plan.md` (Approach A). Idea and wording: Kaveh, 2026-10-02 ("assign an interval
-to each edge ... the begin of the interval is the time for drawing the casing of the edge and the end of the interval
-is the time of filling the casing with the edge colour").
+**Status: built (2026-10-03), on branch `node-levels`.** `render_map(order=True)` is the default; the library module is
+`src/mapstyle/node_levels.py`, drawn through roadstyle's `casing_level_col` / `fill_level_col` (roadstyle branch
+`level-columns`). The sections below are the working notes that led to it; "Implementation plan" at the end says what was
+built. Idea and wording: Kaveh, 2026-10-02 ("assign an interval to each edge ... the begin of the interval is the time
+for drawing the casing of the edge and the end of the interval is the time of filling the casing with the edge colour").
 
 ## The idea
 
@@ -591,52 +592,39 @@ these are the places where this model gives a wrong picture.
    nodes; for an edge that touches other roads without a shared node that can show.
 5. **The tunnel and bridge looks** are not done in the prototype.
 
-## Implementation plan, if Approach B is built (Kaveh chose it on 2026-10-02: "go for my idea")
+## Implementation: what was built (Kaveh chose Approach B on 2026-10-02: "go for my idea", then "go ahead")
 
-Nothing below is built yet. It needs Kaveh's yes, point by point, before any code.
+All five proposals of the plan were taken as yes: OR-Tools optional (`pip install mapstyle[solver]`, heuristic without it),
+Approach A dropped from the default (kept on `levels-pieces`; `render_map(pieces=True, order=False)`), tunnel looks follow
+the levels, bridge decks stay as today, the known gaps accepted for the first version. Same-level crossings are **not** in
+the model (Kaveh: only overpass pairs).
 
-**1. roadstyle (a new feature, asked for by Kaveh)**
-- Two new columns, `casing_level_col` and `fill_level_col` (integers; empty = today's band). An edge's casing is drawn
-  in its casing level and its fill in its fill level.
-- One casing layer and one fill layer for each level that occurs (about 5 in Monaco), in level order; the tunnel look
-  (dashes, faded fill, underlay) and the dashed classes follow the levels; the bridge deck look stays as today.
-- `cap_col` and the stretch-related changes of Approach A are not needed; the tunnel-look-in-any-band and underlay work
-  is kept.
+**roadstyle** (branch `level-columns`, `docs/design/level_columns.md`): `casing_level_col`, `fill_level_col`; one casing and
+one fill layer per position, in order; the tunnel look and dashed classes follow the levels. `tiles=True` with level columns
+raises; mapstyle logs a warning and keeps roadstyle's bands.
 
-**2. mapstyle**
-- `levels.py` (the cutting) is replaced by node levels: (a) the candidate pairs (overpass crossings; the same-level
-  crossings as "either on top"), (b) the levels, (c) the two columns `_cl`, `_fl` for roadstyle. **No extra rows**: no
-  pieces, so the dashboard counts, the planner and `edge_id` need no special handling, and `_piece` goes away.
-- Levels are found by the solver of this document (OR-Tools CP-SAT) started from the heuristic. The problem is cut into
-  independent parts (the connected parts of the pairs plus their neighbouring edges), so a county-sized db stays small.
-- If OR-Tools is not installed, the heuristic alone is used (it gave up 16 pairs in Monaco, against 9 for the solver).
+**mapstyle** (`node_levels.py`, `map.py`):
+- `load`: candidate pairs by a grid (0.001 deg) then `ST_Crosses`; twin directions grouped into one road; overpass pairs =
+  lines cross, no shared node, different level tags.
+- Only roads within 4 nodes of an overpass road are modelled (the rest stay `[0,0]`); boundary roads must contain 0.
+- CP-SAT, hinted by the heuristic, minimises the overpass pairs given up; range [-20, 20], then compacted.
+- Conflict-driven fixes, only where a pair is still given up: rule N (drop a pair whose crossing is within 0.3 m of an end
+  node) and rule C (cut the lower road at its crossing when it is joined to a road whose level differs by 2 or more). The
+  rest of the map is unchanged (checked at 31 places).
+- `with_cuts` turns the intervals into `_cl` / `_fl` (doubled, so crossings sit at +1 and sidewalks at -1) and appends the
+  few cut pieces (`_piece`).
 
-**3. What stays unsolved (known, reported, not hidden)**
-- Pairs the solver gives up (9 in Monaco): drawn as today, and their number is logged.
-- Pairs that share a node and also cross (105): not expressible; drawn as today.
-- Roads that only overlap in width without crossing (`5066…` / `3639…`): not constrained (adding them made it worse).
+**Results.** Monaco: 561 overpass pairs, 3 given up and fixed by rules N and C, 0 left unsatisfied, 6 positions in use,
+about 5 s with 8 workers. `stockholm_county`: 11.4 s. A single solver worker is exact but about 13 times slower (62 s on
+Monaco), so the answer is optimal but not byte-identical between runs. Browser checks on Monaco: dashboard filters (modes,
+classes), click and selection, planner, 51 places before / after (24 identical, the rest at most 1.1 % of pixels).
 
-**4. Checks**
-- Unit tests on the synthetic scenes (ramp, raised walkway with a ground branch, tunnel under a street, bridge).
-- Monaco: no overpass pair given up other than those listed; the 83-case gallery before / after; the eight places.
-- Browser checks: dashboard, planner, tiles, 3D. A timing run on `stockholm_county`.
+**Tests** (`tests/test_map.py`): a raised path over a street joined to ground paths, a tunnel under a street, no overpass
+without a crossing, the heuristic without a solver, Monaco invariants, the arguments given to roadstyle.
 
-**5. Approach A** (the cutting, changes C1–C5): left on its local branches, not merged. It could still serve as the fallback
-for the given-up pairs later.
+**Still open.** `5066...` / `3639...` (roads that overlap in width without crossing); the 105 pairs that share a node and also
+cross; the 76 touching / overlapping pairs; tiles mode; a visual check of every bridge and tunnel look in level mode.
 
-### Questions for Kaveh (my proposal first)
+## Decision
 
-1. **Solver as an optional dependency** (`pip install mapstyle[solver]`), with the heuristic when it is missing: yes / no?
-2. **Approach A is dropped** (kept on its branches only): yes / no?
-3. **Same-level crossings** (344 in Monaco) are given to the solver as "either on top": yes / no?
-4. **Tunnel looks follow the levels, bridge decks stay as today**: yes / no?
-5. The three known gaps in point 3 are accepted for the first version: yes / no?
-
-## Decision for Kaveh
-
-- **A (cutting)**: built on local branches; edges are cut; needs changes C1–C5 approved (`levels_plan.md`).
-- **B (node levels)**: no cutting, a small graph step, a roadstyle extension; the weaknesses above are open.
-- **A + B**: B for most edges, A's cutting only for the cycles and the places B cannot fix.
-
-Nothing in this document is built into the library. The prototype scripts are in `scripts/` and are not imported
-anywhere.
+Approach B was chosen and built (above). A stays on its branch as a possible fallback for the given-up pairs.

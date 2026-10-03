@@ -59,9 +59,10 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
   for the whole map: `osm` (detailed), `google` (clean), `grey` (quiet, for your data on top).
 - **A full base map from the same database**: the sea, land use with openstreetmap.org's textures,
   water, buildings, railways, parking, transit, traffic lights and crossings. No tile server, no API key.
-- **Roads drawn right at junctions**: two-way roads as two lanes, bridges over, tunnels and raised
-  walkways at ground level except where they really pass under or over a road, crossings over their
-  street.
+- **Roads drawn right at junctions**: two-way roads as two lanes, bridges and overpasses over, tunnels
+  under, crossings over their street. The drawing order of the roads is solved (an interval per road,
+  `render_map(order=True)`; `pip install mapstyle[solver]` for the exact solution), so a joint of
+  roads at different levels shows no ring.
 - **A route planner demo**: drag a start and an end and see duckOSM's route on the map (routing
   itself is duckOSM's job).
 - **A dashboard**: filter by mode, road class and layer, colour by mode, inspect what you click.
