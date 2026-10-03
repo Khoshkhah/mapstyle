@@ -62,8 +62,9 @@ minimise   sum over r in R of ( b[r] - a[r] )
 The roads outside `R` are `[0, 0]`. A pair given up (`q = 1`) is then looked at by the two fixes below.
 
 The solver is OR-Tools CP-SAT, started from the heuristic's intervals (`AddHint`), 8 workers, 60 s per problem. The
-heuristic gives each node a level so that every node of an upper road is above every node of the lower road it crosses
-(pairs inside a cycle are dropped), then each road gets `[min, max]` of the levels of its two end nodes.
+heuristic gives each node a level (all start at 0). Pairs inside a cycle are dropped; for every other pair, until each is
+satisfied, a raised upper road is lifted above the lower road's nodes, or else the lower road is sunk below the upper
+road's nodes. A road's interval is the lowest to the highest level of its two end nodes.
 
 ## How it is solved
 
