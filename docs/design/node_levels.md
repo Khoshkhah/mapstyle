@@ -437,6 +437,38 @@ the footway conflict (only 1 road cut, 2 more pieces).
 - Rule C needs pieces (extra rows for roadstyle) for the few cut roads, as in Approach A; here 1 road in Monaco.
 - Both are **rule changes** and need Kaveh's permission. Not built into the library; not drawn yet.
 
+### The fix applied to the 3 failures only (Kaveh, 2026-10-02: "go ahead, and only fix those 3 failure results, don't touch the rest")
+
+Prototype `scripts/node_levels_final.py` (and the drawing script of this test). Both rules are **conflict-driven, not global**:
+a pair is dropped only if it sits in a conflict **and** its crossing is within 0.3 m of an end node of either road; an edge is cut only
+if it sits in a conflict that is left. Every road outside the conflicts, plus the roads that touch them, keeps **exactly its
+baseline interval** (the solution with penalties, 3 given up).
+
+| | |
+|---|---|
+| baseline | 561 overpass pairs, 3 given up (optimal) |
+| conflicts found | 3 |
+| pairs dropped | **2** (the two pairs of conflict 3, crossing 0.02 m from a node) |
+| roads cut | **1**: the footway `3278703636467343940`, into 3 pieces at 0.3 m and 15.7 m |
+| final | **all 559 remaining overpass pairs satisfied as hard constraints** (OPTIMAL) |
+| roads allowed to change | 29 (the roads of the conflicts and their neighbours); the other 6,568 are fixed to the baseline |
+| roads whose interval changed | 24 of 6,594, plus the cut one |
+
+**Checked on the map** (the baseline page against the fixed page, same places, pixels that differ):
+
+| Place | Pixels changed |
+|---|---|
+| conflict 1: pedestrian band over the primary tunnels | 857: the band is now over the tunnels |
+| conflict 2: primary tunnel over the footway tunnel | 462: fixed |
+| conflict 3: the two staircases (nothing was visible) | 0 |
+| your 8 places (tunnel crossing, `4070…`, plaza, Fontvieille, the two tunnel mouths, `5066…`/`3639…`, `4070…`/`7270…`) | **0 in all** |
+| 20 random places in Monaco (zoom 19.5) | **0 in all** |
+
+![fixed](node_levels/fixed3.jpg)
+
+So the rest of the map is unchanged, and the two visible failures are drawn correctly. `5066803562804960394` / `3639438131486059958`
+is still wrong: that is not one of the 3 (it is not an overpass pair).
+
 ### What pairs the solver was given, and what it was not
 
 Kaveh, 2026-10-02: "so you didn't give the solver the list of crossing pairs?" and "if you add more than the exact

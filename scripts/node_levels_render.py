@@ -34,7 +34,7 @@ BUILD = """(levels) => {
 }"""
 
 
-def build_page(db, out, ct=None):
+def build_page(db, out, ct=None, expand=None):
     import mapstyle as ms
     import mapstyle.map as mm
     from node_levels import report
@@ -46,7 +46,7 @@ def build_page(db, out, ct=None):
         roads = orig(d)
         roads["_cl"] = [ct.get(e, (0, 0))[0] for e in roads["edge_id"]]
         roads["_fl"] = [ct.get(e, (0, 0))[1] for e in roads["edge_id"]]
-        return roads
+        return expand(roads) if expand else roads
     mm.load_roads = load
     try:
         ms.render_map(str(db), pieces=False).save(str(out))
