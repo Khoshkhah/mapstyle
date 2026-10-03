@@ -88,6 +88,81 @@ What I see:
 | `4070595946847136678` / `7270978127836132176` | bands over the road, each with its own casing |
 | (two places) | a **white round blob** where a tunnel's round end shows over a pedestrian band's casing |
 
+## Optimization version (solved with a solver)
+
+Kaveh, 2026-10-02: "make it as an optimization problem and solve it by a solver ... and use your approach for
+initialization". Prototype: `scripts/node_levels_opt.py`, solver OR-Tools CP-SAT (installed outside the repository for
+the test; not a dependency of mapstyle).
+
+### The formula, exactly as given to the solver
+
+**Data**
+
+- `N`: the nodes. `E`: the edges, `e = (s_e, t_e)`, with a level tag `lvl_e` (the `layer` if nonzero, else a bridge 1,
+  else a tunnel -1, else 0) and a length `len_e` in metres. `nodes(e) = {s_e, t_e}`.
+- `P`: the overpass pairs `q = (U_q, L_q)`: two edges whose lines cross, with no node in common and different tags.
+  `U_q` is the one with the higher tag.
+- `pref_n`: the level the tags suggest for node `n`: the tag level nearest 0 among the edges at `n` (so 0 if a ground
+  edge touches it), clamped to `[-K, K]`.
+- `c_e = max(1, round(len_e / 5))`: what one level step costs on edge `e` (a long edge costs more, so a step lands on a
+  short edge).
+
+**Variables**
+
+- `p_n` in `{-K, ..., K}` for each node (K = 4): the level of the node.
+- `v_q` in `{0, 1}` for each pair: 1 means the overpass is given up.
+- `d_e = |p_(s_e) - p_(t_e)|` and `r_n = |p_n - pref_n|`: auxiliary variables (`0 .. 2K`), tied to the above by the
+  solver's absolute-value constraint.
+
+**Constraints**, for every pair `q`, every `u` in `nodes(U_q)` and every `l` in `nodes(L_q)`:
+
+```
+v_q = 0   implies   p_u - p_l >= 1
+```
+
+**Objective** (minimize):
+
+```
+W1 * sum_q v_q   +   W2 * sum_e c_e * d_e   +   W3 * sum_n r_n          W1 = 1000, W2 = 10, W3 = 1
+```
+
+In words: first, as few given-up overpasses as possible; then as few level steps as possible, on short edges; then as
+close to the tags as possible.
+
+**Start (warm start):** the heuristic's solution as a hint: `p_n` = its level, `v_q = 1` for the pairs it dropped.
+
+**Reading the answer:** casing level of `e` = `min(p_s, p_t)`, fill level = `max(p_s, p_t)`, as before.
+
+**Solver settings:** CP-SAT, 8 workers, time limit 60 s (a 90 s run also tried). It does not prove optimality in that time.
+
+### Result on Monaco
+
+| | heuristic | solver, crossing pairs | solver, crossing + "drawn widths overlap" pairs |
+|---|---|---|---|
+| pairs | 1,882 | 1,882 | 5,667 |
+| pairs given up | 16 dropped | **9** | 334 (5.9%); the heuristic's start dropped 1,125 |
+| edges that span 1 or more levels | 1,048 | **766** (60 s: objective 26,761, bound 23,565; 90 s: 25,059, bound 23,560) | 1,315 |
+| node levels used | -2 .. 2 | -3 .. 2 | -4 .. 4 |
+
+The solver is better than the heuristic on both counts, but it is not proven optimal (the gap to its bound is 6 to 12%).
+Adding the "drawn widths overlap" pairs (the C1 rule of `levels_plan.md`) makes the problem much harder: three times
+the pairs and many conflicts. As a node-level problem it does not look usable as it stands.
+
+### Drawn at your places: live site, heuristic, solver (crossing pairs)
+
+![a](node_levels/opt_0.jpg)
+![b](node_levels/opt_1.jpg)
+![c](node_levels/opt_2.jpg)
+![d](node_levels/opt_3.jpg)
+
+- The solver **removes the white round end** the heuristic left at the tunnel crossing and at the plaza edge.
+- Clean at the tunnel crossing, `4070595946847136678`, the plaza edge, Avenue de Fontvieille.
+- The slip road and the tunnel join as one connected road in both pairs (`2694…`/`5213…`, `7652…`/`5566…`); where
+  their widths differ there is a small shoulder in the casing.
+- **Still wrong:** `5066803562804960394` / `3639438131486059958`. The pair does not cross (the lines are 1.3 m apart), so
+  neither the heuristic nor the solver has a constraint for it. Only the "drawn widths overlap" version would, and that
+  version is the hard one above.
+
 ## What it needs
 
 - **Roadstyle:** an edge's casing and fill in different levels (two new columns, a small extension of `band_col`), and
@@ -101,10 +176,10 @@ What I see:
    `5066…` / `3639…`) is "free", so it can be drawn over the band. It needs the same extension as C1 in
    `levels_plan.md`: pairs whose **drawn widths overlap** count as crossings. That is a rule change and needs your
    permission in either approach.
-2. **Cycles** (16 pairs in Monaco, none checked in detail) cannot be solved by levels. They need a fallback (the
+2. **Cycles** (16 pairs for the heuristic, 9 for the solver) cannot be solved by levels. They need a fallback (the
    cutting of Approach A for those few edges).
-3. **A blob** (round end of an edge shown over another edge's casing) at two places: an edge spans levels and its fill
-   is drawn in a higher level than the casing of an edge it touches without a node.
+3. **A blob** (round end of an edge shown over another edge's casing) at two places with the heuristic; the solver's
+   levels do not show it at the places I looked at.
 4. **Many edges span levels** (8.1%) and so their fills are drawn above all fills of the lower levels between their
    nodes; for an edge that touches other roads without a shared node that can show.
 5. **The tunnel and bridge looks** are not done in the prototype.

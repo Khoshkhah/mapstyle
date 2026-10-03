@@ -34,11 +34,12 @@ BUILD = """(levels) => {
 }"""
 
 
-def build_page(db, out):
+def build_page(db, out, ct=None):
     import mapstyle as ms
     import mapstyle.map as mm
     from node_levels import report
-    edges, pairs, p, left, ct, dropped = report(db)
+    if ct is None:
+        edges, pairs, p, left, ct, dropped = report(db)
     orig = mm.load_roads
 
     def load(d):
