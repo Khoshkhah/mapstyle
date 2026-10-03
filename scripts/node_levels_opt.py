@@ -423,7 +423,7 @@ if __name__ == "__main__" and "--all" in sys.argv and "--links" not in sys.argv:
 
 
 def link_map(db):
-    """``{eid: link id}``: a link is a road segment with both of its directions. The two directed edges of a two-way road
+    """EXPERIMENT, NOT USED (a wrong reading of "link"; Kaveh: a link is one directed edge). ``{eid: group id}``: a group is a road segment with both of its directions. The two directed edges of a two-way road
     have the same two end nodes and the same line (reversed); the link id is the smallest edge id of the group."""
     import duckdb
 
