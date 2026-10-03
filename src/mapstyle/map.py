@@ -368,7 +368,7 @@ def planner_data(db, roads):
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", pieces=True, **kwargs):
+               paths=PATHS, theme="osm", order=True, pieces=False, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -379,9 +379,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
     (all, driving, walking, cycling); default all, walking with the planner (a walking leg shows).
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
-    (docs/design/themes.md). ``pieces``: cut a road with a level (a ``layer`` tag, a tunnel) into pieces so it
-    is at ground level except where it really passes over or under a road (docs/design/levels_plan.md);
-    False draws each edge whole at the level roadstyle gives it.
+    (docs/design/themes.md). ``order``: give each road the position in the drawing order of its casing and of its fill
+    (``mapstyle.node_levels``, docs/design/node_levels.md; roadstyle's ``casing_level_col`` / ``fill_level_col``), so that connected
+    roads merge cleanly and a road that passes over another is drawn over it; False: roadstyle's own bands. ``pieces``: the other
+    approach, cutting a road with a level into pieces (docs/design/levels_plan.md); not the default, and not with ``order``.
     The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
     ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
@@ -435,12 +436,25 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     path = roads["highway"].isin(PATH_CLASSES)
     roads["_band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
     kw["band_col"], kw["cap_col"] = "_band", "_cap"
-    # a road with a level (a layer tag, a tunnel) is ground except where it really passes over or under a road: cut
-    # into pieces for drawing, square-ended (docs/design/levels_plan.md; roadstyle's cap_col)
     roads["_cap"] = False
     if pieces:
+        # a road with a level (a layer tag, a tunnel) is ground except where it really passes over or under a road: cut
+        # into pieces for drawing, square-ended (docs/design/levels_plan.md; roadstyle's cap_col)
         from mapstyle.levels import with_pieces
         roads = with_pieces(roads, *load_pieces(db, roads))
+    elif order and kwargs.get("tiles"):
+        log.warning("tiles=True: the drawing order (order=True) is not supported with vector tiles yet; roadstyle's bands are used")
+    elif order:
+        # the drawing order of the casing and of the fill of every road (docs/design/node_levels.md). The positions are doubled,
+        # so a crossing (the zebra) can sit between the ground and the next position, over its street with its halo, and a mapped
+        # sidewalk under it (what band_col did)
+        from mapstyle.node_levels import compute, with_cuts
+        roads = with_cuts(roads, compute(db))
+        for band, pos in ((1, 1), (-1, -1)):
+            m_ = roads["_band"] == band
+            roads.loc[m_, ["_cl", "_fl"]] = pos
+        kw["casing_level_col"], kw["fill_level_col"] = "_cl", "_fl"
+        kw.pop("cap_col")
     # duckOSM stores every path, and a one-way street's walking-only reverse, as a reverse edge too:
     # roadstyle draws a pair as two lanes only when both edges are directed (directed_col,
     # twin_ends.md)

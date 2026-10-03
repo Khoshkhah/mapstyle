@@ -402,6 +402,7 @@ def compute(db, hops=HOPS, limit=60.0, solver=None):
     for r, c in cuts.items():
         c["intervals"] = [(cm[a], cm[b]) for a, b in c["intervals"]]
         c["edges"] = [r] + members.get(r, [])
+    info["unsatisfied"] = len(given) if not use else 0              # after the conflict fixes the solver's drawing order is feasible
     info["levels"] = len({v for ab in intervals.values() for v in ab} | {v for c in cuts.values() for ab in c["intervals"] for v in ab})
     info["seconds"] = round(time.time() - t0, 1)
     log.info("node levels: %s", info)
@@ -477,3 +478,49 @@ def _fix_conflicts(con, items, pairs, boundary, base, limit, wkb, substring):
     cuts_out = {r: {"bounds": c["bounds"], "intervals": [final[p] for p in c["pieces"]]} for r, c in cut.items()}
     res = {e: iv for e, iv in final.items() if "#" not in e}
     return res, cuts_out, dropped, pairs
+
+
+def with_cuts(roads, levels, scale=2):
+    """The roads GeoDataFrame with ``_cl`` / ``_fl`` (the drawing-order positions, ``scale`` times the interval numbers so that the odd
+    positions between them stay free) and the roads that must be drawn in pieces split: the row of a directed edge of a cut road
+    becomes its first piece (so the row index the planner's graphs point to is unchanged), the other pieces are appended with
+    ``_piece`` set. ``levels``: a ``Levels``."""
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.ops import substring
+
+    roads = roads.copy()
+    iv = levels.intervals
+    roads["_cl"] = [scale * iv.get(e, (0, 0))[0] for e in roads["edge_id"]]
+    roads["_fl"] = [scale * iv.get(e, (0, 0))[1] for e in roads["edge_id"]]
+    roads["_piece"] = False
+    extra = []
+    for rid, c in levels.cuts.items():
+        bounds = c["bounds"]
+        total = bounds[-1]
+        rep = None
+        for e in c["edges"]:
+            idx = roads.index[roads["edge_id"] == e]
+            if len(idx) == 0:
+                continue
+            i = idx[0]
+            g = roads.at[i, "geometry"]
+            if rep is None:
+                rep = g
+            # the piece bounds run along the road's own line; a twin's line runs the other way
+            same = ((g.coords[0][0] - rep.coords[0][0]) ** 2 + (g.coords[0][1] - rep.coords[0][1]) ** 2
+                    <= (g.coords[0][0] - rep.coords[-1][0]) ** 2 + (g.coords[0][1] - rep.coords[-1][1]) ** 2)
+            for n, (a, b) in enumerate(c["intervals"]):
+                lo, hi = (bounds[n], bounds[n + 1]) if same else (total - bounds[n + 1], total - bounds[n])
+                line = substring(g, lo / M_PER_DEG, hi / M_PER_DEG)
+                if n == 0:
+                    roads.at[i, "geometry"], roads.at[i, "_cl"], roads.at[i, "_fl"] = line, scale * a, scale * b
+                else:
+                    r = roads.loc[i].copy()
+                    r["geometry"], r["_cl"], r["_fl"], r["_piece"] = line, scale * a, scale * b, True
+                    if "k" in r.index:
+                        r["k"] = float("nan")
+                    extra.append(r)
+    if extra:
+        roads = gpd.GeoDataFrame(pd.concat([roads, pd.DataFrame(extra)], ignore_index=True), geometry="geometry", crs=roads.crs)
+    return roads
