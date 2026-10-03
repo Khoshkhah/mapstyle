@@ -94,6 +94,76 @@ Kaveh, 2026-10-02: "make it as an optimization problem and solve it by a solver 
 initialization". Prototype: `scripts/node_levels_opt.py`, solver OR-Tools CP-SAT (installed outside the repository for
 the test; not a dependency of mapstyle).
 
+### Kaveh's formulation: a free interval for each edge (the model to use)
+
+Kaveh, 2026-10-02: "we didn't assign intervals only between −4 and +4. The numbers of the intervals are large. The
+numbers are not related to the node levels. The node levels were your idea, and I told you to use them as the
+initialization, not to bound the problem by them." My first solver model (below, "My first version") did exactly that
+mistake: a number for each node, limited to −4 … 4, with the edge intervals derived from them. This is the model as
+Kaveh described it (`solve_intervals` in `scripts/node_levels_opt.py`).
+
+**Variables**
+
+```
+a_e, b_e  ∈ {0, 1, …, 60}   a_e ≤ b_e      for every edge e     (a_e: the time of the casing, b_e: the time of the fill;
+                                                                  the casing is at 2·a_e and the fill at 2·b_e + 1)
+v_q       ∈ {0, 1}                           for every overpass pair q   (1 = this pair is given up)
+w_q, o_q  ∈ {0, 1}                           for every same-level crossing q  (given up; which edge is on top)
+top, bottom ∈ {0, …, 60}                     the highest b and the lowest a
+```
+
+There are **no node variables**.
+
+**Constraints**
+
+```
+(1) edges x, y that share a node (hard):           a_x ≤ b_y   and   a_y ≤ b_x        [62,626 pairs in Monaco]
+(2) overpass q = (U over L): no shared node, the lines cross, different level tags:
+                                                   v_q = 0  ⇒  b_L + 1 ≤ a_U
+(3) same-level crossing q = {x, y}:                w_q = 0  ⇒  ( o_q = 1 ⇒ b_y + 1 ≤ a_x )  and  ( o_q = 0 ⇒ b_x + 1 ≤ a_y )
+(4) every edge e:                                  b_e ≤ top   and   bottom ≤ a_e
+(5) every other pair of edges:                     free
+```
+
+**Objective** (minimize)
+
+```
+1000 · Σ_q v_q   +   300 · Σ_q w_q   +   10 · Σ_e c_e · (b_e − a_e)   +   1 · Σ_e ( |a_e − g_e| + |b_e − g_e| )   +   5 · (top − bottom)
+```
+
+with c_e = max(1, round(length_e / 5)) and g_e = 20 + (the level tag of e), 20 standing for the ground. **The last three
+terms are mine, not Kaveh's**: they keep intervals short (long ones on long edges cost more), near the tags, and the
+whole in few levels. Kaveh's own problem is only (1), (2), (3), (5).
+
+**Start (a hint only, not a bound):** a_e = 20 + min(p_s, p_t), b_e = 20 + max(p_s, p_t) from the heuristic's node levels,
+and v_q = 1 for the pairs the heuristic dropped.
+
+**Result on Monaco** (OR-Tools CP-SAT, 8 workers, 120 s, all 1,882 overpass pairs and 344 same-level crossings):
+
+| | node form (my first version) | interval form (this model) |
+|---|---|---|
+| overpass pairs given up | 9 | 13 |
+| same-level crossings given up | 0 | 292 of 344 |
+| edges with an interval longer than one point | 1,209 | 928 |
+| distinct level numbers used | 6 | 5 (−2 … 2) |
+| proof | gap to the bound about 25% | objective 147,376, bound 17,763: **far from proven** |
+
+So the free-interval model is bigger (62,626 hard pairs) and the solver found a worse solution in the same time, and gave
+up most same-level crossings, because their weight (300) is below the cost of separating them. The two models are the same
+problem only when the interval numbers are free; my node form restricted them.
+
+Drawn at the eight places (live site, node form, interval form): the two solver forms look alike; the interval form does
+not fix `5066…` / `3639…` either.
+
+![i0](node_levels/int_0.jpg)
+![i1](node_levels/int_1.jpg)
+![i2](node_levels/int_2.jpg)
+![i3](node_levels/int_3.jpg)
+
+### My first version: a level for each node, bounded (superseded)
+
+What follows up to "What pairs the solver was given" is the node form I built first. Keep it for the comparison only.
+
 ### The variables in plain words
 
 Think of **floors**. Every node (a point where edges meet) gets a floor number: 0 is the ground, 1 is above it, −1 is
@@ -174,7 +244,7 @@ pair in P that is satisfied, φ_L < κ_U, so the intervals are disjoint and U is
 
 **Solver settings.** OR-Tools CP-SAT, 8 workers, a time limit of 60 to 150 s. It does not prove optimality in that time.
 
-### The same problem written with an interval for each edge
+### The node form written with intervals (why it was not the same problem)
 
 Kaveh's first formulation has an interval [c_e, f_e] for each edge (c_e: the time of the casing, f_e: the time of the
 fill, c_e ≤ f_e). The solver was given the form with a level for each **node** instead, because the two are the same
@@ -196,8 +266,8 @@ constraints   c_e ≤ p_(s_e) ≤ f_e   and   c_e ≤ p_(t_e) ≤ f_e          f
 objective     minimize  W1 · Σ_q v_q  +  W2 · Σ_e cost_e · (f_e − c_e)  +  W3 · Σ_n |p_n − pref_n|
 ```
 
-Its answer is the same as the node form's, because f_e − c_e = d_e at the best choice. An interval variable that is
-free (larger than the span of the node levels) would only be useful to push two edges apart on purpose.
+Its answer is the same as the node form's **only if the numbers are free**. In my solver run they were bounded to −4 … 4
+and tied to the node levels, which Kaveh rejected: the model above ("Kaveh's formulation") has free intervals.
 
 ### What pairs the solver was given, and what it was not
 

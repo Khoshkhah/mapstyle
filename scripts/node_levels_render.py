@@ -55,7 +55,7 @@ def build_page(db, out, ct=None):
     return ct
 
 
-def shoot(page, out_dir, spots, size=(760, 460), build=True):
+def shoot(page, out_dir, spots, size=(760, 460), build=True, levels=(-3, -2, -1, 0, 1, 2, 3)):
     from playwright.sync_api import sync_playwright
     out_dir = Path(out_dir)
     out_dir.mkdir(exist_ok=True)
@@ -75,7 +75,7 @@ def shoot(page, out_dir, spots, size=(760, 460), build=True):
                 pg.evaluate(idle)
                 pg.wait_for_timeout(1200)
             if build and not built:      # a casing layer and a fill layer for each level in use (-3 .. 3: harmless when empty)
-                pg.evaluate(BUILD, [-3, -2, -1, 0, 1, 2, 3])
+                pg.evaluate(BUILD, list(levels))
                 built = True
                 pg.evaluate(idle)
                 pg.wait_for_timeout(1200)

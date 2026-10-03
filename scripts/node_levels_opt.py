@@ -144,7 +144,7 @@ def stats(edges, p, violated, pairs, info):
     print("edges by level span:", dict(sorted(span.items())))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and "--intervals" not in sys.argv:
     near = "--near" in sys.argv
     tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 60.0
     edges, pairs = load(sys.argv[1], near)
@@ -155,3 +155,113 @@ if __name__ == "__main__":
     p, violated, info = solve_opt(edges, pairs, tl, init=p0, init_dropped=dropped0 + left0, same=same)
     print(f"same-level crossings given: {len(same)}, given up: {info.get('same_given_up')}")
     stats(edges, p, violated, pairs, info)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Kaveh's formulation (2026-10-02): a free interval [a_e, b_e] for each edge, large integer ends, no node variables.
+# a_e: the time of the casing, b_e: the time of the fill (in units where casing = 2a, fill = 2b + 1).
+#   edges that share a node                : the intervals intersect          a_x <= b_y  and  a_y <= b_x
+#   overpass (U over L, no shared node)    : disjoint, U later                b_L + 1 <= a_U    (may be given up, v_q)
+#   same-level crossing                    : disjoint in either order         b_a < a_b  or  b_b < a_a   (may be given up)
+#   other pairs                            : free
+# The node levels of the heuristic are only the starting hint.
+# ---------------------------------------------------------------------------------------------------------------
+LEVELS = 60            # the ends are integers in [0, LEVELS]
+GROUND = 20            # the value the tags suggest for level 0 (room for tunnels below, bridges above)
+
+
+def join_pairs(edges):
+    """``[(x, y)]``: every two edges that share a node."""
+    at = defaultdict(list)
+    for e, (s, t, *_) in edges.items():
+        at[s].append(e)
+        if t != s:
+            at[t].append(e)
+    seen = set()
+    for es in at.values():
+        for i in range(len(es)):
+            for j in range(i + 1, len(es)):
+                seen.add((es[i], es[j]) if es[i] < es[j] else (es[j], es[i]))
+    return sorted(seen)
+
+
+def solve_intervals(edges, pairs, same=(), time_limit=120.0, workers=8, init=None, init_dropped=()):
+    """``edges``: ``{eid: (s, t, lvl, length_m)}``. Returns ``({eid: (a, b)}, violated overpass pairs, info)``."""
+    from ortools.sat.python import cp_model
+    m = cp_model.CpModel()
+    a = {e: m.NewIntVar(0, LEVELS, "") for e in edges}
+    b = {e: m.NewIntVar(0, LEVELS, "") for e in edges}
+    for e in edges:
+        m.Add(a[e] <= b[e])
+    joins = join_pairs(edges)
+    for x, y in joins:
+        m.Add(a[x] <= b[y])
+        m.Add(a[y] <= b[x])
+    terms, v = [], []
+    for i, (u, l) in enumerate(pairs):
+        q = m.NewBoolVar(f"v{i}")
+        v.append(q)
+        m.Add(b[l] + 1 <= a[u]).OnlyEnforceIf(q.Not())
+        terms.append(W1 * q)
+    vs = []
+    for i, (x, y) in enumerate(same):
+        q, o = m.NewBoolVar(f"w{i}"), m.NewBoolVar(f"o{i}")
+        vs.append((q, o))
+        m.Add(b[y] + 1 <= a[x]).OnlyEnforceIf([q.Not(), o])
+        m.Add(b[x] + 1 <= a[y]).OnlyEnforceIf([q.Not(), o.Not()])
+        terms.append(W1S * q)
+    top, bottom = m.NewIntVar(0, LEVELS, "top"), m.NewIntVar(0, LEVELS, "bottom")
+    for e, (s, t, lv, ln) in edges.items():
+        m.Add(b[e] <= top)
+        m.Add(a[e] >= bottom)
+        terms.append(max(1, round(ln / 5)) * W2 * (b[e] - a[e]))
+        g = GROUND + max(-K, min(K, lv))
+        for var in (a[e], b[e]):
+            d = m.NewIntVar(0, LEVELS, "")
+            m.AddAbsEquality(d, var - g)
+            terms.append(W3 * d)
+    terms.append(5 * (top - bottom))                      # few levels in all
+    if init:                                              # the heuristic's node levels: the starting hint only
+        for e, (s, t, *_) in edges.items():
+            lo, hi = sorted((init.get(s, 0), init.get(t, 0)))
+            m.AddHint(a[e], max(0, min(LEVELS, GROUND + lo)))
+            m.AddHint(b[e], max(0, min(LEVELS, GROUND + hi)))
+        gone = set(init_dropped)
+        for q, pr in zip(v, pairs):
+            m.AddHint(q, 1 if pr in gone else 0)
+    m.Minimize(sum(terms))
+    sv = cp_model.CpSolver()
+    sv.parameters.max_time_in_seconds = time_limit
+    sv.parameters.num_workers = workers
+    status = sv.Solve(m)
+    info = {"status": sv.StatusName(status), "objective": sv.ObjectiveValue(), "bound": sv.BestObjectiveBound(),
+            "seconds": round(sv.WallTime(), 1), "join_pairs": len(joins),
+            "same_given_up": sum(sv.Value(q) for q, _ in vs)}
+    out = {e: (sv.Value(a[e]) - GROUND, sv.Value(b[e]) - GROUND) for e in edges}
+    return out, [pairs[i] for i, q in enumerate(v) if sv.Value(q)], info
+
+
+def interval_stats(edges, out, violated, pairs, info):
+    span = defaultdict(int)
+    levels = set()
+    for a_, b_ in out.values():
+        span[b_ - a_] += 1
+        levels.update((a_, b_))
+    print(f"intervals: pairs {len(pairs)}, given up {len(violated)}; solver {info}")
+    print(f"distinct level numbers used: {len(levels)} (range {min(levels)} .. {max(levels)})")
+    print("edges by interval length (b - a):", dict(sorted(span.items())))
+
+
+def run_intervals(db, near=False, with_same=True, time_limit=120.0):
+    import node_levels as nl
+    edges, pairs = load(db, near)
+    same = load_same(db) if with_same else []
+    p0, left0, dropped0 = nl.solve({e: v[:3] for e, v in edges.items()}, pairs)
+    out, violated, info = solve_intervals(edges, pairs, same, time_limit, init=p0, init_dropped=dropped0 + left0)
+    interval_stats(edges, out, violated, pairs, info)
+    return edges, pairs, out, violated
+
+
+if __name__ == "__main__" and "--intervals" in sys.argv:
+    tl = float(sys.argv[sys.argv.index("--time") + 1]) if "--time" in sys.argv else 120.0
+    run_intervals(sys.argv[1], near="--near" in sys.argv, with_same="--same" in sys.argv, time_limit=tl)
