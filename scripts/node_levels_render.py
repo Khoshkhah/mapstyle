@@ -34,7 +34,7 @@ BUILD = """(levels) => {
 }"""
 
 
-def build_page(db, out, ct=None, expand=None):
+def build_page(db, out, ct=None, expand=None, dashboard=False, inject_levels=None):
     import mapstyle as ms
     import mapstyle.map as mm
     from node_levels import report
@@ -49,7 +49,12 @@ def build_page(db, out, ct=None, expand=None):
         return expand(roads) if expand else roads
     mm.load_roads = load
     try:
-        ms.render_map(str(db), pieces=False).save(str(out))
+        page = ms.render_map(str(db), pieces=False, dashboard=dashboard)
+        if inject_levels is not None:        # the layers are rebuilt by a script in the page itself (so the page works on its own)
+            js = ('<script>(function w(){if(!(window.map&&map.isStyleLoaded()&&map.getLayer("roads-casing")&&map.getLayer("roads-highlight")))return setTimeout(w,300);'
+                  'if(window._nl)return;window._nl=1;(' + BUILD.strip() + ')(' + str(list(inject_levels)) + ');})();</script>')
+            page._tpl = page._tpl.replace('</body>', js + '</body>')
+        page.save(str(out))
     finally:
         mm.load_roads = orig
     return ct
