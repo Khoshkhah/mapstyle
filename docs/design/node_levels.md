@@ -108,6 +108,7 @@ the penalty is only on overpasses**." This is that model, with nothing else (`so
 a_e, b_e  ∈ {−10, …, 10},  a_e ≤ b_e     for every edge e    (a_e: the time of the casing, b_e: the time of the fill;
                                                                 the casing is at 2·a_e and the fill at 2·b_e + 1)
 v_q       ∈ {0, 1}                        for every overpass pair q = (U over L)   (1 = this pair is given up)
+w_q, o_q  ∈ {0, 1}                        for every same-level crossing q = {x, y}  (w: given up; o: x is before y)
 ```
 
 **Constraints**
@@ -115,12 +116,16 @@ v_q       ∈ {0, 1}                        for every overpass pair q = (U over 
 ```
 (1) every two edges x, y that share a node (hard):     a_x ≤ b_y   and   a_y ≤ b_x          [62,626 pairs in Monaco]
 (2) every overpass pair q = (U over L), unless given up: v_q = 0  ⇒  b_L + 1 ≤ a_U           [1,882 pairs in Monaco]
+(3) every same-level crossing q = {x, y}, unless given up:  w_q = 0  ⇒  ( o_q = 1 ⇒ b_y + 1 ≤ a_x )  and  ( o_q = 0 ⇒ b_x + 1 ≤ a_y )
+                                                                                         [344 pairs in Monaco; either edge may be first]
 ```
 
 An overpass pair is two edges whose lines cross, with no shared node and different level tags; U is the one with the higher tag.
-Every other pair of edges is free.
+A same-level crossing is two edges whose lines cross, with no shared node and the **same** tag. Every other pair is free.
+(The first run of the model, 8 given up, had only (1) and (2); the run with (3) added gave 8 again. All the road-level runs, the 3
+and the hard-constraint run, have (3).)
 
-**Objective:** minimize  `Σ_q v_q`  (the number of overpasses given up).
+**Objective:** minimize  `Σ_q v_q + Σ_q w_q`  (the number of overpasses and same-level crossings given up).
 
 **Start (a hint only, not a bound):** a_e = min(p_s, p_t), b_e = max(p_s, p_t) from the heuristic's node levels; v_q = 1 for the
 pairs the heuristic dropped.
