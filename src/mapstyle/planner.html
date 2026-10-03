@@ -4,48 +4,66 @@
      a marker joins its roads within the radius by a walk, and the first / last edges count only
      the part travelled. Injected by mapstyle.map.render_map(planner=True). -->
 <style>
-#map{right:300px!important} body{--rs-side:300px}
-#rm-panel{position:fixed;top:0;right:0;bottom:0;width:300px;box-sizing:border-box;padding:14px 16px;
-  overflow-y:auto;background:#fff;border-left:1px solid #ddd;font:14px/1.45 system-ui,sans-serif;color:#222;z-index:5}
-#rm-panel h3{margin:0 0 6px;font-size:16px}
-#rm-panel .rm-hint{margin:0 0 10px;color:#555;font-size:13px}
-#rm-panel fieldset{border:0;padding:0;margin:0 0 8px}
-#rm-panel label{margin-right:10px;cursor:pointer}
-#rm-panel select{font:inherit;padding:3px 6px}
-#rm-result{margin:10px 0;padding:10px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;min-height:20px}
-#rm-result .rm-total{font-size:18px;font-weight:600}
-#rm-result .rm-leg{display:flex;gap:6px;align-items:center;margin-top:4px}
+#map{right:340px!important} body{--rs-side:340px}
+#rm-panel{--line:#e5e7eb;--mut:#6b7280;--soft:#f6f7f9;position:fixed;top:0;right:0;bottom:0;width:340px;box-sizing:border-box;padding:16px 14px 24px;
+  overflow-y:auto;background:#fff;border-left:1px solid #ddd;font:14px/1.45 system-ui,sans-serif;color:#1f2937;z-index:5}
+#rm-panel h3{margin:0;font-size:17px} #rm-panel .rm-hint{margin:2px 0 12px;color:var(--mut);font-size:12.5px}
+#rm-panel .rm-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px;background:#fff}
+#rm-panel .rm-lab{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mut);margin:0 0 6px}
+#rm-ends{position:relative;margin:0 0 10px} #rm-ends div{display:flex;gap:8px;align-items:center;padding:5px 6px;border-radius:6px;cursor:pointer}
+#rm-ends div:hover{background:var(--soft)} #rm-ends .rm-pin{width:10px;height:10px;border-radius:50%;flex:none}
+#rm-ends b{font-weight:600} #rm-ends code{font-size:12px;color:var(--mut);margin-left:auto}
+#rm-swap{position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:1px solid var(--line);border-radius:50%;
+  background:#fff;cursor:pointer;font-size:14px;line-height:1;padding:0;color:#374151;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+#rm-swap:hover{background:var(--soft)} #rm-ends:has(#rm-swap) code{margin-right:26px}
+#rm-modes,#rm-weight{display:flex;gap:0;margin:0 0 8px;padding:0;border:0}
+#rm-modes button,#rm-weight label{flex:1;text-align:center;padding:6px 4px;font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;cursor:pointer;margin:0;color:#374151}
+#rm-modes button:first-child,#rm-weight label:first-child{border-radius:7px 0 0 7px} #rm-modes button:last-child,#rm-weight label:last-child{border-radius:0 7px 7px 0}
+#rm-modes button+button,#rm-weight label+label{border-left:0}
+#rm-modes button.on,#rm-weight label:has(input:checked){background:#1f2937;border-color:#1f2937;color:#fff}
+#rm-weight input{display:none} #rm-mode{display:none}
+#rm-opts{font-size:13px;color:#444} #rm-opts summary{cursor:pointer;color:var(--mut);font-size:12.5px}
+#rm-off{margin-top:6px;font-size:13px;color:#444} #rm-off input{width:56px;font:inherit;padding:1px 4px}
+#rm-result{margin:0;min-height:20px}
+#rm-result .rm-total{font-size:22px;font-weight:650;line-height:1.2}
+#rm-result .rm-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:8px 0 6px;background:var(--soft)}
+#rm-result .rm-bar i{display:block;min-width:2px}
+#rm-result .rm-leg{display:flex;gap:6px;align-items:center;margin-top:3px;font-size:13px}
 #rm-result .rm-dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-#rm-result ol{margin:6px 0 0;padding-left:20px;color:#444;font-size:13px}
-#rm-result .rm-steps li{cursor:pointer;margin:2px 0} #rm-result .rm-steps li:hover{color:#111}
-#rm-result .rm-dist{color:#888;font-size:12px;white-space:nowrap}
-#rm-result .rm-edges{margin-top:8px;font-size:12px} #rm-result .rm-edges summary{cursor:pointer;color:#555}
-#rm-result .rm-edges code{font-size:11px;user-select:all}
-#rm-panel .rm-clicked{margin:8px 0 0;font-size:12px;color:#555} #rm-panel .rm-clicked code{user-select:all}
-#rm-panel .rm-note{margin-top:10px;color:#777;font-size:12px}
-#rm-off{font-size:13px;color:#444} #rm-off input{width:56px;font:inherit;padding:1px 4px}
-#rm-result .rm-break{margin-top:6px;font-size:13px;color:#444} #rm-result .rm-break div{display:flex;justify-content:space-between;gap:8px}
+#rm-result .rm-break{margin-top:6px;font-size:13px;color:#444;border-top:1px solid var(--line);padding-top:6px} #rm-result .rm-break div{display:flex;justify-content:space-between;gap:8px;padding:1px 0}
 #rm-result .rm-break b{font-weight:600;color:#222}
-#rm-ends{margin:0 0 10px;font-size:13px} #rm-ends div{display:flex;gap:6px;align-items:center;margin:3px 0;cursor:pointer}
-#rm-ends .rm-pin{width:10px;height:10px;border-radius:50%;flex:none} #rm-ends code{font-size:12px;color:#555;margin-left:auto}
+#rm-result ol.rm-steps{margin:8px 0 0;padding:0;list-style:none;counter-reset:s;font-size:13px;color:#374151}
+#rm-result .rm-steps li{counter-increment:s;display:flex;gap:8px;align-items:baseline;cursor:pointer;padding:5px 4px;border-top:1px solid var(--line)}
+#rm-result .rm-steps li:hover{background:var(--soft)}
+#rm-result .rm-steps li::before{content:counter(s);flex:none;width:18px;height:18px;border-radius:50%;background:var(--soft);border:1px solid var(--line);
+  font-size:11px;line-height:16px;text-align:center;color:var(--mut)}
+#rm-result .rm-dist{color:var(--mut);font-size:12px;white-space:nowrap;margin-left:auto;padding-left:6px}
+#rm-result .rm-edges{margin-top:8px;font-size:12px} #rm-result .rm-edges summary{cursor:pointer;color:var(--mut)}
+#rm-result .rm-edges code{font-size:11px;user-select:all} #rm-result .rm-edges ol{padding-left:22px;margin:4px 0}
+#rm-panel .rm-clicked{margin:0;font-size:12px;color:var(--mut)} #rm-panel .rm-clicked:empty{display:none} #rm-panel .rm-clicked code{user-select:all}
+#rm-panel .rm-note{margin:0;color:var(--mut);font-size:12px} #rm-panel .rm-note:empty{display:none}
 .rm-tag{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);padding:1px 7px;border-radius:9px;color:#fff;
   font:600 12px/16px sans-serif;white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 </style>
 <div id="rm-panel">
   <h3>Route planner</h3>
-  <p class="rm-hint">Drag the green <b>Start</b> and the purple <b>End</b> marker. Click a road to copy its
-  <code>edge_id</code>.</p>
-  <div id="rm-ends"></div>
-  <fieldset><select id="rm-mode"></select></fieldset>
-  <fieldset id="rm-weight">
-    <label><input type="radio" name="rm-w" value="time" checked> fastest</label>
-    <label><input type="radio" name="rm-w" value="length"> shortest</label>
-  </fieldset>
-  <fieldset id="rm-off" title="A marker may be off the road up to this distance; that walk costs walking time">
-    Off-road up to <input id="rm-radius" type="number" min="0" max="2000" step="5" value="50"> m,
-    walking <input id="rm-speed" type="number" min="0.5" max="10" step="0.5" value="4.5"> km/h
-  </fieldset>
-  <div id="rm-result"></div>
+  <p class="rm-hint">Drag the <b>Start</b> and <b>End</b> markers. Click a road to copy its <code>edge_id</code>.</p>
+  <div class="rm-card">
+    <div class="rm-lab">Trip</div>
+    <div id="rm-ends"></div>
+    <div id="rm-modes"></div><select id="rm-mode"></select>
+    <fieldset id="rm-weight">
+      <label><input type="radio" name="rm-w" value="time" checked>Fastest</label>
+      <label><input type="radio" name="rm-w" value="length">Shortest</label>
+    </fieldset>
+    <details id="rm-opts"><summary>Options</summary>
+      <fieldset id="rm-off" title="A marker may be off the road up to this distance; that walk costs walking time">
+        Off-road up to <input id="rm-radius" type="number" min="0" max="2000" step="5" value="50"> m,
+        walking <input id="rm-speed" type="number" min="0.5" max="10" step="0.5" value="4.5"> km/h
+      </fieldset>
+    </details>
+  </div>
+  <div class="rm-card"><div class="rm-lab">Route</div><div id="rm-result"></div></div>
   <p class="rm-clicked" id="rm-clicked"></p>
   <p class="rm-note" id="rm-note"></p>
 </div>
@@ -426,7 +444,9 @@
     if (!res) { out.textContent = "No route between these points with these modes."; paint(null); return; }
     const v = speed(), road = res.legs.reduce((a, l) => a + l.len, 0);
     const roadT = res.time - (res.start.d + res.end.d) / v;
+    const part = [[res.start.d / v, "#9ca3af"], ...res.legs.map((l) => [l.time, COLORS[l.mode]]), [res.end.d / v, "#9ca3af"]];
     let h = `<div class="rm-total">${fmtTime(res.time)} · ${fmtLen(res.len)}</div>` +
+      `<div class="rm-bar">${part.filter((q) => q[0] > 0).map((q) => `<i style="flex:${q[0]};background:${q[1]}"></i>`).join("")}</div>` +
       `<div class="rm-break"><div><span>Total time</span><b>${fmtTime(res.time)}</b></div>` +
       `<div><span>Total distance</span><b>${fmtLen(res.len)}</b></div>` +
       `<div><span>Walk to the road</span><span>${fmtLen(res.start.d)} · ${fmtTime(res.start.d / v)}</span></div>` +
@@ -476,6 +496,12 @@
       return `<div data-w="${w}"><span class="rm-pin" style="background:${ENDS[w][1]}"></span><b>${ENDS[w][0]}</b>` +
         `<code>${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</code></div>`; }).join("");
     for (const d of $("rm-ends").children) d.onclick = () => map.easeTo({center: markers[d.dataset.w].getLngLat()});
+    if (markers.A && markers.B) {                          // swap start and end
+      const sw = document.createElement("button"); sw.id = "rm-swap"; sw.type = "button"; sw.title = "Swap start and end"; sw.textContent = "⇅";
+      sw.onclick = (e) => { e.stopPropagation(); const a = markers.A.getLngLat(), b = markers.B.getLngLat();
+        markers.A.setLngLat(b); markers.B.setLngLat(a); showEnds(); update(); };
+      $("rm-ends").appendChild(sw);
+    }
   }
 
   function setMarker(which, lngLat) {
@@ -495,7 +521,12 @@
     fid = new Array(D.n); for (let i = 0; i < ids.length; i++) fid[props[i].k] = ids[i];
     buildIndex();
     $("rm-mode").innerHTML = CHOICES.map((c, i) => `<option value="${i}">${c.label}</option>`).join("");
-    $("rm-mode").addEventListener("change", update);
+    $("rm-mode").addEventListener("change", () => {
+      for (const b of $("rm-modes").children) b.classList.toggle("on", b.value === $("rm-mode").value);
+      update(); });
+    $("rm-modes").innerHTML = CHOICES.map((c, i) => `<button type="button" value="${i}">${c.label}</button>`).join("");
+    for (const b of $("rm-modes").children) b.onclick = () => { $("rm-mode").value = b.value; $("rm-mode").dispatchEvent(new Event("change")); };
+    $("rm-mode").value = "0"; $("rm-mode").dispatchEvent(new Event("change"));
     for (const r of document.querySelectorAll('input[name="rm-w"]')) r.addEventListener("change", update);
     for (const id of ["rm-radius", "rm-speed"]) $(id).addEventListener("input", update);
     drawLayers();

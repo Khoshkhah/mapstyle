@@ -42,7 +42,7 @@ async def main(path, n):
         choices = await pg.evaluate("[...document.querySelectorAll('#rm-mode option')].map(o => o.text)")
         print(os.path.basename(path), "menu:", choices, "| note:", await pg.evaluate("document.getElementById('rm-note').innerText"))
         for i, label in enumerate(choices):
-            await pg.select_option("#rm-mode", str(i))
+            await pg.click(f"#rm-modes button >> nth={i}")
             for zoom, off in [(13.5, False), (16, False), (17, True)]:
                 print(f"  {label:13s} zoom {zoom:4}", "B off screen " if off else "both on screen",
                       await pg.evaluate(JS, [zoom, n, off]), flush=True)
