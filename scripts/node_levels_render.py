@@ -55,7 +55,7 @@ def build_page(db, out, ct=None):
     return ct
 
 
-def shoot(page, out_dir, spots, size=(760, 460)):
+def shoot(page, out_dir, spots, size=(760, 460), build=True):
     from playwright.sync_api import sync_playwright
     out_dir = Path(out_dir)
     out_dir.mkdir(exist_ok=True)
@@ -74,7 +74,7 @@ def shoot(page, out_dir, spots, size=(760, 460)):
                 pg.evaluate("([x,y,z]) => { map.setMaxZoom(24); map.stop(); map.jumpTo({center: [x, y], zoom: z}); }", [x, y, z])
                 pg.evaluate(idle)
                 pg.wait_for_timeout(1200)
-            if not built:      # a casing layer and a fill layer for each level in use (-3 .. 3: harmless when empty)
+            if build and not built:      # a casing layer and a fill layer for each level in use (-3 .. 3: harmless when empty)
                 pg.evaluate(BUILD, [-3, -2, -1, 0, 1, 2, 3])
                 built = True
                 pg.evaluate(idle)

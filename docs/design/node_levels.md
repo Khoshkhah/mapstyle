@@ -96,44 +96,59 @@ the test; not a dependency of mapstyle).
 
 ### The formula, exactly as given to the solver
 
-**Data**
+**Sets and data**
 
-- `N`: the nodes. `E`: the edges, `e = (s_e, t_e)`, with a level tag `lvl_e` (the `layer` if nonzero, else a bridge 1,
-  else a tunnel -1, else 0) and a length `len_e` in metres. `nodes(e) = {s_e, t_e}`.
-- `P`: the overpass pairs `q = (U_q, L_q)`: two edges whose lines cross, with no node in common and different tags.
-  `U_q` is the one with the higher tag. (The first runs had only these pairs: see "What pairs the solver was given".)
-- `pref_n`: the level the tags suggest for node `n`: the tag level nearest 0 among the edges at `n` (so 0 if a ground
-  edge touches it), clamped to `[-K, K]`.
-- `c_e = max(1, round(len_e / 5))`: what one level step costs on edge `e` (a long edge costs more, so a step lands on a
-  short edge).
+- N: the nodes. E: the edges; edge e has end nodes s_e and t_e, and V(e) = {s_e, t_e}.
+- ℓ_e ∈ ℤ: the level tag of e (the `layer` if nonzero, else 1 for a bridge, else −1 for a tunnel, else 0).
+- len_e: the length of e in metres, and c_e = max(1, round(len_e / 5)): the cost of one level step on e.
+- P ⊂ E × E: the **overpass pairs** (U, L): ℓ_U > ℓ_L, no node in common, and the lines cross. (The "candidate" runs
+  also include the pairs whose drawn widths overlap.)
+- S ⊂ E × E: the **same-level crossings** {a, b}: ℓ_a = ℓ_b, no node in common, the lines cross. (Later runs only.)
+- pref_n: for each node n, the tag ℓ_e (over the edges e at n) with the smallest |ℓ_e|, clamped to [−K, K].
+- Constants: K = 4, W1 = 1000, W1S = 300, W2 = 10, W3 = 1.
 
 **Variables**
 
-- `p_n` in `{-K, ..., K}` for each node (K = 4): the level of the node.
-- `v_q` in `{0, 1}` for each pair: 1 means the overpass is given up.
-- `d_e = |p_(s_e) - p_(t_e)|` and `r_n = |p_n - pref_n|`: auxiliary variables (`0 .. 2K`), tied to the above by the
-  solver's absolute-value constraint.
-
-**Constraints**, for every pair `q`, every `u` in `nodes(U_q)` and every `l` in `nodes(L_q)`:
-
 ```
-v_q = 0   implies   p_u - p_l >= 1
+p_n   ∈ {−K, …, K}        for every node n ∈ N          (the level of the node)
+v_q   ∈ {0, 1}            for every pair q ∈ P          (1 = the overpass is given up)
+w_q   ∈ {0, 1}            for every pair q ∈ S          (1 = the crossing is given up)
+o_q   ∈ {0, 1}            for every pair q = {a, b} ∈ S (1 = a is on top of b)
+d_e   = | p_(s_e) − p_(t_e) |   ∈ {0, …, 2K}   for every edge e   (the level step on e)
+r_n   = | p_n − pref_n |        ∈ {0, …, 2K}   for every node n   (the distance from the tags)
 ```
 
-**Objective** (minimize):
+**Constraints**
 
 ```
-W1 * sum_q v_q   +   W2 * sum_e c_e * d_e   +   W3 * sum_n r_n          W1 = 1000, W2 = 10, W3 = 1
+(1)  for every q = (U, L) ∈ P, every u ∈ V(U), every l ∈ V(L):
+         v_q = 0   ⇒   p_u − p_l ≥ 1
+
+(2)  for every q = {a, b} ∈ S, every x ∈ V(a), every y ∈ V(b):
+         ( w_q = 0 ∧ o_q = 1 )   ⇒   p_x − p_y ≥ 1
+         ( w_q = 0 ∧ o_q = 0 )   ⇒   p_y − p_x ≥ 1
 ```
 
-In words: first, as few given-up overpasses as possible; then as few level steps as possible, on short edges; then as
-close to the tags as possible.
+(d_e and r_n are tied to the p's by the solver's absolute-value constraint.)
 
-**Start (warm start):** the heuristic's solution as a hint: `p_n` = its level, `v_q = 1` for the pairs it dropped.
+**Objective**
 
-**Reading the answer:** casing level of `e` = `min(p_s, p_t)`, fill level = `max(p_s, p_t)`, as before.
+```
+minimize   W1 · Σ_{q∈P} v_q   +   W1S · Σ_{q∈S} w_q   +   W2 · Σ_{e∈E} c_e · d_e   +   W3 · Σ_{n∈N} r_n
+```
 
-**Solver settings:** CP-SAT, 8 workers, time limit 60 s (a 90 s run also tried). It does not prove optimality in that time.
+Read from left to right: as few overpasses given up as possible; as few same-level crossings given up; as few level
+steps as possible, on short edges; and as close to the tags as possible.
+
+**Start (warm start).** The heuristic's solution is given as a hint: p_n = its level; v_q = 1 for the pairs the
+heuristic dropped, 0 for the others; for S, w_q = 0 and o_q the order its levels already give, if they are disjoint,
+else w_q = 1.
+
+**Reading the answer.** For each edge: casing level κ_e = min(p_(s_e), p_(t_e)), fill level φ_e = max(p_(s_e), p_(t_e)).
+Two edges that share a node both contain that node's level in [κ, φ], so their intervals intersect (they merge); for a
+pair in P that is satisfied, φ_L < κ_U, so the intervals are disjoint and U is drawn over L.
+
+**Solver settings.** OR-Tools CP-SAT, 8 workers, a time limit of 60 to 150 s. It does not prove optimality in that time.
 
 ### What pairs the solver was given, and what it was not
 
@@ -200,6 +215,25 @@ span levels.
   edge now spans three levels.
 - **So the best result so far is the solver with the overpass crossings only**, which is clean at seven of the eight
   places, and the same wrong place.
+
+### Where the solver failed (the 9 pairs it gave up, crossing pairs only)
+
+The run with the overpass crossings only (60 s, objective 26,314, bound 23,564) gave up 9 pairs. They are in four places:
+
+| Place | Pairs | Edges (upper over lower) | What is drawn |
+|---|---|---|---|
+| near 7.41949, 43.73827 (a station) | 4 | footways `1300603807190493280`, `1046203032802764183` (level 0) over steps tunnels `4988690792929201909`, `8825042572998479971` (−2) | nothing wrong is visible |
+| near 7.41193, 43.73136 | 1 | service tunnel `7513686230192698053` (−2) over primary tunnel `1943370964926618174` (−4) | looks right |
+| near 7.41786, 43.73362 | 2 | pedestrian `5421095854252657624`, `5819311505590269978` (0) over primary tunnels `5832769262716690314`, `8691687783733863412` (−2) | **wrong**: the tunnels are drawn over the pedestrian band |
+| near 7.41784, 43.73373 | 2 | the same pedestrian edges over the same tunnels | **wrong**, as above |
+
+![f0](node_levels/fail_0.jpg)
+![f1](node_levels/fail_1.jpg)
+
+Eight of the nine are also the pairs the heuristic dropped as a cycle. I have **not** traced which cycle (which chain of
+overpasses and shared nodes) forces them. Two of the four places show no error on the map; the pedestrian bands over the
+tunnels are the real failures. Besides the pair `5066803562804960394` / `3639438131486059958`, which got no constraint,
+these are the places where this model gives a wrong picture.
 
 ### Drawn at your places: live site, heuristic, solver (overpass crossing pairs only)
 
