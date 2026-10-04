@@ -202,8 +202,10 @@ def _access(roads, mode):
         return roads[f"access_{mode}"].where(~roads[mode])
     acc = roads[[f"access_{m}" for m in MODES]]
     nobody = ~roads[list(MODES)].any(axis=1) & acc.notna().any(axis=1)
-    return roads["access_driving"].where(roads["access_driving"] == "bus",
-                                         acc.bfill(axis=1).iloc[:, 0].where(nobody))
+    first = acc.iloc[:, 0]                                       # the first restriction of the modes in order (a back-fill of the table is slow on big areas)
+    for k in range(1, acc.shape[1]):
+        first = first.combine_first(acc.iloc[:, k])
+    return roads["access_driving"].where(roads["access_driving"] == "bus", first.where(nobody))
 
 
 def _is_directed(roads):
@@ -464,9 +466,8 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         kw.update(name=f"{Path(db).stem}: route planner")
     render = rs.render_edges
     if dashboard:
-        n = roads[list(MODES)].sum(axis=1)
-        roads["modes"] = ["all modes" if k == len(MODES) else " + ".join(m for m in MODES if r[m])
-                          for k, (_, r) in zip(n, roads[list(MODES)].iterrows())]
+        flags = [roads[m].to_numpy() for m in MODES]
+        roads["modes"] = ["all modes" if sum(f) == len(MODES) else " + ".join(m for m, x in zip(MODES, f, strict=True) if x) for f in zip(*flags, strict=True)]
         kw.pop("tooltip")                # the panel shows the clicked road: no road hover tooltip
         kw.update(name=f"{Path(db).stem}: dashboard", color_options={
             "Road class": {}, "Modes": {"color_by": "modes", "colors": load_style("modes")["mode_colors"]}})

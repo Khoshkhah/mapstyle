@@ -4,6 +4,11 @@ All notable changes to **mapstyle** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **Faster:** the `access` of the roads and the dashboard's `modes` column are computed without pandas row loops and a back-fill of the whole table (the same values). A city of 64,000 roads: `render_map` is about 40% faster together with roadstyle's faster pages.
+
 ## [0.4.0] — 2026-10-04
 
 ### Changed
