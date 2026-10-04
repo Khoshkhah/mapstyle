@@ -19,7 +19,7 @@ the fill is whatever the overlays draw. Can the roads' fill be drawn by overlays
 | casing | roadstyle's | roadstyle's, unchanged |
 | fill colour, opacity | roadstyle's per-edge `__rs_fill`, `__rs_op` | the same numbers, read with `rs.build_styler(...).resolve_frame(roads)` and baked in a `fill` property; a tunnel's faded fill is blended onto the canvas colour (roadstyle's opaque underlay) |
 | fill width | roadstyle's per-class zoom expression (`_width_expr`), 12 to 20 | the **same expression**, passed as `Overlay.width` (roadstyle copies it into `line-width` as given) |
-| order | the fill number of the edge, then the class | `edge_col` gives the fill number; `order_col` is roadstyle's class order (`ROAD_Z`) |
+| order | the fill number of the edge, then the class | `edge_col` gives the fill number of the feature's edge; `order_col` orders the features inside one fill number, **globally** (not only the features of one edge): here it is roadstyle's class order (`ROAD_Z`), so a wider road is over a narrower one at the same level. For things on one road (lanestyle: lane 0, lines 1, zebra 2, arrows 3) it is the order of a global scale |
 | two-way streets | two lanes, each 0.6 of the width, shifted 0.28 of the width to its side, with end caps | **not reproduced**: an overlay has no line offset, so both directions lie on the centre line at full width |
 | dashes (steps), caps, arrows | roadstyle's | not reproduced (the arrows stay roadstyle's) |
 | private names used | none | `render_web._width_expr`, `render_web.ROAD_Z` |
