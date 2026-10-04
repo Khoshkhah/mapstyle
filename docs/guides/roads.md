@@ -33,10 +33,11 @@ The OpenStreetMap `layer`, `bridge` and `tunnel` tags decide what passes over wh
 - **A road with only a `layer` tag** acts the same: it is at ground level, so a tunnel approach
   tagged `layer=-1`, or a walkway that starts at a path, still joins the road it meets, and it is
   drawn over (or under) a street only where it really crosses it.
-- **How that is drawn.** A road with a level is cut, for drawing only, into pieces: ground pieces,
-  and the stretch that passes over or under another road, with square ends so the pieces meet
-  without a ring. The database and the `edge_id` are unchanged; a click on any piece is the same
-  edge. `render_map(pieces=False)` draws each edge whole instead.
+- **How that is drawn.** Every road has a casing number (in three parts: start, main, end) and a fill number, computed by
+  [roadstyle](https://khoshkhah.github.io/roadstyle/guides/levels/) from the roads' levels, the road classes and where roads meet or cross: the roads are painted number by
+  number, lowest first, and at each number all casings before all fills, so joints show no ring and an overpass is over its road. If the database has
+  `visualization.edge_levels` (`duckosm levels`), the page reads them; if not, they are computed while the page is made. A click on a road is its own edge.
+  `render_map(pieces=True)` draws the older way: a road with a level cut into pieces, ground pieces and the stretch that passes over or under another road.
 - **Crossings** (`footway=crossing`) are drawn over their street, **mapped sidewalks** under it.
 - **Slip roads** (`*_link`) are drawn under the streets they join.
 

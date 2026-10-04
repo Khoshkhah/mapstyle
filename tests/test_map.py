@@ -145,101 +145,63 @@ def test_roads_with_a_level_are_cut_into_pieces(monaco, monkeypatch):
         assert whole[eid] - 1e-9 <= rows.geometry.length.sum() <= whole[eid] + extra + 1e-9
     off = {}
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: off.update(g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, order=False, pieces=False)
-    assert len(off["g"]) == n and not off["g"]["_cap"].any()
+    render_map(monaco, layers=False, pieces=False)
+    assert len(off["g"]) == n and "_cap" not in off["g"]
 
 
-def _tiny_db(path, edges):
-    """A duckOSM-like db with just ``<mode>.edges``: ``edges`` = [(mode, highway, name, [(x, y) in metres], layer, bridge, tunnel)]."""
-    import math
-
-    import duckdb
-    lon0, lat0 = 7.42, 43.73
-    ll = lambda x, y: (lon0 + x / (111320 * math.cos(math.radians(lat0))), lat0 + y / 110574)  # noqa: E731
-    c = duckdb.connect(str(path))
-    c.execute("INSTALL spatial; LOAD spatial;")
-    node = {}
-    for m in MODES:
-        c.execute(f"CREATE SCHEMA {m}")
-        c.execute(f"CREATE TABLE {m}.edges (edge_id BIGINT, source BIGINT, target BIGINT, osm_id BIGINT, highway VARCHAR, name VARCHAR, "
-                  "bridge VARCHAR, tunnel VARCHAR, layer VARCHAR, oneway BOOLEAN, geometry GEOMETRY)")
-    for i, (mode, hw, nm, pts, lay, br, tu) in enumerate(edges, 1):
-        nid = lambda q: node.setdefault((round(q[0], 3), round(q[1], 3)), len(node) + 1)  # noqa: E731
-        wkt = "LINESTRING(" + ",".join("%.8f %.8f" % ll(*q) for q in pts) + ")"
-        c.execute(f"INSERT INTO {mode}.edges VALUES (?,?,?,?,?,?,?,?,?,false,ST_GeomFromText(?))",
-                  [1000 + i, nid(pts[0]), nid(pts[-1]), 500 + i, hw, nm, "yes" if br else None, "yes" if tu else None,
-                   str(lay) if lay else None, wkt])
-    c.close()
-    return path
+def test_the_band_is_complete(monaco):
+    """docs/design/stored_levels.md: roadstyle's band_col replaces the level from the tags, so the band has a value for every road: the layer, else a bridge 1 and a tunnel -1;
+    a path's sidewalk -1 and crossing 1."""
+    from mapstyle.map import _band
+    roads = load_roads(monaco)
+    band = _band(roads)
+    assert len(band) == len(roads) and set(band) >= {-1, 0, 1}
+    tunnel = roads["tunnel"].notna() & ~roads["tunnel"].astype(str).isin(["", "no"]) & roads["layer"].isna() & ~roads["walk_type"].isin(["sidewalk", "crossing"])
+    assert tunnel.any() and (band[tunnel.to_numpy()] == -1).all()                # a tunnel with no layer tag is below the ground
+    path = roads["highway"].isin(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "corridor"])
+    assert (band[(path & (roads["walk_type"] == "crossing")).to_numpy()] == 1).all() and (band[(path & (roads["walk_type"] == "sidewalk")).to_numpy()] == -1).all()
 
 
-def _levels_of(db):
-    from mapstyle.node_levels import compute
-    lv = compute(db)
-    return lv, (lambda e: lv.intervals.get(str(e), (0, 0)))
-
-
-def test_a_raised_path_over_a_street_joined_to_ground_paths(tmp_path):
-    """The scene of docs/design/node_levels.md: a path with a layer tag joins two ground paths and passes over a street. The
-    intervals of roads that share a node intersect; the upper road's casing comes after the street's fill."""
-    R, P = "residential", "pedestrian"
-    db = _tiny_db(tmp_path / "ramp.duckdb", [
-        ("walking", P, "ground", [(-40, 0), (0, 0)], 0, 0, 0), ("walking", P, "ground", [(0, 0), (-20, -28)], 0, 0, 0),
-        ("walking", P, "raised", [(0, 0), (36, 14.4)], 1, 0, 0), ("driving", R, "street", [(17, -30), (17, 40)], 0, 0, 0)])
-    lv, iv = _levels_of(db)
-    ground1, ground2, raised, street = (iv(1001 + i) for i in range(4))
-    assert lv.info["overpass_pairs"] == 1 and lv.info["given_up"] == 0
-    assert raised[0] > street[1]                                      # over the street, its casing after the street's fill
-    for ground in (ground1, ground2):                                 # the ground paths meet the raised road at a node
-        assert ground[0] <= raised[1] and raised[0] <= ground[1]
-    assert not lv.cuts
-
-
-def test_a_tunnel_under_a_street_and_no_overpass_without_a_crossing(tmp_path):
-    R = "residential"
-    db = _tiny_db(tmp_path / "tunnel.duckdb", [
-        ("driving", R, "road", [(-30, 0), (-12, 0)], 0, 0, 0), ("driving", R, "tunnel", [(-12, 0), (12, 0)], -1, 0, 1),
-        ("driving", R, "road", [(12, 0), (30, 0)], 0, 0, 0), ("driving", R, "street", [(0, -40), (0, 40)], 0, 0, 0)])
-    lv, iv = _levels_of(db)
-    mouth1, tunnel, mouth2, street = (iv(1001 + i) for i in range(4))
-    assert lv.info["overpass_pairs"] == 1 and street[0] > tunnel[1]
-    assert mouth1[0] <= tunnel[1] and tunnel[0] <= mouth1[1] and mouth2[0] <= tunnel[1] and tunnel[0] <= mouth2[1]
-    only = _tiny_db(tmp_path / "flat.duckdb", [("driving", R, "a", [(-30, 0), (0, 0)], 0, 0, 0), ("driving", R, "b", [(0, 0), (30, 0)], 1, 0, 0)])
-    lv, iv = _levels_of(only)
-    assert lv.info["overpass_pairs"] == 0 and not lv.intervals                  # nothing crosses: every road stays at 0
-
-
-def test_node_levels_without_a_solver_and_on_monaco(monaco):
-    """The heuristic runs without OR-Tools; on Monaco every overpass pair is satisfied after the conflict fixes."""
-    from mapstyle.node_levels import compute
-    h = compute(monaco, solver=False)
-    assert h.info["solver"] is False and h.info["overpass_pairs"] > 100
-    s = compute(monaco)
-    assert s.info["unsatisfied"] == 0 and s.info["given_up"] >= s.info["dropped"] and s.info["levels"] <= 12
-    assert s.info["given_up"] <= 8                                         # 3 in the sample; a few for another build of it
-
-
-def test_the_default_page_draws_the_order_of_the_roads(monaco, monkeypatch):
-    """render_map gives roadstyle ``casing_level_col`` / ``fill_level_col``: even positions from the intervals, a crossing at 1 and a
-    mapped sidewalk at -1; a road cut into pieces keeps its row and appends the other pieces with ``_piece``."""
-    seen = {}
+def _seen(monkeypatch, db, **kw):
+    """The arguments and the roads that render_map gives roadstyle's render_edges."""
     from types import SimpleNamespace
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False)
-    g, base = seen["g"], load_roads(monaco)
-    assert seen["casing_level_col"] == "_cl" and seen["fill_level_col"] == "_fl" and "cap_col" not in seen
-    n = len(base)
-    assert list(g["edge_id"].iloc[:n]) == list(base["edge_id"]) and g["_piece"].iloc[n:].all()
-    assert (g["_cl"] <= g["_fl"]).all()
-    cross, side = g["_band"] == 1, g["_band"] == -1
-    assert cross.any() and side.any()
-    assert set(g.loc[cross, "_cl"]) == {1} and set(g.loc[cross, "_fl"]) == {1} and set(g.loc[side, "_cl"]) == {-1}
-    rest = g[~cross & ~side]
-    assert (rest["_cl"] % 2 == 0).all() and (rest["_fl"] % 2 == 0).all()   # the odd positions stay free
-    off = {}
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: off.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, order=False)
-    assert "casing_level_col" not in off and len(off["g"]) == n
+    seen = {}
+    monkeypatch.setattr(rs, "render_edges", lambda g, **k: seen.update(k, g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(db, layers=False, **kw)
+    return seen
+
+
+def test_without_stored_levels_roadstyle_computes_the_order(monaco, monkeypatch):
+    """docs/design/stored_levels.md: a file without visualization.edge_levels: roadstyle computes the numbers from the complete band; every road is drawn whole."""
+    seen = _seen(monkeypatch, monaco)
+    assert seen["band_col"] == "band" and "casing_level_col" not in seen and "cap_col" not in seen
+    assert len(seen["g"]) == len(load_roads(monaco)) and "band" in seen["g"] and not seen["g"]["band"].isna().any()
+
+
+def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, monkeypatch):
+    """With the table (duckosm levels) the page is drawn with its numbers; a table computed with other options is an error that says to run duckosm levels again."""
+    import shutil
+
+    if not DUCKOSM_EXE.exists():
+        pytest.skip("needs duckOSM's duckosm")
+    db = tmp_path / "stored.duckdb"
+    shutil.copy(monaco, db)
+    done = subprocess.run([DUCKOSM_EXE, "levels", str(db)], capture_output=True, text=True)
+    if done.returncode:
+        pytest.skip(f"duckosm levels is not available (duckOSM 0.2.0 with roadstyle 0.13.1 is needed): {done.stderr[-200:]}")
+    seen = _seen(monkeypatch, db)
+    assert [seen[k] for k in ("casing_level_col", "fill_level_col", "casing_start_col", "casing_end_col")] == ["casing_level", "fill_level", "casing_start", "casing_end"]
+    assert "band_col" not in seen and (seen["g"]["casing_level"] <= seen["g"]["fill_level"]).all()
+    assert len(seen["g"]) == len(load_roads(db))
+    assert _seen(monkeypatch, db, tiles=True)["casing_level_col"] == "casing_level"          # also with vector tiles
+    subprocess.run([DUCKOSM_EXE, "levels", str(db), "--no-min-positions"], check=True, capture_output=True)
+    with pytest.raises(ValueError, match="duckosm levels"):
+        render_map(db, layers=False)                                                           # the file's numbers were computed with other options: never recomputed silently
+
+
+def test_the_argument_order_is_removed(monaco):
+    with pytest.raises(ValueError, match="removed"):
+        render_map(monaco, layers=False, order=True)
 
 
 def test_pieces_of_one_road():
@@ -466,7 +428,7 @@ def test_grey_theme_is_muted_except_the_water_and_green_hints():
 
 
 def test_theme_osm_is_todays_page_and_an_unknown_theme_names_the_choices(monaco):
-    assert render_map(monaco, layers=False, order=False).html == render_map(monaco, layers=False, order=False, theme="osm").html
+    assert render_map(monaco, layers=False).html == render_map(monaco, layers=False, theme="osm").html
     with pytest.raises(ValueError, match="unknown theme 'nope'; choose from \\('osm', 'google', 'grey'\\)"):
         render_map(monaco, theme="nope")
     html = render_map(monaco, theme="grey").html

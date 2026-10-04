@@ -209,7 +209,7 @@ Not rule changes: the dashboard's edge counts (pieces are not edges) and a hang 
 
 ## Approach B (a level for each node)
 
-The drawing order that replaces this cutting by default is described in `node_levels.md`.
+The drawing order that replaces this cutting by default is described in `stored_levels.md`.
 
 ## Decisions for Kaveh
 

@@ -53,8 +53,8 @@ m.save("cycling.html")        # m.html is the page as a string; in Jupyter m dis
 | `paths` | `google` (default), `osm`, `komoot`, `cyclosm`: how paths look |
 | `theme` | `osm` (default), `google` (clean), `grey` (quiet, for data on top): the whole map's colours; a theme is a short YAML in `src/mapstyle/styles/themes/` |
 | `layers` | `True` (all), a list (`["buildings", "crossings"]`), `False` (roads only) |
-| `order` | `True` (default): the roads' drawing order is solved (an interval per road: where its casing and its fill are drawn), so joints show no ring and an overpass is over its road; needs `pip install mapstyle[solver]` for the exact solution (else a heuristic); not with `tiles=True`; `False`: roadstyle's bands |
-| `pieces` | `False` (default); `True`: the older way, a road with a level cut into pieces (`order=False` too) |
+| `pieces` | `False` (default); `True`: the older way, a road with a level cut into pieces |
+| *(drawing order)* | not an argument: roadstyle's casing and fill numbers, read from `visualization.edge_levels` (`duckosm levels`) when the file has them, else computed while the page is made; a stale table is an error |
 | `planner` / `dashboard` | `True` adds the route planner / makes it a dashboard |
 | `interaction` | `{"crossings": {"clickable": True, "tooltip": True, "popup": False}}` |
 | other keywords | to `roadstyle.render_edges`: `tiles=True`, `basemap="positron"`, `view_3d=True`, `arrows=False` |

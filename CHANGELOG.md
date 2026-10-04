@@ -4,7 +4,17 @@ All notable changes to **mapstyle** are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — 2026-10-04
+
+### Changed
+- **The drawing order of the roads is roadstyle's** (`docs/design/stored_levels.md`). Every road has a casing number (start, main, end) and a fill number; `render_map` reads them from `visualization.edge_levels`
+  when the file has them (`duckosm levels`, duckOSM 0.2.0), else roadstyle computes them while it renders. A stored table computed for other roads or with other options is an error that says to run `duckosm levels` again.
+  `tiles=True` now draws by the numbers too. Needs roadstyle 0.14.0 (0.13.1 for the numbers; 0.14.0 also hides a road's arrows and street names with the road).
+- **The band given to roadstyle is complete**: the level from the tags (the `layer`, else a bridge 1, a tunnel -1), a path's sidewalk -1 and crossing 1. It was only the sidewalks and crossings, so tunnels and bridges were band 0
+  wherever roadstyle computed the numbers.
+
+### Removed
+- mapstyle's own solver (`mapstyle.node_levels`), the argument `order` (it raises an error), the `solver` extra, and the prototype scripts `scripts/node_levels*.py`. `pieces=True` stays.
 
 ## [0.3.0] — 2026-10-03
 
