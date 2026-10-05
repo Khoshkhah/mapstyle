@@ -199,6 +199,12 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
     assert seen["head_m"] == 5.0
     subprocess.run([DUCKOSM_EXE, "levels", str(db), "--head-m", "25"], check=True, capture_output=True)
     assert _seen(monkeypatch, db)["head_m"] == 25.0                                           # the file's own head_m is read and given to roadstyle, not refused
+    import duckdb
+    con = duckdb.connect(str(db))
+    con.execute("UPDATE visualization.edge_levels_meta SET band_rule = NULL")                 # a table made before the band rule was stored
+    con.close()
+    with pytest.raises(ValueError, match="band rule"):
+        render_map(db, layers=False)
     subprocess.run([DUCKOSM_EXE, "levels", str(db), "--no-min-positions"], check=True, capture_output=True)
     with pytest.raises(ValueError, match="duckosm levels"):
         render_map(db, layers=False)                                                           # the file's numbers were computed with other options: never recomputed silently

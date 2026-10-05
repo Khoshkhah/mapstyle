@@ -229,6 +229,7 @@ def _data_url(mime, data):
     return f"data:{mime};base64," + base64.b64encode(data).decode()
 
 
+BAND_RULE = "tags"      # the rule of the band the stored levels must be solved from (duckosm.levels.BAND_RULE): the tags only, a crossing and a sidewalk on their street's floor
 EDGE_ATTACHED = ("crossings", "traffic_signals")     # point layers that sit on a road: drawn at the level of their road (docs/design/edge_features.md)
 
 
@@ -443,7 +444,7 @@ def _band(roads):
 def stored_levels(db, roads):
     """``roads`` with the four columns of ``visualization.edge_levels`` (``casing_start``, ``casing_level``, ``casing_end``, ``fill_level``), or None when the file has no such
     table. The numbers must be those computed for these roads with ``duckosm levels``: the ``head_m`` is the file's own (it is in ``attrs["levels_params"]``, for the page to draw the heads at),
-    the other options its defaults; if they are not (the file was rebuilt, other options), a ``ValueError`` says what differs and that ``duckosm levels`` must be run again.
+    the other options its defaults, and the band rule ``BAND_RULE``; if they are not (the file was rebuilt, other options, a table made before the rule), a ``ValueError`` says what differs and that ``duckosm levels`` must be run again.
     Nothing is recomputed (docs/design/stored_levels.md)."""
     import duckdb
     import roadstyle as rs
@@ -453,9 +454,15 @@ def stored_levels(db, roads):
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'visualization' AND table_name = 'edge_levels'").fetchone()[0]:
             return None
         try:
-            head_m = float(con.execute("SELECT head_m FROM visualization.edge_levels_meta").fetchone()[0])    # the heads were solved at this length: draw them at it
-        except (duckdb.Error, TypeError):
-            head_m = 5.0                                                     # no meta row: load_levels says so
+            meta = con.execute("SELECT * FROM visualization.edge_levels_meta").df().iloc[0]
+        except (duckdb.Error, IndexError):
+            meta = None                                                      # no meta row: load_levels says so
+        if meta is not None:
+            rule = meta.get("band_rule")
+            rule = None if rule != rule else rule                           # a NULL: a table made before the rule was stored
+            if rule != BAND_RULE:
+                raise ValueError(f"the stored levels were solved from another band rule ({rule!r}, expected {BAND_RULE!r}: a crossing and a sidewalk on their street's floor); run `duckosm levels {db}` again")
+        head_m = float(meta["head_m"]) if meta is not None else 5.0         # the heads were solved at this length: draw them at it
         try:
             return rs.load_levels(con, roads, band_col="band", order="class", head_m=head_m)
         except ValueError as e:
