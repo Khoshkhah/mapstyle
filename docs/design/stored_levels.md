@@ -40,7 +40,7 @@ The band is an input of the optimization, and roadstyle's `band_col` **replaces*
 It is the same as duckOSM's (`duckosm.levels.load_roads`), so that the stored numbers and mapstyle's agree:
 
 - the level from the tags: the OSM `layer` if that is a number, else 1 for a bridge, −1 for a tunnel, else 0;
-- except for a path (`footway`, `path`, `cycleway`, `steps`, `pedestrian`, `bridleway`, `corridor`) with a `walk_type`: a `sidewalk` is −1 (under its street) and a `crossing` is 1 (over it).
+- nothing else: a sidewalk and a crossing have the band of their tags (0 on a plain street), since 2026-10-04 ([crossing_band.md](crossing_band.md); they were −1 and 1 before). A table made before that has the old numbers: run `duckosm levels` again.
 
 **This is a fix.** mapstyle passed `_band` with values only for sidewalks and crossings and nulls for every other road, so wherever roadstyle computed the numbers (`tiles=True`, `order=False`),
 tunnels, bridges and layers were band 0. On Monaco roadstyle then saw only the bands −1, 0, 1 instead of −4 to 3.

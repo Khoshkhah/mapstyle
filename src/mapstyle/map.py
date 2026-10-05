@@ -428,8 +428,8 @@ def planner_data(db, roads):
 
 def _band(roads):
     """The band of every road: below (-1 ...), on (0) or over (1 ...) the ground (docs/design/stored_levels.md). It is complete, because roadstyle's ``band_col``
-    replaces the level from the tags: the OSM ``layer`` if that is a number, else 1 for a bridge, -1 for a tunnel, else 0; except for a path with a
-    ``walk_type``: a sidewalk is -1 (under its street) and a crossing 1 (over it). The same as duckOSM's (``duckosm levels``)."""
+    replaces the level from the tags: the OSM ``layer`` if that is a number, else 1 for a bridge, -1 for a tunnel, else 0. A sidewalk and a crossing have the band of their tags too: they
+    are on the ground like their street, which the class order paints over them (docs/design/crossing_band.md). The same as duckOSM's (``duckosm levels``)."""
     import numpy as np
     import pandas as pd
 
@@ -437,9 +437,7 @@ def _band(roads):
 
     def yes(col):
         return (roads[col].notna() & ~roads[col].astype(str).isin(["", "no", "None", "nan"])).to_numpy()
-    tags = np.where(layer != 0, layer, np.where(yes("bridge"), 1, np.where(yes("tunnel"), -1, 0)))
-    path = (roads["highway"].isin(PATH_CLASSES) & roads["walk_type"].isin(["sidewalk", "crossing"])).to_numpy()
-    return np.where(path, roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).fillna(0).astype(int).to_numpy(), tags).astype(int)
+    return np.where(layer != 0, layer, np.where(yes("bridge"), 1, np.where(yes("tunnel"), -1, 0))).astype(int)
 
 
 def stored_levels(db, roads):

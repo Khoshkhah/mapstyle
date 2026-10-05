@@ -36,9 +36,9 @@ missing-features case).
 - `map.py` — the library; its `main()` is the `mapstyle` CLI. `render_map(db, mode, layers=True)` → `rs.render_edges` with:
   roads from `load_roads(db)` (one row per `edge_id`, mode flags) in `mode_settings(mode, paths)`:
   palette + `settings=` from `styles/modes.yaml` (`all`/driving/walking/cycling: which network is
-  on top) and `styles/paths.yaml` (path styles, default `google`); crossings over / sidewalks
-  under their street from duckOSM's `walk_type` (roadstyle's `band_col`, a roadstyle feature added
-  for this at Kaveh's request); paths and one-way streets drawn as one line, not two lanes,
+  on top) and `styles/paths.yaml` (path styles, default `google`); the band of every road
+  (`_band`, roadstyle's `band_col`) is the floor from its tags (a sidewalk and a crossing are on their street's
+  floor, so the class order paints the street over them; `docs/design/crossing_band.md`); paths and one-way streets drawn as one line, not two lanes,
   from `is_directed` (roadstyle's `directed_col`) (design:
   `docs/design/mode_styles.md`); base map `blank` (Kaveh's choice; the sea is duckOSM's `features.ocean`); themes (`theme=`: `osm`,
   `google`, `grey`; `styles/themes/*.yaml` over osm_carto.yaml via `style.load_theme`; design:

@@ -60,7 +60,7 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
 - **A full base map from the same database**: the sea, land use with openstreetmap.org's textures,
   water, buildings, railways, parking, transit, traffic lights and crossings. No tile server, no API key.
 - **Roads drawn right at junctions**: two-way roads as two lanes, bridges and overpasses over, tunnels
-  under, crossings over their street; zebra crossings and traffic lights sit at the level of their street, so on a bridge or in a tunnel they follow it. The drawing order of the roads is [roadstyle's](https://github.com/Khoshkhah/roadstyle):
+  under, a footway or crossing never over a street; zebra crossings and traffic lights are drawn over their street, at its level, so on a bridge or in a tunnel they follow it. The drawing order of the roads is [roadstyle's](https://github.com/Khoshkhah/roadstyle):
   a casing number and a fill number for every road, read from the database when `duckosm levels` stored them, else computed
   while the page is made, so a joint of roads at different levels shows no ring.
 - **A route planner demo**: drag a start and an end and see duckOSM's route on the map (routing

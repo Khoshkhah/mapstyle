@@ -150,16 +150,18 @@ def test_roads_with_a_level_are_cut_into_pieces(monaco, monkeypatch):
 
 
 def test_the_band_is_complete(monaco):
-    """docs/design/stored_levels.md: roadstyle's band_col replaces the level from the tags, so the band has a value for every road: the layer, else a bridge 1 and a tunnel -1;
-    a path's sidewalk -1 and crossing 1."""
+    """docs/design/stored_levels.md: roadstyle's band_col replaces the level from the tags, so the band has a value for every road: the layer, else a bridge 1 and a tunnel -1, else 0.
+    docs/design/crossing_band.md: a sidewalk and a crossing are on their street's floor: the band of their tags, 0 on a plain street."""
     from mapstyle.map import _band
     roads = load_roads(monaco)
     band = _band(roads)
     assert len(band) == len(roads) and set(band) >= {-1, 0, 1}
-    tunnel = roads["tunnel"].notna() & ~roads["tunnel"].astype(str).isin(["", "no"]) & roads["layer"].isna() & ~roads["walk_type"].isin(["sidewalk", "crossing"])
+    tunnel = roads["tunnel"].notna() & ~roads["tunnel"].astype(str).isin(["", "no"]) & roads["layer"].isna()
     assert tunnel.any() and (band[tunnel.to_numpy()] == -1).all()                # a tunnel with no layer tag is below the ground
-    path = roads["highway"].isin(["footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "corridor"])
-    assert (band[(path & (roads["walk_type"] == "crossing")).to_numpy()] == 1).all() and (band[(path & (roads["walk_type"] == "sidewalk")).to_numpy()] == -1).all()
+    plain = roads["layer"].isna() & ~(roads["bridge"].notna() & ~roads["bridge"].astype(str).isin(["", "no"])) & ~(roads["tunnel"].notna() & ~roads["tunnel"].astype(str).isin(["", "no"]))
+    for walk_type in ("crossing", "sidewalk"):
+        on_ground = (roads["walk_type"] == walk_type) & plain
+        assert on_ground.any() and (band[on_ground.to_numpy()] == 0).all()       # neither over nor under its street
 
 
 def _seen(monkeypatch, db, **kw):
@@ -200,6 +202,36 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
     subprocess.run([DUCKOSM_EXE, "levels", str(db), "--no-min-positions"], check=True, capture_output=True)
     with pytest.raises(ValueError, match="duckosm levels"):
         render_map(db, layers=False)                                                           # the file's numbers were computed with other options: never recomputed silently
+
+
+def test_a_crossing_is_not_over_its_street(monaco, tmp_path):
+    """docs/design/crossing_band.md: with the stored levels (duckosm levels, the band of the tags), a footway crossing is not painted over the driving road it crosses
+    (Monaco: 1,254 of 1,266 under it, 10 at the same number, 2 over it)."""
+    import shutil
+
+    import numpy as np
+    from shapely import STRtree
+
+    from mapstyle.map import PATH_CLASSES, stored_levels
+
+    if not DUCKOSM_EXE.exists():
+        pytest.skip("needs duckOSM's duckosm")
+    db = tmp_path / "levels.duckdb"
+    shutil.copy(monaco, db)
+    done = subprocess.run([DUCKOSM_EXE, "levels", str(db)], capture_output=True, text=True, check=False)
+    if done.returncode:
+        pytest.skip(f"duckosm levels is not available: {done.stderr[-200:]}")
+    roads = stored_levels(db, load_roads(db))
+    street = roads[~roads["highway"].isin(PATH_CLASSES)]
+    tree, fill = STRtree(street.geometry.to_numpy()), street["fill_level"].to_numpy()
+    crossing = roads[roads["walk_type"] == "crossing"]
+    over = total = 0
+    for geom, f in zip(crossing.geometry, crossing["fill_level"], strict=True):
+        hits = tree.query(geom, predicate="intersects")
+        if len(hits):
+            total += 1
+            over += f > fill[hits].max()
+    assert total > 100 and over <= 0.01 * total, (over, total)
 
 
 def test_the_argument_order_is_removed(monaco):

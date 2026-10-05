@@ -21,11 +21,12 @@
 - The planner's default is `all` (was `walking`, 2026-10-02): in the walking look every road is one centred line, so a two-way road's two directions overlap and only one can be clicked. The route is drawn by the planner over any look, so a walking leg shows.
 - **Order at junctions** (Kaveh, 2026-09-30): the walking look no longer lifts every path above
   every road (`z_order` 9.5): that cut through junctions, and a path's halo vanished under the road
-  it crossed. Instead, by duckOSM's `walk_type`, a `crossing` (the zebra) draws entirely over the
+  it crossed. Instead, by duckOSM's `walk_type`, a `crossing` (the zebra) drew entirely over the
   street and a `sidewalk` entirely under it, casings included (roadstyle's new `band_col`:
   `../roadstyle/docs/design/draw_order_per_edge.md`); every other path keeps the class order
   (a street over the path ending at it), as openstreetmap-carto does. Needs roadstyle's
-  `band_col` (after 0.9.2).
+  `band_col` (after 0.9.2). **Changed 2026-10-04** ([crossing_band.md](crossing_band.md)): a crossing and a sidewalk have the
+  band of their tags, so the street is over them, as for every other path; the zebra marking is drawn over the street.
 
 ## Problem
 

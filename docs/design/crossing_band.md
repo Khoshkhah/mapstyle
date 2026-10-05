@@ -1,6 +1,7 @@
 # A crossing keeps its real floor (band 0), so its street is drawn over it
 
-**Status:** proposal, 2026-10-04, waiting for Kaveh's sign-off. Not coded. It changes duckOSM (`duckosm levels`) and mapstyle together.
+**Status:** implemented 2026-10-04 (Kaveh: a footway never over a driving road, "yes"; sidewalks: "real floor"). Changed in duckOSM (`levels.py`, `docs/design/levels.md`, its test) and in
+mapstyle (`_band`, its test, the docs below). Verified: on all 12,941 edges of Monaco the two bands agree. A stored table made before must be made again.
 
 ## What the words mean
 
@@ -32,7 +33,7 @@ With band 0 nothing says the crossing is higher; the class order puts the street
 
 1. A crossing has the band of its tags (the `layer`, bridge, tunnel; ground 0 on a plain street). Remove `"crossing": 1` from `_BAND_OF_WALK_TYPE` (duckOSM `levels.py`, line 15) and from `_band`
    (mapstyle `map.py`, lines 441-442), so the two stay the same: the stored numbers come from duckOSM's band, and mapstyle's band is what roadstyle computes from when there is no table.
-2. A **sidewalk stays −1** (under its street). Not asked to change; see the open points.
+2. A **sidewalk** has its real floor too (Kaveh), not −1.
 3. The zebra **marking** is the icon: it is already drawn at the level of its street, over the street's fill ([edge_features.md](edge_features.md)). Nothing to change there.
 4. Docs and tests that say "crossings over their street": duckOSM `docs/design/levels.md` (line 52), mapstyle `README.md`, `AGENTS.md`, `docs/design/stored_levels.md` ("The band"), `docs/design/mode_styles.md`
    ("Order at junctions"), `test_the_band_is_complete` (a crossing's band is the one of its tags), the `pieces=True` band (`map.py`, line 539: the older approach, to be decided).
@@ -54,6 +55,6 @@ as openstreetmap-carto does). Decide: keep that look, or "a footway never over a
 
 ## Open points
 
-1. The 2026-09-30 decision above.
-2. A sidewalk: also its real floor (0), or still −1? A sidewalk drawn under its street is the same wish seen from the other side; the data was not measured.
+1. Decided: the 2026-09-30 look is replaced (a footway never over a driving road). Sidewalks too: their real floor.
+2. Not measured after the change: the sidewalks (they were −1) and the junction heads; run `duckosm levels` on Monaco and look.
 3. A crossing on a real bridge or in a tunnel keeps the band of its tags (1 or −1), as every road does. Not tested.

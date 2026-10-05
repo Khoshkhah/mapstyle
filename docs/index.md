@@ -46,7 +46,7 @@ mapstyle monaco.duckdb          # -> monaco_all.html: one file, opens offline
     ---
 
     Bridges over, tunnels under only where they really pass under a road, raised walkways,
-    crossings over their street, two-way roads as two lanes.
+    footways and crossings never over a street (the zebra marking is), two-way roads as two lanes.
 
     [:octicons-arrow-right-24: How roads are drawn](guides/roads.md)
 
