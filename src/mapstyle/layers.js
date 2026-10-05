@@ -77,6 +77,8 @@ const run = async () => {
   MS.layers.forEach(L => {
     const ov = byLabel[L.label]; if (!ov) return;
     const body = ov.layers[0], vis = ov.visible === false ? "none" : "visible";
+    // the body layers: one for a plain overlay, one for each (fill number, order) for an overlay attached to edges (docs/design/edge_features.md); not the outline of a polygon
+    const bodies = ov.layers.filter((id) => map.getLayer(id).type === map.getLayer(body).type);
     const add = (spec, before) => {
       map.addLayer({...spec, source: ov.source, layout: {...(spec.layout || {}), visibility: vis}}, before);
       ov.layers.push(spec.id);
@@ -90,18 +92,25 @@ const run = async () => {
       paint: {"fill-pattern": ["match", ["get", "kind"], ...Object.entries(L.patterns).flat(),
                                Object.values(L.patterns)[0]]}}, ov.layers[1]);
     if (L.icon) {
-      add({id: ov.source + "-icon", type: "symbol",
-        layout: {"icon-image": L.icon.image, "icon-allow-overlap": true,
-                 "icon-size": ["interpolate", ["linear"], ["zoom"], ...L.icon.size.flat()],
-                 "icon-rotate": ["coalesce", ["get", "bearing"], 0], "icon-rotation-alignment": "map"},
-        paint: {"icon-opacity": L.icon.opacity}});
+      // on a road's level: an icon layer right after each circle layer, with its filter; else one icon layer on top of the map
+      const onEdge = bodies.some((id) => JSON.stringify(map.getFilter(id) || null).includes("__rs_fl"));
+      bodies.forEach((id, k) => {
+        const ids = map.getStyle().layers.map((l) => l.id);
+        add({id: ov.source + "-icon" + (k || ""), type: "symbol", ...(onEdge ? {filter: map.getFilter(id)} : {}),
+          layout: {"icon-image": L.icon.image, "icon-allow-overlap": true,
+                   "icon-size": ["interpolate", ["linear"], ["zoom"], ...L.icon.size.flat()],
+                   "icon-rotate": ["coalesce", ["get", "bearing"], 0], "icon-rotation-alignment": "map"},
+          paint: {"icon-opacity": L.icon.opacity}}, onEdge ? ids[ids.indexOf(id) + 1] : undefined);
+      });
       // the circle stays as the click / hover target, unseen and as big as the icon (an icon is
       // 48 px scaled by icon-size, so its radius is 24 x that): a click anywhere on the icon is its
       // click, not the road's under it
-      map.setPaintProperty(body, "circle-opacity", 0);
-      map.setPaintProperty(body, "circle-stroke-width", 0);
-      map.setPaintProperty(body, "circle-radius",
-        ["interpolate", ["linear"], ["zoom"], ...L.icon.size.map(([z, s]) => [z, s * 24]).flat()]);
+      bodies.forEach((id) => {
+        map.setPaintProperty(id, "circle-opacity", 0);
+        map.setPaintProperty(id, "circle-stroke-width", 0);
+        map.setPaintProperty(id, "circle-radius",
+          ["interpolate", ["linear"], ["zoom"], ...L.icon.size.map(([z, s]) => [z, s * 24]).flat()]);
+      });
     }
     if (L.min_zoom) ov.layers.forEach(id => map.setLayerZoomRange(id, L.min_zoom, 24));
     base[L.label] = Object.fromEntries(ov.layers.map((id) => [id, map.getFilter(id) || null]));
@@ -109,7 +118,7 @@ const run = async () => {
     // every layer is built clickable with a tooltip, so each switch can go both ways; the page
     // opens with the state render_map(interaction=) asked for
     state[L.label] = {clickable: true, tooltip: true, popup: true,
-                      color: map.getPaintProperty(body, p), paint: p, body, tip: ov.tooltip};
+                      color: map.getPaintProperty(body, p), paint: p, body, bodies, tip: ov.tooltip};
     setInteraction(L.label, L.interaction);
     rsSetOverlay(L.label, true);                       // built hidden (map.py): shown once styled
   });
@@ -123,7 +132,7 @@ const run = async () => {
     ov.interactive = s.clickable;
     ov.tooltip = s.tooltip ? s.tip : null;
     const c = s.color;
-    map.setPaintProperty(s.body, s.paint, s.clickable || !Array.isArray(c) || c[0] !== "case" ? c : c[c.length - 1]);
+    s.bodies.forEach((id) => map.setPaintProperty(id, s.paint, s.clickable || !Array.isArray(c) || c[0] !== "case" ? c : c[c.length - 1]));
     fire("rs:interactionchange", {overlay: ov.label, clickable: s.clickable, tooltip: s.tooltip, popup: s.popup});
   }
   // popup off: roadstyle opens a popup for every clicked layer and sends rs:select right after, so

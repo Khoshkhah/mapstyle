@@ -207,6 +207,54 @@ def test_the_argument_order_is_removed(monaco):
         render_map(monaco, layers=False, order=True)
 
 
+def _roads_for_edge_attach(rows):
+    """A roads table for edge_attach: ``(edge_id, highway, walk_type, fill_level, x0, x1)`` as a horizontal line at y = 0 from x0 to x1 (degrees)."""
+    import geopandas as gpd
+    from shapely.geometry import LineString
+
+    return gpd.GeoDataFrame({"edge_id": [r[0] for r in rows], "highway": [r[1] for r in rows], "walk_type": [r[2] for r in rows], "fill_level": [r[3] for r in rows],
+                             "layer": None, "bridge": None, "tunnel": None},
+                            geometry=[LineString([(r[4], 0), (r[5], 0)]) for r in rows], crs=4326)
+
+
+def test_a_point_on_a_road_gets_the_street_it_is_on():
+    """docs/design/edge_features.md: the street within ~1 m (the one drawn on top: the highest fill number), not the footpath or the crossing edge; a point beside its road
+    (a signal) the nearest street within ~3 m; with no street that close the nearest road."""
+    from mapstyle.map import edge_attach
+
+    roads = _roads_for_edge_attach([
+        (1, "residential", None, 1, 0.0, 1.0),       # a street that passes over...
+        (2, "residential", None, -1, 0.0, 1.0),      # ...the same street's other stretch (a tunnel): the same line, lower
+        (3, "footway", "crossing", 3, 0.5, 0.6),     # a crossing edge, drawn above everything: still not the answer
+        (4, "footway", None, 0, 5.0, 6.0)])          # a path far from any street
+    point = lambda x, y: {"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [x, y]}}  # noqa: E731
+    fcs = {"crossings": {"features": [point(0.55, 0.0), point(0.3, 2e-5), point(5.5, 0.0), point(9.0, 9.0)]}, "traffic_signals": {"features": []}}
+    assert edge_attach(fcs, roads) == ["crossings"]            # an empty layer stays a plain overlay
+    on_street, beside, on_path, nowhere = [f["properties"]["edge_id"] for f in fcs["crossings"]["features"]]
+    assert on_street == "1"            # on the crossing edge and the street: the street, the one with the higher fill number of the two
+    assert beside == "1"               # 2 m beside the street: the street
+    assert on_path == "4" and nowhere == "4"      # no street within 3 m: the nearest road, a text id
+
+
+def test_crossings_and_signals_are_drawn_at_their_roads_level(monaco, monkeypatch):
+    """The overlays of the points on a road are attached to edges (edge_col): every point has the edge_id of a road of the page; not with pieces=True."""
+    from types import SimpleNamespace
+
+    seen = {}
+    monkeypatch.setattr(rs, "render_edges", lambda g, **k: seen.update(k, g=g) or SimpleNamespace(_tpl="</body>"))
+    render_map(monaco)
+    on_edges = {o.label: o for o in seen["overlays"] if o.edge_col}
+    assert set(on_edges) <= {"crossings", "traffic_signals"}
+    ids = set(seen["g"]["edge_id"].astype(str))
+    for o in on_edges.values():
+        assert o.edge_col == "edge_id" and all(f["properties"]["edge_id"] in ids for f in o.data["features"])
+    if load_layers(monaco, ["crossings"]).get("crossings"):
+        assert "crossings" in on_edges
+    seen.clear()
+    render_map(monaco, pieces=True)
+    assert not any(o.edge_col for o in seen["overlays"])
+
+
 def test_pieces_of_one_road():
     """The cut of one road: ground, the stretch around a crossing, ground; a crossing near an end takes that end;
     two crossings close together are one stretch; none is one ground piece."""

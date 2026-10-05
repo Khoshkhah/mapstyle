@@ -229,7 +229,55 @@ def _data_url(mime, data):
     return f"data:{mime};base64," + base64.b64encode(data).decode()
 
 
-def feature_overlays(fcs, interaction=None, style=None):
+EDGE_ATTACHED = ("crossings", "traffic_signals")     # point layers that sit on a road: drawn at the level of their road (docs/design/edge_features.md)
+
+
+_CLASS_RANK = {c: r for r, c in enumerate(("motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "service"), 1)}
+
+
+def edge_attach(fcs, roads, names=EDGE_ATTACHED, near=1e-5, far=3e-5):
+    """Put ``edge_id`` (text: it can pass 2**53) on every feature of the layers ``names`` in ``fcs``: the **street** it is on, not the footpath, so that the point is drawn at the
+    level of that street, over its fill and under every road above it. Of the streets (not a path class) within ``near`` degrees (about 1 m) of the point, the one drawn on top: the
+    highest ``fill_level`` if ``roads`` has the stored levels, then the highest band, then the highest class (a link as its parent), so that no street the point overlaps covers it.
+    With no street that close: the nearest street within ``far`` (about 3 m: a signal stands beside its road), else the nearest road. (A crossing's own edge is no good: duckOSM's levels
+    put 562 of Monaco's 1,292 crossing edges below the street they cross, because a short road is never stacked over another; docs/design/edge_features.md.)
+    Returns the names of the layers that got one (an empty layer stays a plain overlay)."""
+    import numpy as np
+    import shapely
+    from shapely import STRtree
+    from shapely.geometry import shape
+
+    klass = roads["highway"].fillna("").str.removesuffix("_link").map(_CLASS_RANK).fillna(99)
+    fill = roads["fill_level"].to_numpy() if "fill_level" in roads else np.zeros(len(roads))
+    top = np.lexsort(((-klass).to_numpy(), _band(roads), fill))[::-1]       # roads from the one drawn on top to the one under
+    rank = np.empty(len(roads), int)
+    rank[top] = np.arange(len(roads))
+    geoms = roads.geometry.to_numpy()
+    tree = STRtree(geoms)
+    street = ~roads["highway"].isin(PATH_CLASSES).to_numpy()
+    ids = roads["edge_id"].to_numpy()
+    done = []
+    for name in names:
+        feats = (fcs.get(name) or {}).get("features")
+        if not feats:
+            continue
+        for f in feats:
+            pt = shape(f["geometry"])
+            hits = tree.query(pt, predicate="dwithin", distance=near)
+            hits = hits[street[hits]]
+            if not len(hits):
+                hits = tree.query(pt, predicate="dwithin", distance=far)
+                hits = hits[street[hits]] if street[hits].any() else hits
+                if len(hits):
+                    d = shapely.distance(pt, geoms[hits])
+                    hits = hits[d <= d.min() + 2e-6]                       # the nearest (about 0.2 m)
+            j = hits[np.argmin(rank[hits])] if len(hits) else tree.query_nearest(pt)[0]
+            f["properties"]["edge_id"] = str(ids[j])
+        done.append(name)
+    return done
+
+
+def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
     """``(overlays, script_config)`` for ``load_layers`` output: one ``rs.Overlay`` per layer, and
     what layers.js adds on top (colour by kind, zoom ranges, dashes, textures, icons, each layer's
     opening ``{clickable, tooltip, popup}``: today's defaults updated by ``interaction``)."""
@@ -243,6 +291,8 @@ def feature_overlays(fcs, interaction=None, style=None):
         kind = _kind(name)
         L = {"label": name, "kind": _OV_KIND[kind]}
         ov = dict(data=fc, kind=L["kind"], label=name, placement="over" if kind == "point" else "under")
+        if name in edge_attached:             # drawn at the fill number of its edge (roadstyle's edge_col): layers.js puts the icon there too
+            ov["edge_col"] = "edge_id"
         if name == "landcover":               # colour, outline and texture by kind
             fills = dict(areas["landcover"])
             default = fills.pop("default")
@@ -450,7 +500,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
-    overlays, config = feature_overlays(fcs, interaction, style)
+    # a point on a road is drawn at its road's level: not with pieces (their edge_ids are the pieces'), and the roads must be the ones roadstyle draws
+    # (the levels are read again below, with the columns added to the roads since: they are cheap)
+    levels = None if pieces else stored_levels(db, roads)
+    overlays, config = feature_overlays(fcs, interaction, style, edge_attached=() if pieces else edge_attach(fcs, roads if levels is None else levels))
     roads["access"] = _access(roads, mode)
     roads = roads.drop(columns=[f"access_{m}" for m in MODES])
     kw = {"name": f"{Path(db).stem} ({mode}, {paths}" + ("" if theme in (None, "osm") else f", {theme}") + ")",
