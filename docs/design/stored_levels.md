@@ -13,11 +13,26 @@ duckOSM can store them in the file (`duckosm levels`, schema `visualization`). S
 
 1. The roads get the **band** (below, on, or over the ground) that roadstyle needs, in the column `band` (see below).
 2. **The numbers.**
-   - If the file has `visualization.edge_levels`, they are read with `roadstyle.load_levels(con, roads, band_col="band", order="class")`. The reader checks that the options and the edges are those the numbers were computed for.
+   - If the file has `visualization.edge_levels`, they are read with `roadstyle.load_levels(con, roads, band_col="band", order="class")`. The reader checks that the options (`head_m` is the file's own, see below) and the edges are those the numbers were computed for.
      If they are not (the file was rebuilt, or `duckosm levels` was run with other options), `render_map` stops with the reader's message and says: run `duckosm levels` again. It never recomputes silently.
    - If the file has no such table, roadstyle computes them while it renders (`render_edges` with `band_col="band"`, its defaults). They are not stored: mapstyle only reads the file.
 3. The page is drawn with `casing_level_col`, `fill_level_col`, `casing_start_col`, `casing_end_col` and `head_m` (the stored one), roadstyle's columns for numbers.
 4. `tiles=True` works with the numbers (roadstyle 0.13 puts them in the tiles), so the warning "the drawing order is not supported with vector tiles" goes.
+
+## head_m is the file's own (2026-10-04)
+
+**Status:** implemented (Kaveh: "keep head_m value inside the database").
+
+`duckosm levels --head-m 25` stores the heads at 25 m. mapstyle used to expect roadstyle's default, 5 m, so `render_map` refused such a table
+(`head_m: stored 25.0, expected 5.0`), and it never gave `head_m` to roadstyle, which drew the heads at 5 m whatever the file said.
+
+Now `stored_levels` reads `head_m` from `visualization.edge_levels_meta`, asks the reader for exactly that value (so only the rest of the
+options must be the defaults) and leaves it in `attrs["levels_params"]`; `render_map` passes it to `render_edges(head_m=...)` with the four number columns.
+roadstyle already has the `head_m` argument: nothing changes there. A `head_m=` the caller gives still wins (`**kwargs`).
+
+The other options (`band_dist`, `margin`, `max_level`, `order`, `min_positions`) are still compared with the defaults, so a table stored with
+`--no-min-positions` is still refused (open point 2). The edge check stays: another set of roads is an error that says to run `duckosm levels` again.
+Test: `test_stored_levels_are_read_and_a_stale_table_is_an_error` (a table stored with `--head-m 25` is read and `head_m=25.0` is given to roadstyle).
 
 ## The band
 

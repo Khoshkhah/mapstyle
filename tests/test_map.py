@@ -194,6 +194,9 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
     assert "band_col" not in seen and (seen["g"]["casing_level"] <= seen["g"]["fill_level"]).all()
     assert len(seen["g"]) == len(load_roads(db))
     assert _seen(monkeypatch, db, tiles=True)["casing_level_col"] == "casing_level"          # also with vector tiles
+    assert seen["head_m"] == 5.0
+    subprocess.run([DUCKOSM_EXE, "levels", str(db), "--head-m", "25"], check=True, capture_output=True)
+    assert _seen(monkeypatch, db)["head_m"] == 25.0                                           # the file's own head_m is read and given to roadstyle, not refused
     subprocess.run([DUCKOSM_EXE, "levels", str(db), "--no-min-positions"], check=True, capture_output=True)
     with pytest.raises(ValueError, match="duckosm levels"):
         render_map(db, layers=False)                                                           # the file's numbers were computed with other options: never recomputed silently

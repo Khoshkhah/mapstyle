@@ -394,8 +394,9 @@ def _band(roads):
 
 def stored_levels(db, roads):
     """``roads`` with the four columns of ``visualization.edge_levels`` (``casing_start``, ``casing_level``, ``casing_end``, ``fill_level``), or None when the file has no such
-    table. The numbers must be those computed for these roads with ``duckosm levels``' defaults: if they are not (the file was rebuilt, other options), a ``ValueError`` says what
-    differs and that ``duckosm levels`` must be run again. Nothing is recomputed (docs/design/stored_levels.md)."""
+    table. The numbers must be those computed for these roads with ``duckosm levels``: the ``head_m`` is the file's own (it is in ``attrs["levels_params"]``, for the page to draw the heads at),
+    the other options its defaults; if they are not (the file was rebuilt, other options), a ``ValueError`` says what differs and that ``duckosm levels`` must be run again.
+    Nothing is recomputed (docs/design/stored_levels.md)."""
     import duckdb
     import roadstyle as rs
 
@@ -404,7 +405,11 @@ def stored_levels(db, roads):
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'visualization' AND table_name = 'edge_levels'").fetchone()[0]:
             return None
         try:
-            return rs.load_levels(con, roads, band_col="band", order="class")
+            head_m = float(con.execute("SELECT head_m FROM visualization.edge_levels_meta").fetchone()[0])    # the heads were solved at this length: draw them at it
+        except (duckdb.Error, TypeError):
+            head_m = 5.0                                                     # no meta row: load_levels says so
+        try:
+            return rs.load_levels(con, roads, band_col="band", order="class", head_m=head_m)
         except ValueError as e:
             raise ValueError(f"{e}; run `duckosm levels {db}` again") from None
     finally:
@@ -490,7 +495,8 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
             kw["band_col"] = "band"
         else:
             roads = stored
-            kw.update(casing_level_col="casing_level", fill_level_col="fill_level", casing_start_col="casing_start", casing_end_col="casing_end")
+            kw.update(casing_level_col="casing_level", fill_level_col="fill_level", casing_start_col="casing_start", casing_end_col="casing_end",
+                      head_m=stored.attrs["levels_params"]["head_m"])
     # duckOSM stores every path, and a one-way street's walking-only reverse, as a reverse edge too:
     # roadstyle draws a pair as two lanes only when both edges are directed (directed_col,
     # twin_ends.md)
