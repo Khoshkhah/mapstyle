@@ -53,8 +53,7 @@ m.save("cycling.html")        # m.html is the page as a string; in Jupyter m dis
 | `paths` | `google` (default), `osm`, `komoot`, `cyclosm`: how paths look |
 | `theme` | `osm` (default), `google` (clean), `grey` (quiet, for data on top): the whole map's colours; a theme is a short YAML in `src/mapstyle/styles/themes/` |
 | `layers` | `True` (all), a list (`["buildings", "crossings"]`), `False` (roads only) |
-| `pieces` | `False` (default); `True`: the older way, a road with a level cut into pieces |
-| *(drawing order)* | not an argument: roadstyle's casing and fill numbers, read from `visualization.edge_levels` (`duckosm levels`) when the file has them, else computed while the page is made; a stale table is an error |
+| *(drawing order)* | not an argument: roadstyle's casing and fill numbers, read with each road end's head and shape from `visualization.edge_levels` (`duckosm levels`) when the file has them, else computed while the page is made; a stale table is an error |
 | `planner` / `dashboard` | `True` adds the route planner / makes it a dashboard |
 | `interaction` | `{"crossings": {"clickable": True, "tooltip": True, "popup": False}}` |
 | other keywords | to `roadstyle.render_edges`: `tiles=True`, `basemap="positron"`, `view_3d=True`, `arrows=False` |

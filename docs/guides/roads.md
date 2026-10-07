@@ -36,8 +36,8 @@ The OpenStreetMap `layer`, `bridge` and `tunnel` tags decide what passes over wh
 - **How that is drawn.** Every road has a casing number (in three parts: start, main, end) and a fill number, computed by
   [roadstyle](https://khoshkhah.github.io/roadstyle/guides/levels/) from the roads' levels, the road classes and where roads meet or cross: the roads are painted number by
   number, lowest first, and at each number all casings before all fills, so joints show no ring and an overpass is over its road. If the database has
-  `visualization.edge_levels` (`duckosm levels`), the page reads them; if not, they are computed while the page is made. A click on a road is its own edge.
-  `render_map(pieces=True)` draws the older way: a road with a level cut into pieces, ground pieces and the stretch that passes over or under another road.
+  `visualization.edge_levels` (`duckosm levels`: one level area for all modes, next to the file), the page reads them with each road end's head and shape; if not,
+  they are computed while the page is made. To fix a place by hand: `roadstyle-levels edit monaco.levels`, then make the page again. A click on a road is its own edge.
 - **Crossings** (`footway=crossing`) are drawn over their street, **mapped sidewalks** under it.
 - **Slip roads** (`*_link`) are drawn under the streets they join.
 

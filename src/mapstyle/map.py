@@ -20,6 +20,7 @@ PATHS = "google"                                   # the default path style (sty
 PATH_CLASSES = ("footway", "path", "cycleway", "steps", "pedestrian", "bridleway", "corridor")
 log = logging.getLogger(__name__)
 _HERE = Path(__file__).parent
+OPTIONAL_COLS = ("walk_type", "junction", "edge_ref", "lanes")   # roadstyle reads junction: a roundabout is on top where roads meet
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 
@@ -32,31 +33,18 @@ def _roads_union(con, db):
     modes = [m for m in MODES if m in have]
     if not modes:
         raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
-    wt = {m for (m,) in con.execute("SELECT table_schema FROM information_schema.columns "
-                                    "WHERE table_name = 'edges' AND column_name = 'walk_type'").fetchall()}
+    has = {(s, t, c) for s, t, c in con.execute("SELECT table_schema, table_name, column_name FROM information_schema.columns").fetchall()}
     cols = "edge_id, source, target, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
     priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
                                       "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
+
+    def optional(m, t, skip=()):                     # a column an older file may not have: NULL there
+        return ", ".join(f"{c if (m, t, c) in has and c not in skip else 'NULL'} AS {c}" for c in OPTIONAL_COLS)
     return " UNION ALL ".join(
-        [f"SELECT {cols}, {'walk_type' if m in wt else 'NULL'} AS walk_type, '{m}' AS mode, "
+        [f"SELECT {cols}, {optional(m, 'edges')}, '{m}' AS mode, "
          f"NULL AS pmode, NULL AS access FROM {m}.edges" for m in modes]
-        + [f"SELECT {cols}, NULL AS walk_type, NULL AS mode, '{m}' AS pmode, access "
+        + [f"SELECT {cols}, {optional(m, 'private_edges', ('walk_type',))}, NULL AS mode, '{m}' AS pmode, access "
            f"FROM {m}.private_edges" for m in sorted(priv)])
-
-
-def load_pieces(db, roads):
-    """``({edge_id: [(m0, m1, band)]}, tunnel edge ids, edge ids to end square)``: how each road with a level is cut for drawing
-    (``mapstyle.levels``, docs/design/levels_plan.md): ground except where it really passes over or under a road."""
-    import duckdb
-
-    from mapstyle.levels import level_pieces
-    con = duckdb.connect(str(db), read_only=True)
-    try:
-        union = _roads_union(con, db)
-        geoms = dict(zip(roads["edge_id"], roads.geometry))
-        return level_pieces(con, union, geoms, dict(zip(roads["edge_id"], roads["highway"])))
-    finally:
-        con.close()
 
 
 def load_roads(db):
@@ -83,6 +71,7 @@ def load_roads(db):
                    first(bridge ORDER BY mode IS NULL, mode, pmode) AS bridge, first(tunnel ORDER BY mode IS NULL, mode, pmode) AS tunnel,
                    first(layer ORDER BY mode IS NULL, mode, pmode) AS layer, bool_or(oneway) AS oneway,
                    any_value(walk_type) AS walk_type,
+                   {", ".join(f"first({c} ORDER BY mode IS NULL, mode, pmode) AS {c}" for c in OPTIONAL_COLS[1:])},
                    {", ".join(f"COALESCE(bool_or(mode = '{m}'), false) AS {m}" for m in MODES)},
                    {", ".join(f"max(CASE WHEN pmode = '{m}' THEN access END) AS access_{m}" for m in MODES)},
                    first(geometry ORDER BY mode IS NULL, mode, pmode) AS geom
@@ -229,7 +218,6 @@ def _data_url(mime, data):
     return f"data:{mime};base64," + base64.b64encode(data).decode()
 
 
-BAND_RULE = "tags"      # the rule of the band the stored levels must be solved from (duckosm.levels.BAND_RULE): the tags only, a crossing and a sidewalk on their street's floor
 EDGE_ATTACHED = ("crossings", "traffic_signals")     # point layers that sit on a road: drawn at the level of their road (docs/design/edge_features.md)
 
 
@@ -442,9 +430,8 @@ def _band(roads):
 
 
 def stored_levels(db, roads):
-    """``roads`` with the four columns of ``visualization.edge_levels`` (``casing_start``, ``casing_level``, ``casing_end``, ``fill_level``), or None when the file has no such
-    table. The numbers must be those computed for these roads with ``duckosm levels``: the ``head_m`` is the file's own (it is in ``attrs["levels_params"]``, for the page to draw the heads at),
-    the other options its defaults, and the band rule ``BAND_RULE``; if they are not (the file was rebuilt, other options, a table made before the rule), a ``ValueError`` says what differs and that ``duckosm levels`` must be run again.
+    """``roads`` with the drawing order stored in the file by ``duckosm levels`` (its level area: the four numbers and each edge's ends),
+    or None when the file has none. A ``ValueError`` if it was solved for other roads (the file was rebuilt): run ``duckosm levels`` again.
     Nothing is recomputed (docs/design/stored_levels.md)."""
     import duckdb
     import roadstyle as rs
@@ -454,25 +441,18 @@ def stored_levels(db, roads):
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'visualization' AND table_name = 'edge_levels'").fetchone()[0]:
             return None
         try:
-            meta = con.execute("SELECT * FROM visualization.edge_levels_meta").df().iloc[0]
-        except (duckdb.Error, IndexError):
-            meta = None                                                      # no meta row: load_levels says so
-        if meta is not None:
-            rule = meta.get("band_rule")
-            rule = None if rule != rule else rule                           # a NULL: a table made before the rule was stored
-            if rule != BAND_RULE:
-                raise ValueError(f"the stored levels were solved from another band rule ({rule!r}, expected {BAND_RULE!r}: a crossing and a sidewalk on their street's floor); run `duckosm levels {db}` again")
-        head_m = float(meta["head_m"]) if meta is not None else 5.0         # the heads were solved at this length: draw them at it
-        try:
-            return rs.load_levels(con, roads, band_col="band", order="class", head_m=head_m)
+            return rs.load_area_levels(con, roads)
         except ValueError as e:
             raise ValueError(f"{e}; run `duckosm levels {db}` again") from None
     finally:
         con.close()
 
 
+LEVEL_COLS = dict(casing_start_col="casing_start", casing_level_col="casing_level", casing_end_col="casing_end", fill_level_col="fill_level")
+
+
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", pieces=False, **kwargs):
+               paths=PATHS, theme="osm", **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -485,14 +465,15 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
     (docs/design/themes.md). The drawing order of the roads is roadstyle's (docs/design/stored_levels.md): every road has a casing number and a fill number, so that connected
     roads merge cleanly and a road that passes over another is drawn over it. They are read from ``visualization.edge_levels`` when the file has them (``duckosm levels``),
-    else roadstyle computes them while it renders. ``pieces``: the other approach, cutting a road with a level into pieces (docs/design/levels_plan.md); not the default.
-    The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
+    else roadstyle computes them while it renders. The base map is ``blank``: the db's own layers are the map (the sea is ``features.ocean``).
     ``kwargs`` go to roadstyle
     (``basemap``, ``tiles``, ``arrows``, ...)."""
     import roadstyle as rs
 
     if "order" in kwargs:
         raise ValueError("render_map(order=...) is removed: the drawing order is roadstyle's (docs/design/stored_levels.md)")
+    if "pieces" in kwargs:
+        raise ValueError("render_map(pieces=...) is removed: the drawing order is the file's level area (duckosm levels), fixable by hand")
     mode = mode or "all"
     if planner and kwargs.get("tiles"):
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
@@ -505,10 +486,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
-    # a point on a road is drawn at its road's level: not with pieces (their edge_ids are the pieces'), and the roads must be the ones roadstyle draws
+    # a point on a road is drawn at its road's level; the roads must be the ones roadstyle draws
     # (the levels are read again below, with the columns added to the roads since: they are cheap)
-    levels = None if pieces else stored_levels(db, roads)
-    overlays, config = feature_overlays(fcs, interaction, style, edge_attached=() if pieces else edge_attach(fcs, roads if levels is None else levels))
+    levels = stored_levels(db, roads)
+    overlays, config = feature_overlays(fcs, interaction, style, edge_attached=edge_attach(fcs, roads if levels is None else levels))
     roads["access"] = _access(roads, mode)
     roads = roads.drop(columns=[f"access_{m}" for m in MODES])
     kw = {"name": f"{Path(db).stem} ({mode}, {paths}" + ("" if theme in (None, "osm") else f", {theme}") + ")",
@@ -536,25 +517,11 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
             "Road class": {}, "Modes": {"color_by": "modes", "colors": load_style("modes")["mode_colors"]}})
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
         render = rs.render_report
-    roads["band"] = _band(roads)
-    if pieces:
-        # a road with a level (a layer tag, a tunnel) is ground except where it really passes over or under a road: cut into pieces for drawing, square-ended
-        # (docs/design/levels_plan.md; roadstyle's cap_col). The band of a piece is ``_band``; a crossing over its street, a sidewalk under it (paths only)
-        path = roads["highway"].isin(PATH_CLASSES)
-        roads["_band"] = roads["walk_type"].map({"crossing": 1, "sidewalk": -1}).where(path)
-        kw["band_col"], kw["cap_col"] = "_band", "_cap"
-        roads["_cap"] = False
-        from mapstyle.levels import with_pieces
-        roads = with_pieces(roads, *load_pieces(db, roads))
-    else:
-        # the drawing order: the numbers stored in the file, else roadstyle computes them from the band (docs/design/stored_levels.md)
-        stored = stored_levels(db, roads)
-        if stored is None:
-            kw["band_col"] = "band"
-        else:
-            roads = stored
-            kw.update(casing_level_col="casing_level", fill_level_col="fill_level", casing_start_col="casing_start", casing_end_col="casing_end",
-                      head_m=stored.attrs["levels_params"]["head_m"])
+    # the drawing order: the file's level area (duckosm levels), else roadstyle computes it while drawing (docs/design/stored_levels.md)
+    stored = stored_levels(db, roads)
+    if stored is not None:
+        roads = stored
+        kw.update(LEVEL_COLS, head_start_m_col="head_start_m", head_end_m_col="head_end_m", cap_start_col="cap_start", cap_end_col="cap_end")
     # duckOSM stores every path, and a one-way street's walking-only reverse, as a reverse edge too:
     # roadstyle draws a pair as two lanes only when both edges are directed (directed_col,
     # twin_ends.md)

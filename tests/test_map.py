@@ -45,6 +45,7 @@ def test_load_roads(monaco):
     acc = g[[f"access_{m}" for m in MODES]]
     assert (g[list(MODES)].any(axis=1) | acc.notna().any(axis=1)).all()   # usable, or private / bus
     assert g["walking"].sum() > g["driving"].sum()          # footways and steps
+    assert (g["junction"] == "roundabout").any() and g["edge_ref"].notna().all()   # roadstyle puts a roundabout on top where roads meet
     # the same order on every call (the page's feature ids are row numbers): edge_id order
     assert list(load_roads(monaco)["edge_id"]) == list(g["edge_id"])
     # edge_id order, except a one-way street's walking-only reverse edges first: they lie on the street's own edge, which must
@@ -89,64 +90,12 @@ def test_one_way_streets_are_not_drawn_as_two_lanes(monaco, monkeypatch):
     seen = {}
     from types import SimpleNamespace
     monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, pieces=True)
+    render_map(monaco, layers=False)
     g = seen["g"].set_index("edge_id")
     assert seen["directed_col"] == "is_directed"
     assert g.loc["441704187184649227", "is_directed"] and not g.loc["5990211243552773545", "is_directed"]
     assert g.loc[g.highway == "footway", "is_directed"].sum() == 0                 # paths: one line
     assert g.loc[g.driving, "is_directed"].all()                                   # every driving edge
-
-
-def test_crossings_over_and_sidewalks_under_their_street(monaco, monkeypatch):
-    """walk_type -> roadstyle's band_col: a crossing (zebra) over the street, a sidewalk under it
-    (roadstyle/docs/design/draw_order_per_edge.md)."""
-    roads = load_roads(monaco)
-    assert {"crossing", "sidewalk"} <= set(roads["walk_type"].dropna())
-    seen = {}
-    from types import SimpleNamespace
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, pieces=True)
-    g = seen["g"]
-    assert seen["band_col"] == "_band" and seen["cap_col"] == "_cap"
-    foot = g.highway == "footway"
-    assert set(g.loc[foot & (g.walk_type == "crossing"), "_band"]) == {1}
-    assert set(g.loc[foot & (g.walk_type == "sidewalk"), "_band"]) == {-1}
-    # a road with a level (a layer tag, a tunnel) gets a band from its pieces; every other road none
-    plain = g["layer"].fillna("0").isin(["0", ""]) & g["bridge"].isna() & g["tunnel"].isna() & ~g["_piece"]
-    other = ~g.walk_type.isin(["crossing", "sidewalk"]) & plain
-    assert g.loc[other, "_band"].isna().all()
-    # a car road duckOSM marks "sidewalk" (you walk on its sidewalk) stays with the streets
-    road = (g.walk_type == "sidewalk") & g.highway.isin(["residential", "secondary", "primary"])
-    assert road.sum() > 100 and g.loc[road & plain, "_band"].isna().all()
-
-
-def test_roads_with_a_level_are_cut_into_pieces(monaco, monkeypatch):
-    """docs/design/levels_plan.md R4: a plain-layer road or a tunnel is ground except where it really crosses a road;
-    the stretch is a square-ended piece in its own band, the rest ground. The first piece keeps the edge's row (the
-    planner's feature index), the others are appended with ``_piece``."""
-    seen = {}
-    from types import SimpleNamespace
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: seen.update(kw, g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, pieces=True)
-    g, base = seen["g"], load_roads(monaco)
-    n = len(base)
-    assert list(g["edge_id"].iloc[:n]) == list(base["edge_id"]) and not g["_piece"].iloc[:n].any()   # same rows, same order
-    assert g["_piece"].iloc[n:].all() and len(g) > n
-    assert set(g.loc[g["_piece"], "edge_id"]) <= set(base["edge_id"])
-    stretch = g[g["_band"].isin([-1, 1]) & g["layer"].notna() & g["tunnel"].isna() & g["bridge"].isna()
-                & ~g["walk_type"].isin(["crossing", "sidewalk"])]
-    assert len(stretch) > 5 and stretch["_cap"].all()                       # a stretch ends square
-    assert set(stretch["_band"]) == {-1, 1}
-    # the pieces of one edge cover the edge, overlapping a little at each cut (lengths in degrees)
-    cut = g[g["edge_id"].isin(g.loc[g["_piece"], "edge_id"])].groupby("edge_id")
-    whole = base.set_index("edge_id").geometry.length
-    for eid, rows in list(cut)[:200]:
-        extra = (len(rows) - 1) * 2 * 0.3 / 80000                  # each cut overlaps 0.3 m each side (degrees, upper bound)
-        assert whole[eid] - 1e-9 <= rows.geometry.length.sum() <= whole[eid] + extra + 1e-9
-    off = {}
-    monkeypatch.setattr(rs, "render_edges", lambda g, **kw: off.update(g=g) or SimpleNamespace(_tpl="</body>"))
-    render_map(monaco, layers=False, pieces=False)
-    assert len(off["g"]) == n and "_cap" not in off["g"]
 
 
 def test_the_band_is_complete(monaco):
@@ -174,10 +123,10 @@ def _seen(monkeypatch, db, **kw):
 
 
 def test_without_stored_levels_roadstyle_computes_the_order(monaco, monkeypatch):
-    """docs/design/stored_levels.md: a file without visualization.edge_levels: roadstyle computes the numbers from the complete band; every road is drawn whole."""
+    """docs/design/stored_levels.md: a file without visualization.edge_levels: roadstyle computes the numbers while it draws (no level columns given)."""
     seen = _seen(monkeypatch, monaco)
-    assert seen["band_col"] == "band" and "casing_level_col" not in seen and "cap_col" not in seen
-    assert len(seen["g"]) == len(load_roads(monaco)) and "band" in seen["g"] and not seen["g"]["band"].isna().any()
+    assert "band_col" not in seen and "casing_level_col" not in seen and "cap_col" not in seen
+    assert len(seen["g"]) == len(load_roads(monaco))
 
 
 def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, monkeypatch):
@@ -190,24 +139,19 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
     shutil.copy(monaco, db)
     done = subprocess.run([DUCKOSM_EXE, "levels", str(db)], capture_output=True, text=True)
     if done.returncode:
-        pytest.skip(f"duckosm levels is not available (duckOSM 0.2.0 with roadstyle 0.13.1 is needed): {done.stderr[-200:]}")
+        pytest.skip(f"duckosm levels is not available (duckOSM with roadstyle 0.17 is needed): {done.stderr[-200:]}")
     seen = _seen(monkeypatch, db)
-    assert [seen[k] for k in ("casing_level_col", "fill_level_col", "casing_start_col", "casing_end_col")] == ["casing_level", "fill_level", "casing_start", "casing_end"]
+    cols = ("casing_start", "casing_level", "casing_end", "fill_level", "head_start_m", "head_end_m", "cap_start", "cap_end")
+    assert [seen[f"{c}_col"] for c in cols] == list(cols) and all(c in seen["g"] for c in cols)    # the level area's result, ends too
     assert "band_col" not in seen and (seen["g"]["casing_level"] <= seen["g"]["fill_level"]).all()
     assert len(seen["g"]) == len(load_roads(db))
     assert _seen(monkeypatch, db, tiles=True)["casing_level_col"] == "casing_level"          # also with vector tiles
-    assert seen["head_m"] == 5.0
-    subprocess.run([DUCKOSM_EXE, "levels", str(db), "--head-m", "25"], check=True, capture_output=True)
-    assert _seen(monkeypatch, db)["head_m"] == 25.0                                           # the file's own head_m is read and given to roadstyle, not refused
     import duckdb
     con = duckdb.connect(str(db))
-    con.execute("UPDATE visualization.edge_levels_meta SET band_rule = NULL")                 # a table made before the band rule was stored
+    con.execute("UPDATE visualization.edge_levels_meta SET edge_hash = 'other'")               # solved for other roads (the file was rebuilt)
     con.close()
-    with pytest.raises(ValueError, match="band rule"):
-        render_map(db, layers=False)
-    subprocess.run([DUCKOSM_EXE, "levels", str(db), "--no-min-positions"], check=True, capture_output=True)
     with pytest.raises(ValueError, match="duckosm levels"):
-        render_map(db, layers=False)                                                           # the file's numbers were computed with other options: never recomputed silently
+        render_map(db, layers=False)                                                           # never recomputed silently
 
 
 def test_a_crossing_is_not_over_its_street(monaco, tmp_path):
@@ -275,7 +219,7 @@ def test_a_point_on_a_road_gets_the_street_it_is_on():
 
 
 def test_crossings_and_signals_are_drawn_at_their_roads_level(monaco, monkeypatch):
-    """The overlays of the points on a road are attached to edges (edge_col): every point has the edge_id of a road of the page; not with pieces=True."""
+    """The overlays of the points on a road are attached to edges (edge_col): every point has the edge_id of a road of the page."""
     from types import SimpleNamespace
 
     seen = {}
@@ -288,32 +232,7 @@ def test_crossings_and_signals_are_drawn_at_their_roads_level(monaco, monkeypatc
         assert o.edge_col == "edge_id" and all(f["properties"]["edge_id"] in ids for f in o.data["features"])
     if load_layers(monaco, ["crossings"]).get("crossings"):
         assert "crossings" in on_edges
-    seen.clear()
-    render_map(monaco, pieces=True)
-    assert not any(o.edge_col for o in seen["overlays"])
 
-
-def test_pieces_of_one_road():
-    """The cut of one road: ground, the stretch around a crossing, ground; a crossing near an end takes that end;
-    two crossings close together are one stretch; none is one ground piece."""
-    import math
-
-    from shapely.geometry import LineString
-
-    from mapstyle.levels import _pieces_of
-    kx, ky = 1 / (111320 * math.cos(math.radians(43.7))), 1 / 110574          # degrees per metre at 43.7 N
-    road = LineString([(7.0, 43.7), (7.0 + 60 * kx, 43.7)])                    # 60 m east
-    cross = lambda x: (LineString([(7.0 + x * kx, 43.7 - 20 * ky), (7.0 + x * kx, 43.7 + 20 * ky)]), "residential")  # noqa: E731
-    mid = _pieces_of(road, [cross(30)], 1)
-    assert [b for _, _, b in mid] == [0, 1, 0] and mid[0][1] == mid[1][0] and mid[1][1] == mid[2][0]
-    assert abs(mid[1][0] - (30 - 4 - 3)) < 1.5 and abs(mid[1][1] - (30 + 4 + 3)) < 1.5   # the drawn road + 4 m each side
-    assert [b for _, _, b in _pieces_of(road, [cross(3)], -1)] == [-1, 0]               # near the start: no ground piece there
-    near = (LineString([(7.0 + 20 * kx, 43.7 + 4 * ky), (7.0 + 40 * kx, 43.7 + 4 * ky)]), "residential")   # 4 m beside it, never touching
-    assert [b for _, _, b in _pieces_of(road, [near], 1, "pedestrian")] == [0, 1, 0]      # drawn roads overlap: a stretch, like a crossing
-    far = (LineString([(7.0 + 20 * kx, 43.7 + 12 * ky), (7.0 + 40 * kx, 43.7 + 12 * ky)]), "residential")  # 12 m beside it: apart
-    assert [b for _, _, b in _pieces_of(road, [far], 1, "pedestrian")] == [0]
-    assert [b for _, _, b in _pieces_of(road, [cross(20), cross(30)], 1)] == [0, 1, 0]  # one stretch
-    assert _pieces_of(road, [], 1) == [(0.0, mid[-1][1], 0)]
 
 
 def test_mode_reaches_render_edges(monaco, monkeypatch):
@@ -486,7 +405,7 @@ def test_every_page_has_the_rs_functions(monaco):
     ms = _ms(html)
     assert ms["layers"][0]["interaction"] == {"clickable": True, "tooltip": True, "popup": True}
     assert set(ms["kinds"]["crossings"]) == {"crossing"}
-    assert "rsSetModes" in render_map(monaco, layers=False, pieces=True).html       # roads only: modes still
+    assert "rsSetModes" in render_map(monaco, layers=False).html       # roads only: modes still
 
 
 def test_dashboard(monaco):
@@ -546,7 +465,7 @@ def test_the_pages_access_follows_its_mode(monaco):
     assert counts["driving"] == {"private": 196, "bus": 18}
     assert counts["all"] == {"private": 152, "bus": 18}           # private: no mode can use it
     assert counts["walking"] == {"private": 154}
-    html = render_map(monaco, layers=False, pieces=True).html
+    html = render_map(monaco, layers=False).html
     assert "Private roads" in html and "rsSetAccess" in html
 
 

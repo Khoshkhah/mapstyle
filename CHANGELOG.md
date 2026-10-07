@@ -7,6 +7,12 @@ All notable changes to **mapstyle** are documented here. The format is based on
 ## [Unreleased]
 
 ### Changed
+- **The drawing order is the file's level area** (roadstyle 0.17, duckOSM's `duckosm levels`: one area for all modes, your edits, heads and caps kept
+  next to the file): `render_map` reads the numbers and each road end's head and shape from `visualization.edge_levels`; without them roadstyle computes
+  the order while it draws. mapstyle gives roadstyle no band any more. A table solved for other roads is an error that says to run `duckosm levels` again.
+
+### Removed
+- `render_map(pieces=...)` (it raises an error) and `mapstyle.levels`: a road is fixed by hand in the level area (`roadstyle-levels edit`) instead.
 - **Faster:** the `access` of the roads and the dashboard's `modes` column are computed without pandas row loops and a back-fill of the whole table (the same values). A city of 64,000 roads: `render_map` is about 40% faster together with roadstyle's faster pages.
 
 ## [0.4.0] — 2026-10-04
