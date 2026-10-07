@@ -464,7 +464,7 @@ def test_the_pages_access_follows_its_mode(monaco):
     counts = {m: _access(g, m).value_counts().to_dict() for m in ("all", "driving", "walking")}
     assert counts["driving"] == {"private": 196, "bus": 18}
     assert counts["all"] == {"private": 152, "bus": 18}           # private: no mode can use it
-    assert counts["walking"] == {"private": 154}
+    assert counts["walking"] == {"private": 158}                  # duckOSM 2026-10-07: walking follows OSM access, 2 private primary ways joined
     html = render_map(monaco, layers=False).html
     assert "Private roads" in html and "rsSetAccess" in html
 
