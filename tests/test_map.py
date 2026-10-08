@@ -21,7 +21,8 @@ PATH_CLASSES = {"footway", "path", "steps", "corridor", "platform", "pedestrian"
 
 @pytest.fixture(scope="session")
 def monaco(tmp_path_factory):
-    """``$MAPSTYLE_TEST_DB``, else a Monaco db with features.* built by duckOSM (~10 s)."""
+    """``$MAPSTYLE_TEST_DB``, else a Monaco db with features.* built by duckOSM (~10 s) and its drawing order solved once
+    (``duckosm levels``), so the pages read it instead of each solving again."""
     if os.environ.get("MAPSTYLE_TEST_DB"):
         return os.environ["MAPSTYLE_TEST_DB"]
     exe = DUCKOSM_EXE
@@ -36,6 +37,7 @@ def monaco(tmp_path_factory):
         "modes: [driving, walking, cycling]\noptions: {build_features: true}\n")
     subprocess.run([exe, "build", "-c", out / "monaco.yaml"], cwd=DUCKOSM, check=True,
                    capture_output=True)
+    subprocess.run([exe, "levels", out / "monaco.duckdb"], cwd=DUCKOSM, check=True, capture_output=True)
     return out / "monaco.duckdb"
 
 
@@ -122,9 +124,17 @@ def _seen(monkeypatch, db, **kw):
     return seen
 
 
-def test_without_stored_levels_roadstyle_computes_the_order(monaco, monkeypatch):
+def test_without_stored_levels_roadstyle_computes_the_order(monaco, tmp_path, monkeypatch):
     """docs/design/stored_levels.md: a file without visualization.edge_levels: roadstyle computes the numbers while it draws (no level columns given)."""
-    seen = _seen(monkeypatch, monaco)
+    import shutil
+
+    import duckdb
+    db = tmp_path / "unsolved.duckdb"
+    shutil.copy(monaco, db)
+    con = duckdb.connect(str(db))
+    con.execute("DROP TABLE IF EXISTS visualization.edge_levels; DROP TABLE IF EXISTS visualization.edge_levels_meta")
+    con.close()
+    seen = _seen(monkeypatch, db)
     assert "band_col" not in seen and "casing_level_col" not in seen and "cap_col" not in seen
     assert len(seen["g"]) == len(load_roads(monaco))
 
@@ -136,10 +146,7 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
     if not DUCKOSM_EXE.exists():
         pytest.skip("needs duckOSM's duckosm")
     db = tmp_path / "stored.duckdb"
-    shutil.copy(monaco, db)
-    done = subprocess.run([DUCKOSM_EXE, "levels", str(db)], capture_output=True, text=True)
-    if done.returncode:
-        pytest.skip(f"duckosm levels is not available (duckOSM with roadstyle 0.17 is needed): {done.stderr[-200:]}")
+    shutil.copy(monaco, db)                                   # solved by the fixture (duckosm levels)
     seen = _seen(monkeypatch, db)
     cols = ("casing_start", "casing_level", "casing_end", "fill_level", "head_start_m", "head_end_m", "cap_start", "cap_end")
     assert [seen[f"{c}_col"] for c in cols] == list(cols) and all(c in seen["g"] for c in cols)    # the level area's result, ends too
@@ -154,24 +161,14 @@ def test_stored_levels_are_read_and_a_stale_table_is_an_error(monaco, tmp_path, 
         render_map(db, layers=False)                                                           # never recomputed silently
 
 
-def test_a_crossing_is_not_over_its_street(monaco, tmp_path):
+def test_a_crossing_is_not_over_its_street(monaco):
     """docs/design/crossing_band.md: with the stored levels (duckosm levels, the band of the tags), a footway crossing is not painted over the driving road it crosses
     (Monaco: 1,254 of 1,266 under it, 10 at the same number, 2 over it)."""
-    import shutil
-
-    import numpy as np
     from shapely import STRtree
 
     from mapstyle.map import PATH_CLASSES, stored_levels
 
-    if not DUCKOSM_EXE.exists():
-        pytest.skip("needs duckOSM's duckosm")
-    db = tmp_path / "levels.duckdb"
-    shutil.copy(monaco, db)
-    done = subprocess.run([DUCKOSM_EXE, "levels", str(db)], capture_output=True, text=True, check=False)
-    if done.returncode:
-        pytest.skip(f"duckosm levels is not available: {done.stderr[-200:]}")
-    roads = stored_levels(db, load_roads(db))
+    roads = stored_levels(monaco, load_roads(monaco))        # solved by the fixture (duckosm levels)
     street = roads[~roads["highway"].isin(PATH_CLASSES)]
     tree, fill = STRtree(street.geometry.to_numpy()), street["fill_level"].to_numpy()
     crossing = roads[roads["walk_type"] == "crossing"]
