@@ -37,7 +37,9 @@ def monaco(tmp_path_factory):
         "modes: [driving, walking, cycling]\noptions: {build_features: true}\n")
     subprocess.run([exe, "build", "-c", out / "monaco.yaml"], cwd=DUCKOSM, check=True,
                    capture_output=True)
-    subprocess.run([exe, "levels", out / "monaco.duckdb"], cwd=DUCKOSM, check=True, capture_output=True)
+    done = subprocess.run([exe, "levels", out / "monaco.duckdb"], cwd=DUCKOSM, capture_output=True, text=True)
+    if done.returncode:
+        pytest.fail(f"duckosm levels failed: {done.stderr[-1500:]}")
     return out / "monaco.duckdb"
 
 
