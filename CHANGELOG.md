@@ -11,6 +11,13 @@ All notable changes to **mapstyle** are documented here. The format is based on
   next to the file): `render_map` reads the numbers and each road end's head and shape from `visualization.edge_levels`; without them roadstyle computes
   the order while it draws. mapstyle gives roadstyle no band any more. A table solved for other roads is an error that says to run `duckosm levels` again.
 
+- **roadstyle 0.18** (`roadstyle>=0.18.0`): the pages are in its simple mode by default (one `roads-simple` layer). The private and bus colours
+  go on the fill pieces of `roads-simple` (the full look: the fill layers), by edge id read with `rsQuery`, not by the `access` property: they now
+  show on tiled pages (`tiles=True`) too, which do not carry `access`.
+
+### Fixed
+- A database without `edge_ref` (an all-NULL column came back as pandas NA, which roadstyle 0.18 cannot test) gives text NULLs.
+
 ### Removed
 - `render_map(pieces=...)` (it raises an error) and `mapstyle.levels`: a road is fixed by hand in the level area (`roadstyle-levels edit`) instead.
 - **Faster:** the `access` of the roads and the dashboard's `modes` column are computed without pandas row loops and a back-fill of the whole table (the same values). A city of 64,000 roads: `render_map` is about 40% faster together with roadstyle's faster pages.

@@ -59,13 +59,29 @@ define("rsGetAccess", () => Object.fromEntries(ACCESS.map(([k]) => [k, !hiddenAc
 // colour as the BASE of every road fill (so rsColor and the colour options still paint over them),
 // again after each recolouring, and a row each in the Roads box after Bridges / Tunnels
 const ACCESS = [["private", "#c8c8c8", "Private roads"], ["bus", "#9db8d9", "Bus lanes"]];
-const isAccess = (v) => ["==", ["get", "access"], v];
-const withAccess = (e) => Array.isArray(e) && e[0] === "case"
-  ? (JSON.stringify(e[1]) === JSON.stringify(isAccess(ACCESS[0][0])) ? e : e.slice(0, -1).concat([withAccess(e[e.length - 1])]))
-  : ["case", ...ACCESS.flatMap(([k, c]) => [isAccess(k), c]), e];
-const paintAccess = () => map.getStyle().layers.forEach((l) => {
-  if (l.type === "line" && /^roads-.*fill/.test(l.id)) map.setPaintProperty(l.id, "line-color", withAccess(map.getPaintProperty(l.id, "line-color")));
-});
+// The colour is set by edge id, not by the `access` property: tiles (tiles=True) do not carry it, but rsQuery reads
+// it from the page's own table. Simple mode: only the fill pieces (__rs_k == 1) of roads-simple; full look: the fill layers.
+const accessIds = {};
+const isAccess = (k, edge) => ["any", ["match", edge, accessIds[k], true, false], ["match", ["get", "__rs_edge2"], accessIds[k], true, false]];
+const withAccess = (e, edge, only) => {
+  const mine = ACCESS.filter(([k]) => accessIds[k].length);
+  if (!mine.length) return e;
+  const cond = (k) => only ? ["all", only, isAccess(k, edge)] : isAccess(k, edge);
+  if (Array.isArray(e) && e[0] === "case") {
+    if (JSON.stringify(e[1]) === JSON.stringify(cond(mine[0][0]))) return e;           // already painted
+    if (!only) return e.slice(0, -1).concat([withAccess(e[e.length - 1], edge, only)]); // under rsColor's cases
+  }
+  return ["case", ...mine.flatMap(([k, c]) => [cond(k), c]), e];
+};
+const paintAccess = () => {
+  ACCESS.forEach(([k]) => { accessIds[k] = rsQuery((p) => p.access === k).map(Number).sort((a, b) => a - b); });
+  const layers = map.getStyle().layers;
+  const simple = layers.find((l) => l.id === "roads-simple");
+  (simple ? [simple] : layers.filter((l) => l.type === "line" && /^roads-.*fill/.test(l.id))).forEach((l) => {
+    const edge = !simple && l.source === "roads" ? ["id"] : ["get", "__rs_edge"];   // a simple piece names its edge in __rs_edge (its own id is the piece's)
+    map.setPaintProperty(l.id, "line-color", withAccess(map.getPaintProperty(l.id, "line-color"), edge, simple ? ["==", ["get", "__rs_k"], 1] : null));
+  });
+};
 
 const run = async () => {
   await Promise.all(Object.entries(MS.images).map(loadImage));

@@ -3,7 +3,6 @@ site_description: A whole OpenStreetMap map in one offline HTML page - roads for
 site_url: https://khoshkhah.github.io/mapstyle/
 repo_url: https://github.com/Khoshkhah/mapstyle
 repo_name: Khoshkhah/mapstyle
-edit_uri: edit/main/docs/
 copyright: mapstyle · MIT licence · map data © OpenStreetMap contributors
 
 theme:

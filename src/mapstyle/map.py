@@ -38,8 +38,8 @@ def _roads_union(con, db):
     priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
                                       "WHERE table_name = 'private_edges'").fetchall()} & set(modes)
 
-    def optional(m, t, skip=()):                     # a column an older file may not have: NULL there
-        return ", ".join(f"{c if (m, t, c) in has and c not in skip else 'NULL'} AS {c}" for c in OPTIONAL_COLS)
+    def optional(m, t, skip=()):                     # a column an older file may not have: NULL there (edge_ref a text NULL: a bare NULL comes back as pandas NA, which roadstyle 0.18's edge_ref read cannot test)
+        return ", ".join(f"{c if (m, t, c) in has and c not in skip else ('CAST(NULL AS VARCHAR)' if c == 'edge_ref' else 'NULL')} AS {c}" for c in OPTIONAL_COLS)
     return " UNION ALL ".join(
         [f"SELECT {cols}, {optional(m, 'edges')}, '{m}' AS mode, "
          f"NULL AS pmode, NULL AS access FROM {m}.edges" for m in modes]
