@@ -44,10 +44,11 @@ jobs:
       - run: pip install ./duckOSM -e ".[docs]"
 
       # The live maps (docs/maps/*.html) are built here, not committed: Monaco from duckOSM's
-      # sample extract (the sea comes from Overture Maps), with walk + drive for the planner.
+      # sample extract (the sea comes from Overture Maps), with walk + drive for the planner and the
+      # drawing order solved once (duckosm levels): every map reads it instead of solving again.
       - name: Build Monaco and the live maps
         run: |
-          (cd duckOSM && duckosm build --config config/sample_monaco.yaml && duckosm multimodal monaco.duckdb)
+          (cd duckOSM && duckosm build --config config/sample_monaco.yaml && duckosm multimodal monaco.duckdb && duckosm levels monaco.duckdb)
           python docs/build_maps.py duckOSM/monaco.duckdb
 
       - name: Configure Pages
