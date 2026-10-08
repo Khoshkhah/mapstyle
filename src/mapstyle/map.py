@@ -353,6 +353,7 @@ def planner_data(db, roads):
         con.execute("INSTALL spatial; LOAD spatial;")
         have = {tuple(r) for r in con.execute(
             "SELECT table_schema, table_name FROM information_schema.tables").fetchall()}
+        cols = {tuple(r) for r in con.execute("SELECT table_schema, table_name, column_name FROM information_schema.columns").fetchall()}
         modes = [m for m in MODES if (m, "edges") in have and (m, "edge_graph") in have]
         if not modes:
             raise ValueError(f"{db}: no mode with edges + edge_graph to route on")
@@ -382,7 +383,9 @@ def planner_data(db, roads):
         for m in modes:                                        # edge-based graph of legal turns
             es = con.execute(f"SELECT edge_id, cost_s, length_m FROM {m}.edges ORDER BY edge_id").fetchall()
             nxt = {}
-            for f, t in con.execute(f"SELECT from_edge, to_edge FROM {m}.edge_graph").fetchall():
+            own = {"driving": "car", "walking": "walk", "cycling": "bike"}.get(m)      # duckOSM 2026-10-09: edge_graph also holds bus-lane
+            uses = (m, "edge_graph", "uses") in cols and own                          # turns (uses = 'bus'); a mode routes on its own rows
+            for f, t in con.execute(f"SELECT from_edge, to_edge FROM {m}.edge_graph" + (f" WHERE uses = '{own}'" if uses else "")).fetchall():
                 if f in k_of and t in k_of:
                     nxt.setdefault(k_of[f], []).append(k_of[t])
             data["graphs"][m] = {"k": [k_of[e] for e, _, _ in es],
