@@ -527,6 +527,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # twin_ends.md)
     roads["is_directed"] = _is_directed(roads)
     kw["directed_col"] = "is_directed"
+    kw["driving_col"] = "driving"                          # arrows only on cars' one-ways (roadstyle 0.18.1): never on a bus / bike-only reverse
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 

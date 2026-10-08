@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "roadstyle>=0.18.0",  # the page and the drawing order (load_area_levels: duckosm levels' level area; directed_col)
+    "roadstyle>=0.18.1",  # the page and the drawing order (load_area_levels: duckosm levels' level area; directed_col)
     "duckdb",             # reads the duckOSM db
     "geopandas",
     "pyyaml",             # styles/*.yaml
