@@ -121,7 +121,7 @@ def mode_settings(mode, paths=PATHS, theme="osm"):
     roads = {k: dict(v) for k, v in (spec.get("roads") or {}).items()}
     for k, v in {"width": {"em": st["em"]["width"]}, "width_zoom_rate": {"em": 1.3},
                  "casing_ratio": {"em": st["em"]["casing_ratio"]},
-                 "group": {**{c: "em" for c in spec.get("em", [])}, **(st.get("group") or {})}}.items():
+                 "group": {"ferry": "path", **{c: "em" for c in spec.get("em", [])}, **(st.get("group") or {})}}.items():   # a ferry line: path width
         roads.setdefault(k, {}).update(v)
     config = {"minor_no_casing": st["minor_no_casing"]} if "minor_no_casing" in st else {}
     config.update(th.get("roadstyle") or {})

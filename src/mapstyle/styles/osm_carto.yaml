@@ -27,6 +27,7 @@ roads:
     platform:      {fill: "#bbbbbb", casing: "#969696"}
     raceway:       {fill: "#ffc0cb", casing: "#bbbbbb"}
     busway:        {fill: "#ffffff", casing: "#bbbbbb"}
+    ferry:         {fill: "#6666ff", casing: null, dash: [6, 4]}   # a ferry line (duckOSM highway = ferry, 2026-10-09): osm-carto's dashed blue route
 
 # ---- FEATURES ------------------------------------------------------------------------------------
 # Feature-layer styling (mapstyle.map.feature_overlays), keyed by the layer name in layers.yaml.
