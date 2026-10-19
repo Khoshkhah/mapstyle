@@ -450,21 +450,45 @@ def test_cli_theme(monaco, tmp_path, capsys):
 
 # ---- private roads and bus lanes (docs/design/private_and_bus.md) -------------------------------
 
+def _private_counts(db):
+    """What the pages must say, read from the database itself (not numbers of one duckOSM version): per mode, the access values of its
+    ``private_edges`` (one count per edge); on the ``all`` map, ``bus`` for every driving bus road, else the first restriction of an edge
+    that no mode can use."""
+    import duckdb
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        per_mode = {m: dict(con.execute(f"SELECT access, count(DISTINCT edge_id) FROM {m}.private_edges GROUP BY access").fetchall()) for m in MODES}
+        usable = " UNION ".join(f"SELECT edge_id FROM {m}.edges" for m in MODES)
+        stacked = " UNION ALL ".join(f"SELECT edge_id, access, {k} AS ord FROM {m}.private_edges" for k, m in enumerate(MODES))
+        nobody = dict(con.execute(f"SELECT access, count(*) FROM (SELECT edge_id, arg_min(access, ord) AS access FROM ({stacked}) "
+                                  f"WHERE edge_id NOT IN ({usable}) GROUP BY edge_id) GROUP BY access").fetchall())
+        bus = set(r[0] for r in con.execute("SELECT edge_id FROM driving.private_edges WHERE access = 'bus'").fetchall())
+    finally:
+        con.close()
+    every = dict(nobody)
+    every["bus"] = len(bus)                                   # a bus road is 'bus' on the all map, though bikes may use it
+    return per_mode, every
+
+
 def test_private_and_bus_roads_are_rows_with_their_restriction_per_mode(monaco):
     g = load_roads(monaco).set_index("edge_id")
     lane = g.loc["1964280132851416298"]                  # Boulevard des Moulins' contraflow bus lane
     assert lane["access_driving"] == "bus" and not lane["driving"] and lane["cycling"]
-    assert (g["access_driving"] == "bus").sum() == 18 and (g["access_driving"] == "private").sum() == 198
-    assert (g["access_driving"] == "pedestrian").sum() == 473         # duckOSM 2026-10-19: pedestrian streets cars may not use
+    driving = _private_counts(monaco)[0]["driving"]
+    for access, n in driving.items():
+        assert (g["access_driving"] == access).sum() == n, access
+    assert driving.get("bus", 0) > 0 and driving.get("pedestrian", 0) > 0     # the sample has bus lanes and pedestrian streets cars may not use
 
 
 def test_the_pages_access_follows_its_mode(monaco):
     from mapstyle.map import _access
     g = load_roads(monaco)
     counts = {m: _access(g, m).value_counts().to_dict() for m in ("all", "driving", "walking")}
-    assert counts["driving"] == {"pedestrian": 473, "private": 198, "bus": 18}
-    assert counts["all"] == {"private": 152, "bus": 18, "pedestrian": 6}   # no mode can use it (6 pedestrian streets walking has not either)
-    assert counts["walking"] == {"private": 158}                  # duckOSM 2026-10-07: walking follows OSM access, 2 private primary ways joined
+    per_mode, every = _private_counts(monaco)
+    assert counts["driving"] == per_mode["driving"]
+    assert counts["walking"] == per_mode["walking"]                # duckOSM: walking follows OSM access
+    assert counts["all"].get("bus", 0) == every["bus"]             # every driving bus road is 'bus' on the all map
+    assert {k: v for k, v in counts["all"].items() if k != "bus"} == {k: v for k, v in every.items() if k != "bus"}   # the rest: no mode can use it
     html = render_map(monaco, layers=False).html
     assert "Private roads" in html and "rsSetAccess" in html
 
