@@ -56,3 +56,11 @@ mapstyle monaco.duckdb --mode walking --paths komoot
 ```
 
 Both are data: `styles/modes.yaml` and `styles/paths.yaml` ([Styles](../reference/styles.md)).
+
+## One mode only
+
+`mapstyle db.duckdb --mode driving --only` (or `render_map(db, "driving", only=True)`) draws only that
+mode's roads: its `edges` and its `private_edges`. A driving map has no walking paths and no cycleways. It shows
+the roads that cars may not use, each with its label: private roads, bus lanes, pedestrian streets and
+delivery-only streets (rows in the Roads box). It needs a mode of one network, and not the planner or
+the dashboard.

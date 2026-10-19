@@ -454,18 +454,35 @@ def test_private_and_bus_roads_are_rows_with_their_restriction_per_mode(monaco):
     g = load_roads(monaco).set_index("edge_id")
     lane = g.loc["1964280132851416298"]                  # Boulevard des Moulins' contraflow bus lane
     assert lane["access_driving"] == "bus" and not lane["driving"] and lane["cycling"]
-    assert (g["access_driving"] == "bus").sum() == 18 and (g["access_driving"] == "private").sum() == 196
+    assert (g["access_driving"] == "bus").sum() == 18 and (g["access_driving"] == "private").sum() == 198
+    assert (g["access_driving"] == "pedestrian").sum() == 473         # duckOSM 2026-10-19: pedestrian streets cars may not use
 
 
 def test_the_pages_access_follows_its_mode(monaco):
     from mapstyle.map import _access
     g = load_roads(monaco)
     counts = {m: _access(g, m).value_counts().to_dict() for m in ("all", "driving", "walking")}
-    assert counts["driving"] == {"private": 196, "bus": 18}
-    assert counts["all"] == {"private": 152, "bus": 18}           # private: no mode can use it
+    assert counts["driving"] == {"pedestrian": 473, "private": 198, "bus": 18}
+    assert counts["all"] == {"private": 152, "bus": 18, "pedestrian": 6}   # no mode can use it (6 pedestrian streets walking has not either)
     assert counts["walking"] == {"private": 158}                  # duckOSM 2026-10-07: walking follows OSM access, 2 private primary ways joined
     html = render_map(monaco, layers=False).html
     assert "Private roads" in html and "rsSetAccess" in html
+
+
+def test_only_draws_one_modes_edges_and_private_edges(monaco):
+    """docs/design/one_mode_map.md: a driving map with driving.edges and driving.private_edges, no walking or cycling path."""
+    import duckdb
+    g = load_roads(monaco, ["driving"])
+    con = duckdb.connect(str(monaco), read_only=True)
+    ids = {str(r[0]) for r in con.execute("SELECT edge_id FROM driving.edges UNION SELECT edge_id FROM driving.private_edges").fetchall()}
+    assert set(g["edge_id"]) == ids
+    assert not g["walking"].any() and not g["cycling"].any()
+    assert len(load_roads(monaco)) > len(g)                  # every mode: more roads (the walking and cycling paths)
+    html = render_map(monaco, "driving", layers=False, only=True).html
+    assert "Pedestrian streets" in html and "rsSetAccess" in html
+    for kw in ({"mode": None}, {"mode": "driving", "planner": True}, {"mode": "driving", "dashboard": True}):
+        with pytest.raises(ValueError, match="only=True"):
+            render_map(monaco, layers=False, only=True, **kw)
 
 
 def test_the_planner_has_its_roads_box_and_never_routes_a_restricted_road(monaco):

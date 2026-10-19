@@ -6,6 +6,11 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **`render_map(only=True)` / `mapstyle --only`**: the map of one mode with just its `edges` and `private_edges` (a driving map has no walking or
+  cycling edges). Not with the planner or the dashboard; the file's stored drawing order is not used. `load_roads(db, only=[...])` reads the same roads.
+- **Pedestrian streets and Delivery only** rows in the Roads box (`access` `pedestrian` / `delivery`, from duckOSM's `driving.private_edges`).
+
 ### Changed
 - **The drawing order is the file's level area** (roadstyle 0.17, duckOSM's `duckosm levels`: one area for all modes, your edits, heads and caps kept
   next to the file): `render_map` reads the numbers and each road end's head and shape from `visualization.edge_levels`; without them roadstyle computes

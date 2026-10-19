@@ -24,15 +24,15 @@ OPTIONAL_COLS = ("walk_type", "junction", "edge_ref", "lanes")   # roadstyle rea
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 
-def _roads_union(con, db):
+def _roads_union(con, db, only=None):
     """The SQL that stacks every mode's ``edges`` (and ``private_edges``) with ``walk_type`` / ``mode`` / ``pmode`` /
-    ``access`` columns; loads the spatial extension on ``con``."""
+    ``access`` columns; loads the spatial extension on ``con``. ``only``: a list of modes: just those (docs/design/one_mode_map.md)."""
     con.execute("INSTALL spatial; LOAD spatial;")
     have = {r[0] for r in con.execute(
         "SELECT table_schema FROM information_schema.tables WHERE table_name = 'edges'").fetchall()}
-    modes = [m for m in MODES if m in have]
+    modes = [m for m in MODES if m in have and (only is None or m in only)]
     if not modes:
-        raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(MODES)})")
+        raise ValueError(f"{db}: no <mode>.edges table (modes: {', '.join(only or MODES)})")
     has = {(s, t, c) for s, t, c in con.execute("SELECT table_schema, table_name, column_name FROM information_schema.columns").fetchall()}
     cols = "edge_id, source, target, osm_id, highway, name, bridge, tunnel, layer, oneway, geometry"
     priv = {r[0] for r in con.execute("SELECT table_schema FROM information_schema.tables "
@@ -47,20 +47,20 @@ def _roads_union(con, db):
            f"FROM {m}.private_edges" for m in sorted(priv)])
 
 
-def load_roads(db):
+def load_roads(db, only=None):
     """One row per ``edge_id`` over the db's mode networks, with ``driving`` / ``walking`` /
     ``cycling`` flags (the mode can use it) and duckOSM's ``walk_type`` (sidewalk, crossing,
     footpath, …; the walking network's, when the build has it). The roads a mode may not use
     (``<mode>.private_edges``) are rows too, with ``access_driving`` / ``access_walking`` /
     ``access_cycling``: ``private`` or ``bus`` where that mode keeps it there, else null
     (docs/design/private_and_bus.md). ``edge_id`` / ``osm_id`` are strings: the hashes can pass
-    2**53. Rows are in ``edge_id`` order (a one-way street's walking-only reverse edges first), so a page's feature ids are the same on every render."""
+    2**53. ``only``: a list of modes, to read just their ``edges`` and ``private_edges`` (docs/design/one_mode_map.md). Rows are in ``edge_id`` order (a one-way street's walking-only reverse edges first), so a page's feature ids are the same on every render."""
     import duckdb
     import geopandas as gpd
 
     con = duckdb.connect(str(db), read_only=True)
     try:
-        union = _roads_union(con, db)
+        union = _roads_union(con, db, only)
         # several rows per edge (modes, private_edges): a usable mode's first, so the same every time
         con.execute(f"""
             CREATE TEMP TABLE r AS
@@ -455,7 +455,7 @@ LEVEL_COLS = dict(casing_start_col="casing_start", casing_level_col="casing_leve
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", **kwargs):
+               paths=PATHS, theme="osm", only=False, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -465,6 +465,9 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     (docs/design/route_planner.md); ``dashboard=True`` makes it roadstyle's report page with mode,
     kind and interaction filters (docs/design/dashboard.md). ``mode``: which network stands out
     (all, driving, walking, cycling); default all (the planner too: in the walking look a road's two directions are one line, so only one can be clicked).
+    ``only=True``: the map of ``mode`` alone, with just that mode's ``edges`` and ``private_edges`` (a driving map has no
+    walking paths; docs/design/one_mode_map.md). It needs a ``mode`` of one network, and not the planner or the dashboard; the
+    file's stored drawing order is not used (roadstyle solves it for these roads).
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
     (docs/design/themes.md). The drawing order of the roads is roadstyle's (docs/design/stored_levels.md): every road has a casing number and a fill number, so that connected
     roads merge cleanly and a road that passes over another is drawn over it. They are read from ``visualization.edge_levels`` when the file has them (``duckosm levels``),
@@ -478,20 +481,22 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     if "pieces" in kwargs:
         raise ValueError("render_map(pieces=...) is removed: the drawing order is the file's level area (duckosm levels), fixable by hand")
     mode = mode or "all"
+    if only and (mode not in MODES or planner or dashboard):
+        raise ValueError("only=True needs mode driving, walking or cycling, and no planner or dashboard (they use every mode)")
     if planner and kwargs.get("tiles"):
         raise ValueError("planner=True can't use tiles=True: the planner snaps to the roads in the page")
     if planner and dashboard:
         raise ValueError("planner=True and dashboard=True both use the right-hand panel: pick one")
     palette, settings = mode_settings(mode, paths, theme)
     style, th, _ = load_theme(theme)
-    roads = load_roads(db)
+    roads = load_roads(db, [mode] if only else None)
     fcs = load_layers(db, None if layers is True else layers) if layers else {}
     unknown = set(interaction or {}) - set(fcs)
     if unknown:
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
     # a point on a road is drawn at its road's level; the roads must be the ones roadstyle draws
     # (the levels are read again below, with the columns added to the roads since: they are cheap)
-    levels = stored_levels(db, roads)
+    levels = None if only else stored_levels(db, roads)
     overlays, config = feature_overlays(fcs, interaction, style, edge_attached=edge_attach(fcs, roads if levels is None else levels))
     roads["access"] = _access(roads, mode)
     roads = roads.drop(columns=[f"access_{m}" for m in MODES])
@@ -521,7 +526,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
         render = rs.render_report
     # the drawing order: the file's level area (duckosm levels), else roadstyle computes it while drawing (docs/design/stored_levels.md)
-    stored = stored_levels(db, roads)
+    stored = None if only else stored_levels(db, roads)
     if stored is not None:
         roads = stored
         kw.update(LEVEL_COLS, head_start_m_col="head_start_m", head_end_m_col="head_end_m", cap_start_col="cap_start", cap_end_col="cap_end")
@@ -545,6 +550,7 @@ def main(argv=None):
     ap.add_argument("-o", "--out", help="output HTML (default: <db name>_<mode>.html)")
     ap.add_argument("--mode", choices=LOOKS,
                     help="which network stands out (default: all)")
+    ap.add_argument("--only", action="store_true", help="only the roads of --mode (its edges and private_edges), not the other modes")
     ap.add_argument("--no-layers", action="store_true", help="roads only, no features.* layers")
     ap.add_argument("--paths", default=PATHS, choices=tuple(load_style("paths")),
                     help=f"how walking / cycling paths look (default: {PATHS})")
@@ -563,5 +569,5 @@ def main(argv=None):
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
     render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,
-               paths=a.paths, theme=a.theme, **kw).save(out)
+               paths=a.paths, theme=a.theme, only=a.only, **kw).save(out)
     print(out)

@@ -33,7 +33,7 @@ const byLabel = {};
 const overlay = (l) => typeof l === "number" ? (window.RS_OVERLAYS || [])[l] : byLabel[l];
 
 // ---- rsSetModes: the roads any of these modes can use (the driving / walking / cycling flags), and
-// rsSetAccess: show / hide the roads you may not use (`access`: private, bus); one rsFilter for both
+// rsSetAccess: show / hide the roads you may not use (`access`: private, bus, pedestrian, delivery); one rsFilter for all
 let modes = null;
 const hiddenAccess = new Set();
 const roadFilter = () => {
@@ -58,7 +58,9 @@ define("rsGetAccess", () => Object.fromEntries(ACCESS.map(([k]) => [k, !hiddenAc
 // ---- roads you may not use (duckOSM's private_edges; docs/design/private_and_bus.md): their own
 // colour as the BASE of every road fill (so rsColor and the colour options still paint over them),
 // again after each recolouring, and a row each in the Roads box after Bridges / Tunnels
-const ACCESS = [["private", "#c8c8c8", "Private roads"], ["bus", "#9db8d9", "Bus lanes"]];
+// (pedestrian, delivery: driving's pedestrian streets that cars may not use; docs/design/one_mode_map.md)
+const ACCESS = [["private", "#c8c8c8", "Private roads"], ["bus", "#9db8d9", "Bus lanes"],
+  ["pedestrian", "#dddde8", "Pedestrian streets"], ["delivery", "#e8d2b0", "Delivery only"]];
 // The colour is set by edge id, not by the `access` property: tiles (tiles=True) do not carry it, but rsQuery reads
 // it from the page's own table. Simple mode: only the fill pieces (__rs_k == 1) of roads-simple; full look: the fill layers.
 const accessIds = {};
