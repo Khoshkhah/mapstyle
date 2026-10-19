@@ -9,7 +9,7 @@ All notable changes to **mapstyle** are documented here. The format is based on
 ### Fixed
 - **The colours of private roads, bus lanes, pedestrian streets and delivery-only streets** show on every road layer: `roads-simple` draws them in pieces
   with no `access`, so its rule is by the road's number (`__rs_edge`).
-- **Private roads and bus lanes have arrows** (they are directed roads in `is_directed`); pedestrian streets, being paths, have none.
+- **Private roads and bus lanes have arrows** (they are directed roads in `is_directed`, and in roadstyle's `driving_col`); pedestrian streets, being paths, have none.
 - **Arrows in 3D**: the road-length thresholds of roadstyle's arrows follow the tilt (a tilted map squashes the pixels per degree), so a 3D map keeps
   as many arrows as the flat one. roadstyle is not changed.
 

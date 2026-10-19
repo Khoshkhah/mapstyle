@@ -547,7 +547,10 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # twin_ends.md)
     roads["is_directed"] = _is_directed(roads)
     kw["directed_col"] = "is_directed"
-    kw["driving_col"] = "driving"                          # arrows only on cars' one-ways (roadstyle 0.18.1): never on a bus / bike-only reverse
+    # arrows only on cars' one-ways (roadstyle 0.18.1): never on a bus / bike-only reverse half of a street that cars can use; a road that is
+    # private or bus-only has its own direction, so it has arrows too (Kaveh, 2026-10-19: driving.private_edges had none)
+    roads["has_arrows"] = roads["driving"] | roads["access"].isin(["private", "bus"]) if "access" in roads else roads["driving"]
+    kw["driving_col"] = "has_arrows"
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 
