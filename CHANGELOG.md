@@ -6,6 +6,8 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-19
+
 ### Fixed
 - **The colours of private roads, bus lanes, pedestrian streets and delivery-only streets** show on every road layer: `roads-simple` draws them in pieces
   with no `access`, so its rule is by the road's number (`__rs_edge`).
