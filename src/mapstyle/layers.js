@@ -138,7 +138,7 @@ const run = async () => {
     state[L.label] = {clickable: true, tooltip: true, popup: true,
                       color: map.getPaintProperty(body, p), paint: p, body, bodies, tip: ov.tooltip};
     setInteraction(L.label, L.interaction);
-    rsSetOverlay(L.label, true);                       // built hidden (map.py): shown once styled
+    rsSetOverlay(L.label, L.ticked !== false);         // built hidden (map.py): shown once styled, unless layers.yaml says `ticked: false`
   });
 
   // ---- rsSetInteraction: a layer's clicks, hover tooltip and click popup ----------------------
@@ -197,7 +197,26 @@ const run = async () => {
       body.appendChild(lab);
     });
   }
+  // a pedestrian street cars may not use has its own row (Pedestrian streets): where no usable road is of the class (a driving-only
+  // map), roadstyle's class row `pedestrian` would be a second switch for the same streets (docs/design/one_mode_map.md)
+  if (restricted.some(([k]) => k === "pedestrian") && !rsQuery((p) => p.highway === "pedestrian" && !p.access).length) {
+    document.querySelectorAll(".flt-ctrl .flt-body label").forEach((l) => { if (l.textContent.trim() === "pedestrian") l.remove(); });
+  }
   window.RS_ACCESS = Object.fromEntries(restricted.map(([k]) => [k, rsQuery((p) => p.access === k).length]));
+  // roadstyle sizes a road in pixels by the vertical pixels per degree at the centre: a tilted (3D) map squashes it (zoom 17: 8 times), every
+  // road looks too short and the arrows are thinned to a few. The thresholds are scaled by the same squash (1 on a flat map), on every move,
+  // before roadstyle's `moveend` places the arrows.
+  if (typeof _RS_ARROW !== "undefined") {
+    const arrowScale = () => {
+      const c = map.getCenter();
+      const ideal = 111320 / (78271.51696 * Math.cos(c.lat * Math.PI / 180) / 2 ** map.getZoom());
+      const got = Math.abs(map.project([c.lng, c.lat + 0.01]).y - map.project(c).y) / 0.01;
+      const s = Math.min(1, got / ideal);
+      _RS_ARROW.minLenPx = 100 * s; _RS_ARROW.minGapPx = 150 * s;
+    };
+    map.on("move", arrowScale);
+    arrowScale();
+  }
   fire("ms:ready", {});
 };
 run();

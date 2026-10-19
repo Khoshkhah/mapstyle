@@ -5,6 +5,7 @@
 #   name      layer id (must match its styling entry in osm_carto.yaml features.*)
 #   table     duckOSM features.<table> to read
 #   kind      polygon | line | point
+#   ticked    false = loaded, but unticked in the Layers box when the page opens (default: ticked)
 #   show      false = drop the layer entirely (also gone from the debug viewer's checkboxes)
 #   where     optional SQL filter on the table
 #   centroid  true = use the polygon centroid (a point from an area, e.g. the parking "P")
@@ -20,13 +21,13 @@ layers:
   - {name: water,           table: water_polygons,   kind: polygon, show: true}   # incl. the river (smart clip)
   - {name: waterways,       table: water_lines,      kind: line,    show: true}
   - {name: buildings,       table: buildings,        kind: polygon, show: true}
-  - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')"}
-  - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'"}
-  - {name: parking_p,       table: sites,            kind: point,   show: true, where: "kind = 'parking'", centroid: true}   # blue "P"
-  - {name: bus_station,     table: sites,            kind: polygon, show: true, where: "kind = 'bus_station'"}
-  - {name: platform,        table: sites,            kind: polygon, show: true, where: "kind = 'platform'"}
-  - {name: traffic_signals, table: traffic,          kind: point,   show: true, where: "kind = 'traffic_signals'"}
-  - {name: crossings,       table: traffic,          kind: point,   show: true, where: "kind = 'crossing'", bearing: true}
-  - {name: bus_stations,    table: public_transport, kind: point,   show: true, where: "kind = 'bus_stop'"}
-  - {name: train_stations,  table: public_transport, kind: point,   show: true, where: "kind IN ('station','halt')"}
-  - {name: bicycle,         table: pois,             kind: point,   show: true, where: "kind = 'bicycle_rental'"}
+  - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')", ticked: false}
+  - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'", ticked: false}
+  - {name: parking_p,       table: sites,            kind: point,   show: true, where: "kind = 'parking'", centroid: true, ticked: false}   # blue "P"
+  - {name: bus_station,     table: sites,            kind: polygon, show: true, where: "kind = 'bus_station'", ticked: false}
+  - {name: platform,        table: sites,            kind: polygon, show: true, where: "kind = 'platform'", ticked: false}
+  - {name: traffic_signals, table: traffic,          kind: point,   show: true, where: "kind = 'traffic_signals'", ticked: false}
+  - {name: crossings,       table: traffic,          kind: point,   show: true, where: "kind = 'crossing'", bearing: true, ticked: false}
+  - {name: bus_stations,    table: public_transport, kind: point,   show: true, where: "kind = 'bus_stop'", ticked: false}
+  - {name: train_stations,  table: public_transport, kind: point,   show: true, where: "kind IN ('station','halt')", ticked: false}
+  - {name: bicycle,         table: pois,             kind: point,   show: true, where: "kind = 'bicycle_rental'", ticked: false}

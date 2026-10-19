@@ -480,9 +480,23 @@ def test_only_draws_one_modes_edges_and_private_edges(monaco):
     assert len(load_roads(monaco)) > len(g)                  # every mode: more roads (the walking and cycling paths)
     html = render_map(monaco, "driving", layers=False, only=True).html
     assert "Pedestrian streets" in html and "rsSetAccess" in html
+    from mapstyle.map import stored_levels                   # the stored drawing order (the fixture ran duckosm levels): a mode's roads get theirs
+    lv = stored_levels(monaco, g, only=True)
+    assert lv is not None and len(lv) == len(g) and lv[["casing_level", "fill_level"]].notna().all().all()
     for kw in ({"mode": None}, {"mode": "driving", "planner": True}, {"mode": "driving", "dashboard": True}):
         with pytest.raises(ValueError, match="only=True"):
             render_map(monaco, layers=False, only=True, **kw)
+
+
+def test_private_and_bus_roads_have_directions_but_pedestrian_streets_do_not(monaco):
+    """A private road or a bus lane is a road with a direction (arrows); a pedestrian street is a path (docs/design/one_mode_map.md)."""
+    from mapstyle.map import _access, _is_directed
+    g = load_roads(monaco, ["driving"])
+    g["access"] = _access(g, "driving")
+    d = _is_directed(g)
+    road = g["access"].isin(["private", "bus"]) & ~g["highway"].isin(PATH_CLASSES)      # a private footway stays a path
+    assert road.any() and d[road].all()
+    assert not d[g["access"].isin(["pedestrian", "delivery"])].any()
 
 
 def test_the_planner_has_its_roads_box_and_never_routes_a_restricted_road(monaco):

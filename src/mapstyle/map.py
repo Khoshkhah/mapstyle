@@ -200,7 +200,10 @@ def _access(roads, mode):
 def _is_directed(roads):
     """Per edge: a direction of travel of its own, i.e. a road (not a path) open to cars or bikes.
     False = undirected: a footway stored both ways, a one-way street's walking-only reverse edge."""
-    return (roads["driving"] | roads["cycling"]) & ~roads["highway"].isin(PATH_CLASSES)
+    open_ = roads["driving"] | roads["cycling"]
+    if "access" in roads:                       # a private or bus-only road has its directions too (drawn, never routed)
+        open_ = open_ | roads["access"].isin(["private", "bus"])
+    return open_ & ~roads["highway"].isin(PATH_CLASSES)
 
 
 def _mix(a, b, t):
@@ -278,7 +281,8 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
     overlays, layers, images = [], [], {}
     for name, fc in fcs.items():
         kind = _kind(name)
-        L = {"label": name, "kind": _OV_KIND[kind]}
+        L = {"label": name, "kind": _OV_KIND[kind],
+             "ticked": next(sp for sp in load_style("layers")["layers"] if sp["name"] == name).get("ticked", True)}   # ticked when the page opens
         ov = dict(data=fc, kind=L["kind"], label=name, placement="over" if kind == "point" else "under")
         if name in edge_attached:             # drawn at the fill number of its edge (roadstyle's edge_col): layers.js puts the icon there too
             ov["edge_col"] = "edge_id"
@@ -432,19 +436,27 @@ def _band(roads):
     return np.where(layer != 0, layer, np.where(yes("bridge"), 1, np.where(yes("tunnel"), -1, 0))).astype(int)
 
 
-def stored_levels(db, roads):
+def stored_levels(db, roads, only=False):
     """``roads`` with the drawing order stored in the file by ``duckosm levels`` (its level area: the four numbers and each edge's ends),
     or None when the file has none. A ``ValueError`` if it was solved for other roads (the file was rebuilt): run ``duckosm levels`` again.
-    Nothing is recomputed (docs/design/stored_levels.md)."""
+    Nothing is recomputed (docs/design/stored_levels.md). ``only``: ``roads`` are one mode's roads (render_map(only=True)): the order is
+    read for the roads of every mode, which is what it was solved for, and the rows of ``roads`` get theirs."""
     import duckdb
     import roadstyle as rs
+    from roadstyle.levels_store import AREA_COLS
 
     con = duckdb.connect(str(db), read_only=True)
     try:
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'visualization' AND table_name = 'edge_levels'").fetchone()[0]:
             return None
         try:
-            return rs.load_area_levels(con, roads)
+            if not only:
+                return rs.load_area_levels(con, roads)
+            every = rs.load_area_levels(con, load_roads(db)).set_index("edge_id")
+            out = roads.copy()
+            for c in AREA_COLS:
+                out[c] = out["edge_id"].map(every[c])
+            return out
         except ValueError as e:
             raise ValueError(f"{e}; run `duckosm levels {db}` again") from None
     finally:
@@ -467,7 +479,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     (all, driving, walking, cycling); default all (the planner too: in the walking look a road's two directions are one line, so only one can be clicked).
     ``only=True``: the map of ``mode`` alone, with just that mode's ``edges`` and ``private_edges`` (a driving map has no
     walking paths; docs/design/one_mode_map.md). It needs a ``mode`` of one network, and not the planner or the dashboard; the
-    file's stored drawing order is not used (roadstyle solves it for these roads).
+    file's stored drawing order is used (read for every mode's roads, as it was solved).
     ``theme``: the whole map's colours, ``osm`` (default) or a styles/themes/*.yaml
     (docs/design/themes.md). The drawing order of the roads is roadstyle's (docs/design/stored_levels.md): every road has a casing number and a fill number, so that connected
     roads merge cleanly and a road that passes over another is drawn over it. They are read from ``visualization.edge_levels`` when the file has them (``duckosm levels``),
@@ -496,7 +508,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         log.warning("interaction: no layer %s on this map", ", ".join(sorted(unknown)))
     # a point on a road is drawn at its road's level; the roads must be the ones roadstyle draws
     # (the levels are read again below, with the columns added to the roads since: they are cheap)
-    levels = None if only else stored_levels(db, roads)
+    levels = stored_levels(db, roads, only)
     overlays, config = feature_overlays(fcs, interaction, style, edge_attached=edge_attach(fcs, roads if levels is None else levels))
     roads["access"] = _access(roads, mode)
     roads = roads.drop(columns=[f"access_{m}" for m in MODES])
@@ -526,7 +538,7 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
         html += f"<script>{(_HERE / 'dashboard.js').read_text()}</script>"
         render = rs.render_report
     # the drawing order: the file's level area (duckosm levels), else roadstyle computes it while drawing (docs/design/stored_levels.md)
-    stored = None if only else stored_levels(db, roads)
+    stored = stored_levels(db, roads, only)
     if stored is not None:
         roads = stored
         kw.update(LEVEL_COLS, head_start_m_col="head_start_m", head_end_m_col="head_end_m", cap_start_col="cap_start", cap_end_col="cap_end")

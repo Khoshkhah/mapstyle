@@ -6,9 +6,20 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **The colours of private roads, bus lanes, pedestrian streets and delivery-only streets** show on every road layer: `roads-simple` draws them in pieces
+  with no `access`, so its rule is by the road's number (`__rs_edge`).
+- **Private roads and bus lanes have arrows** (they are directed roads in `is_directed`); pedestrian streets, being paths, have none.
+- **Arrows in 3D**: the road-length thresholds of roadstyle's arrows follow the tilt (a tilted map squashes the pixels per degree), so a 3D map keeps
+  as many arrows as the flat one. roadstyle is not changed.
+
+### Changed
+- **Layers**: `layers.yaml` has `ticked: false` (the page opens with the layer unticked). Open by default: ocean, landcover, water, waterways,
+  buildings; the others (railways, parking, stops, signals, crossings, …) are in the Layers box, unticked.
+
 ### Added
 - **`render_map(only=True)` / `mapstyle --only`**: the map of one mode with just its `edges` and `private_edges` (a driving map has no walking or
-  cycling edges). Not with the planner or the dashboard; the file's stored drawing order is not used. `load_roads(db, only=[...])` reads the same roads.
+  cycling edges). Not with the planner or the dashboard; the file's stored drawing order (duckosm levels, the level editor) is used. `load_roads(db, only=[...])` reads the same roads.
 - **Pedestrian streets and Delivery only** rows in the Roads box (`access` `pedestrian` / `delivery`, from duckOSM's `driving.private_edges`).
 
 ### Changed
