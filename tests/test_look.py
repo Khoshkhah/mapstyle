@@ -30,3 +30,11 @@ def test_unknown_where_stops():
     assert _where("kind = 'a'") == ["==", ["get", "kind"], "a"]
     with pytest.raises(ValueError, match="kind IN"):
         _where("name LIKE 'x%'")
+
+
+def test_hover_and_popup_come_from_the_config():
+    from roadstyle import _settings
+    look = export_look()
+    b = look["files"]["features_buildings"]
+    assert b["hover"]["id"] == "osm_id" and b["hover"]["layers"][0]["paint"]["line-color"] == _settings.theme()["selection"]["hover"]
+    assert b["popup"] == {"title": "name", "columns": [c for c in load_style("layers")["popup"] if c != "name"]}

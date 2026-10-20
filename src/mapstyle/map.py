@@ -323,7 +323,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")
-        overlays.append(rs.Overlay(**ov, popup=["name", "kind"], tooltip=["name", "kind"], visible=False))
+        overlays.append(rs.Overlay(**ov, popup=load_style("layers")["popup"], tooltip=load_style("layers")["popup"], visible=False))
         layers.append(L)
     kinds = {n: dict(Counter(f["properties"]["kind"] for f in fc["features"]).most_common())
              for n, fc in fcs.items()}

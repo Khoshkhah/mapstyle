@@ -34,9 +34,17 @@ def _by_kind(colors, default):
 
 
 def export_look(path=None, *, theme: str = "osm") -> dict:
-    """``{"name", "order", "files": {"features_<table>": {"layers": [...]}}, "not_drawn"}``, written to ``path`` if given.
-    ``order`` is the tables in the draw order of their first layer."""
+    """``{"name", "order", "files": {"features_<table>": {"layers", "hover", "popup", "columns"}}, "not_drawn"}``, written to ``path``
+    if given. ``order`` is the tables in the draw order of their first layer. ``hover``: the feature under the cursor (the plugin sets
+    which ``osm_id`` the filter keeps), in roadstyle's selection colour; ``popup``: the columns of ``layers.yaml``'s ``popup``."""
+    from roadstyle import _settings
     st = load_theme(theme)[0]["features"]
+    rt = _settings.theme()                    # the hover as on the page: roadstyle's selection colour and its overlay sizes
+    sel, ov = rt["selection"], rt["overlays"]
+    hover = {"polygon": {"type": "line", "paint": {"line-color": sel["hover"], "line-opacity": sel["opacity"], "line-width": ov["width"]}},
+             "line": {"type": "line", "paint": {"line-color": sel["hover"], "line-opacity": sel["opacity"], "line-width": ov["width"]}},
+             "point": {"type": "circle", "paint": {"circle-color": sel["hover"], "circle-opacity": sel["opacity"], "circle-radius": ov["radius"]}}}
+    popup = load_style("layers")["popup"]
     areas, lines, points = st["areas"], st["lines"], st["points"]
     files, order, not_drawn = {}, [], []
     for s in load_style("layers")["layers"]:
@@ -49,7 +57,11 @@ def export_look(path=None, *, theme: str = "osm") -> dict:
         if table not in order:
             order.append(table)
         flt = ["all", ["in", ["geometry-type"], ["literal", _GEOM[kind]]], *[f for f in [_where(s.get("where"))] if f]]
-        out = files.setdefault(f"features_{table}", {"layers": []})["layers"]
+        fl = files.setdefault(f"features_{table}", {"layers": [], "hover": {"id": "osm_id", "layers": []},
+                                                    "popup": {"title": "name", "columns": [c for c in popup if c != "name"]}})
+        out = fl["layers"]
+        if kind not in {h.get("kind") for h in fl["hover"]["layers"]}:
+            fl["hover"]["layers"].append({"id": "hover-" + kind, "kind": kind, "filter": ["in", ["geometry-type"], ["literal", _GEOM[kind]]], **hover[kind]})
         lid = s["name"]
         if name == "landcover":
             fills = dict(areas["landcover"])
@@ -80,6 +92,8 @@ def export_look(path=None, *, theme: str = "osm") -> dict:
                         "paint": {"circle-color": p["color"], "circle-radius": POINT_R}})
     for f in files.values():
         f["columns"] = ["kind"]
+        for h in f["hover"]["layers"]:
+            h.pop("kind")
     look = {"name": f"mapstyle {theme}", "order": order, "files": files, "not_drawn": not_drawn}
     if path is not None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
