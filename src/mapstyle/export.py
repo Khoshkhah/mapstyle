@@ -30,7 +30,7 @@ def _restyle(style, config):
     paint = {"fill": "fill-color", "line": "line-color", "circle": "circle-color"}
     by_ov = {}
     for lyr in layers:
-        m = re.fullmatch(r"ov(\d+)", lyr.get("source-layer") or "")
+        m = re.fullmatch(r"ov(\d+)", lyr.get("source-layer") or lyr.get("source") or "")   # tiles: the tile layer; data inside: the source
         if m:
             by_ov.setdefault(int(m.group(1)), []).append(lyr)
     extra = {}                                            # layer id -> layers to put right after it
@@ -49,7 +49,7 @@ def _restyle(style, config):
             if x["id"].endswith("-outline") and L.get("outline_by"):
                 x["paint"]["line-color"] = _match(L["outline_by"]["map"], L["outline_by"]["default"])
         def new(spec, after):
-            spec = {**spec, "source": lys[0]["source"], "source-layer": f"ov{i}", "metadata": meta,
+            spec = {**spec, "source": lys[0]["source"], **({"source-layer": f"ov{i}"} if "source-layer" in lys[0] else {}), "metadata": meta,
                     "layout": {**spec.get("layout", {}), "visibility": vis}}
             extra.setdefault(after, []).append(spec)
             lys.append(spec)
@@ -96,3 +96,21 @@ def export_style(db, out_dir, *, base_url, mode=None, paths=PATHS, theme="osm", 
         return path
 
     return render_map(db, mode, paths=paths, theme=theme, _export=write, **kwargs)
+
+
+def export_inline(db, *, mode=None, paths=PATHS, theme="osm", **kwargs):
+    """The map of ``db`` as ``export_style`` makes it, but as one style with the data inside (GeoJSON sources, no files), for the
+    roadstyle GeoLibre plugin, which runs this in the browser (Pyodide). ``kwargs`` go to ``render_map``."""
+    import roadstyle as rs
+
+    def make(roads, palette, settings, kw, config):
+        kw = {k: v for k, v in kw.items() if k not in ("basemap", "basemaps")}   # the app has its own base map
+        for ov, L in zip(kw.get("overlays", []), config["layers"], strict=True):
+            ov.visible = L["ticked"]           # as the page opens: a layer unticked in layers.yaml starts hidden
+        style = rs.export_inline(roads, palette=palette, settings=settings, **kw)
+        images = style["metadata"]["roadstyle:images"]
+        _restyle(style, config)                # sets roadstyle:images to mapstyle's: keep roadstyle's arrow too
+        style["metadata"]["roadstyle:images"] = {**style["metadata"]["roadstyle:images"], **images}
+        return style
+
+    return render_map(db, mode, paths=paths, theme=theme, _export=make, **kwargs)

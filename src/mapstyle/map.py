@@ -24,10 +24,27 @@ OPTIONAL_COLS = ("walk_type", "junction", "edge_ref", "lanes")   # roadstyle rea
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 
+
+def _spatial(con):
+    """DuckDB's spatial functions on ``con``: the spatial extension. In the browser (Pyodide: the roadstyle GeoLibre plugin) DuckDB
+    has no spatial extension, so the three functions a map reads with (ST_AsGeoJSON, ST_Area, ST_Centroid) are shapely's, over the
+    ST_AsWKB of DuckDB's core (the planner's other functions are not there)."""
+    import sys
+    if sys.platform != "emscripten":
+        con.execute("INSTALL spatial; LOAD spatial;")
+        return
+    import shapely
+    con.create_function("_ms_geojson", lambda b: json.dumps(shapely.geometry.mapping(shapely.from_wkb(b))), ["BLOB"], "VARCHAR")
+    con.create_function("_ms_area", lambda b: float(shapely.from_wkb(b).area), ["BLOB"], "DOUBLE")
+    con.create_function("_ms_centroid", lambda b: shapely.to_wkb(shapely.from_wkb(b).centroid), ["BLOB"], "BLOB")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_AsGeoJSON(g) AS _ms_geojson(ST_AsWKB(g))")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_Area(g) AS _ms_area(ST_AsWKB(g))")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_Centroid(g) AS ST_GeomFromWKB(_ms_centroid(ST_AsWKB(g)))")
+
 def _roads_union(con, db, only=None):
     """The SQL that stacks every mode's ``edges`` (and ``private_edges``) with ``walk_type`` / ``mode`` / ``pmode`` /
     ``access`` columns; loads the spatial extension on ``con``. ``only``: a list of modes: just those (docs/design/one_mode_map.md)."""
-    con.execute("INSTALL spatial; LOAD spatial;")
+    _spatial(con)
     have = {r[0] for r in con.execute(
         "SELECT table_schema FROM information_schema.tables WHERE table_name = 'edges'").fetchall()}
     modes = [m for m in MODES if m in have and (only is None or m in only)]
@@ -140,7 +157,7 @@ def load_layers(db, names=None):
     out, area = {}, {}
     con = duckdb.connect(str(db), read_only=True)
     try:
-        con.execute("INSTALL spatial; LOAD spatial;")
+        _spatial(con)
         have = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables "
                                           "WHERE table_schema = 'features'").fetchall()}
         if not have:
@@ -354,7 +371,7 @@ def planner_data(db, roads):
 
     con = duckdb.connect(str(db), read_only=True)
     try:
-        con.execute("INSTALL spatial; LOAD spatial;")
+        _spatial(con)
         have = {tuple(r) for r in con.execute(
             "SELECT table_schema, table_name FROM information_schema.tables").fetchall()}
         cols = {tuple(r) for r in con.execute("SELECT table_schema, table_name, column_name FROM information_schema.columns").fetchall()}
