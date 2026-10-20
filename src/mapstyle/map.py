@@ -467,7 +467,7 @@ LEVEL_COLS = dict(casing_start_col="casing_start", casing_level_col="casing_leve
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", only=False, **kwargs):
+               paths=PATHS, theme="osm", only=False, _export=None, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -551,13 +551,15 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # private or bus-only has its own direction, so it has arrows too (Kaveh, 2026-10-19: driving.private_edges had none)
     roads["has_arrows"] = roads["driving"] | roads["access"].isin(["private", "bus"]) if "access" in roads else roads["driving"]
     kw["driving_col"] = "has_arrows"
+    if _export is not None:                    # export_style: the same map as style + tiles for another app
+        return _export(roads, palette, settings, {**kw, **kwargs}, config)
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 
 
 def main(argv=None):
     """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--planner | --dashboard]
-    [--tiles] [--basemap KEY]``"""
+    [--tiles] [--basemap KEY] [--export DIR --base-url URL]``"""
     import argparse
 
     ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
@@ -575,12 +577,20 @@ def main(argv=None):
     ap.add_argument("--dashboard", action="store_true", help="a dashboard: filter by mode, class, layer, kind")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
     ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
+    ap.add_argument("--export", metavar="DIR", help="write the map as style.json + tiles into DIR for another app (GeoLibre, RustGIS), not a page")
+    ap.add_argument("--base-url", help="with --export: the URL where DIR is served")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
     mode = a.mode or "all"
+    if a.export:
+        if not a.base_url:
+            ap.error("--export needs --base-url (the URL where the folder is served)")
+        from mapstyle.export import export_style
+        print(export_style(a.db, a.export, base_url=a.base_url, mode=mode, paths=a.paths, theme=a.theme, layers=not a.no_layers, only=a.only))
+        return
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
     render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,
