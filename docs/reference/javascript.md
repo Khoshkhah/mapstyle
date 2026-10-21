@@ -17,7 +17,7 @@ Every mapstyle page is a roadstyle page, so roadstyle's whole
 | `RS_KINDS` | `{layer: {kind: count}}` | |
 | `rsSetInteraction(layer, {clickable?, tooltip?, popup?})` | switch a layer's clicks, hover tooltip and click popup; keys left out keep their state. Roads are always clickable | `rs:interactionchange` (`overlay`, `clickable`, `tooltip`, `popup`) |
 | `rsGetInteraction(layer)` | `{clickable, tooltip, popup}` of a layer | |
-| `rsSetBuildings3D(on)` | show the buildings as 3D blocks (the "Buildings 3D" row of the Layers box). The blocks show only while the `buildings` layer is on. Tilt the map to see them | `ms:buildings3d` (`on`) |
+| `rsSetBuildings3D(on)` | show the buildings as 3D blocks (the building button and the "Buildings 3D" row of the Layers box). The blocks show only while the `buildings` layer is on. Tilt the map to see them | `ms:buildings3d` (`on`) |
 | `rsGetBuildings3D()` | `true` when the 3D blocks are on | |
 
 `layer` is a layer's name (`"crossings"`) or its index. `ms:ready` fires once they are all defined

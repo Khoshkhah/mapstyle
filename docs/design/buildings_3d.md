@@ -79,7 +79,8 @@ every theme has 3D buildings in its own colour with no new key.
 - `load_layers` gives each building a `height` property, from the rule above, in SQL.
 - `layers.js` adds one `fill-extrusion` layer on the source of the buildings overlay. It is above
   the roads and below the icons, so a building hides the roads behind it and the icons stay on top.
-- The Layers box gets a "Buildings 3D" row under "buildings". It starts off.
+- A building button under roadstyle's 2D/3D button (added 2026-10-21: the row alone was hard to find), and a "Buildings 3D"
+  row under "buildings" in the Layers box. Both start off and both call `rsSetBuildings3D`.
 - The 3D layer shows only when the "buildings" layer is on and "Buildings 3D" is on. It follows
   `rs:overlaychange` for the buildings layer.
 - JavaScript: `rsSetBuildings3D(on)` and `rsGetBuildings3D()`, made like mapstyle's other `rs*`

@@ -6,6 +6,10 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **A building button** under the 2D/3D button (in 0.7.0, not in its notes): it turns the 3D buildings on and off, like the
+  "Buildings 3D" row of the Layers box. The docs now name it.
+
 ## [0.7.0] — 2026-10-21
 
 ### Added

@@ -65,7 +65,8 @@ roadstyle's `rsSetOverlay` change them on the page ([JavaScript API](../referenc
 
 ## Buildings in 3D
 
-The Layers box has a "Buildings 3D" row under "buildings". It is off when the page opens. When it is on, each building is a block,
+The building button under the 2D/3D button, and the "Buildings 3D" row under "buildings" in the Layers box, turn the 3D buildings
+on and off. They are off when the page opens. When they are on, each building is a block,
 and you see the blocks when you tilt the map (the 2D/3D button or right-drag). The blocks hide the roads behind them.
 From JavaScript: `rsSetBuildings3D(true)`.
 
