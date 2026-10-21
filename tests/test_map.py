@@ -612,3 +612,28 @@ def test_paved_layer(monaco):
     html = render_map(monaco, "walking").html
     layer = next(L for L in _ms(html)["layers"] if L["label"] == "paved")
     assert layer["interaction"]["clickable"] is False and layer["ticked"] is True        # ground: a click reaches the road under it
+
+
+def test_ways_outside_the_networks(monaco):
+    """raceway and other_ways: the ways of features.streets that no mode network holds (the Circuit de Monaco is a raceway: driving,
+    walking and cycling all leave it out). A way that a network holds is not drawn a second time."""
+    import duckdb
+    fcs = load_layers(monaco)
+    ids = {f["properties"]["osm_id"] for n in ("raceway", "other_ways") for f in fcs.get(n, {}).get("features", [])}
+    con = duckdb.connect(str(monaco), read_only=True)
+    try:
+        held = {str(r[0]) for t in ("edges", "private_edges") for m in MODES
+                for r in con.execute(f"SELECT osm_id FROM {m}.{t}").fetchall()}
+    finally:
+        con.close()
+    assert ids and not (ids & held)
+    assert {f["properties"]["kind"] for f in fcs["raceway"]["features"]} == {"raceway"}
+    assert "rail" not in {f["properties"]["kind"] for f in fcs["other_ways"]["features"]}   # rails are the layer railways
+
+
+def test_background_is_the_boundary(monaco):
+    """background: the boundary polygon of main.boundary, unticked, not clickable (it adds no OSM data)."""
+    fcs = load_layers(monaco)
+    assert [f["properties"]["kind"] for f in fcs["background"]["features"]] == ["background"]
+    layer = next(L for L in _ms(render_map(monaco, "walking").html)["layers"] if L["label"] == "background")
+    assert layer["ticked"] is False and layer["interaction"]["clickable"] is False

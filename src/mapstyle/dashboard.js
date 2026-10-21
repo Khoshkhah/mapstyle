@@ -82,9 +82,9 @@
 
   // ---- per layer: a row with a gear (switches and kinds), the layers grouped by meaning ---------
   // (docs/design/dashboard_panel.md)
-  const GROUPS = [["Nature and water", ["ocean", "landcover", "institutional", "water", "waterways"]],
+  const GROUPS = [["Nature and water", ["background", "ocean", "landcover", "institutional", "water", "waterways"]],
                   ["Buildings and places", ["buildings", "parking", "parking_p", "platform", "bus_station"]],
-                  ["Transport", ["railways", "crossings", "traffic_signals", "bus_stations", "train_stations", "bicycle"]]];
+                  ["Transport", ["railways", "raceway", "other_ways", "crossings", "traffic_signals", "bus_stations", "train_stations", "bicycle"]]];
   const grpOf = (label) => (GROUPS.find(([, l]) => l.includes(label)) || [])[0] || "Other";
   const rows = ovs ? [...ovs.querySelectorAll("label.rp-chk")] : [];
   const sets = {};                                  // layer -> its switches / kinds box

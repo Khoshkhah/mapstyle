@@ -14,6 +14,7 @@ In drawing order, bottom first. Each has a row in the **LAYERS** box, so it can 
 
 | Layer | From duckOSM | Shows | From zoom |
 |---|---|---|---|
+| `background` | `main.boundary` | the boundary polygon in the land colour, under everything (starts unticked; no OSM data) | |
 | `ocean` | `features.ocean` | the sea | |
 | `landcover` | `features.land` (+ school, hospital and sports grounds from `sites`) | parks, grass, forest, residential and industrial land, cemeteries, beaches…; forests, orchards, cemeteries, wetland and scrub get openstreetmap.org's textures | |
 | `water` | `features.water_polygons` | lakes, rivers, basins, docks | |
@@ -21,6 +22,8 @@ In drawing order, bottom first. Each has a row in the **LAYERS** box, so it can 
 | `paved` | `features.paved` | squares, pedestrian areas, piers and quays, helipads, marketplaces (needs duckOSM 0.6.0; an older database has no such table, and the layer is left out) | |
 | `buildings` | `features.buildings` | building footprints | 15 |
 | `railways` | `features.streets` | rail, tram, light rail, subway, funicular, monorail | |
+| `raceway` | `features.streets` | the raceways (Circuit de Monaco) that no mode network holds | |
+| `other_ways` | `features.streets` | the other ways that no mode network holds: pieces that touch no network, platforms, lifts | |
 | `parking` | `features.sites` | car parks | 15 |
 | `parking_p` | `features.sites` | a "P" on each car park | 16 |
 | `bus_station` | `features.sites` | bus station footprints | 15 |

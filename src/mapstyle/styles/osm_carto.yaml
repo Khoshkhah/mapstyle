@@ -34,6 +34,7 @@ roads:
 # Landcover fills / outlines / textures key by the feature's `kind`; `default` catches the rest.
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
+    background:  {fill: "#f2efe9", outline: null,      opacity: 1.0}   # the boundary polygon, as OSM-Carto's land colour
     ocean:       {fill: "#aad3df", outline: null,      opacity: 1.0}   # the sea, as water
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
     paved:       {fill: "#ededed", outline: "#bbbbbb", opacity: 1.0}   # squares, pedestrian areas, piers, helipads: osm-carto's pedestrian area
@@ -161,6 +162,8 @@ features:
   lines:                             # line colour + width (px) + optional [on,off] dash
     waterways:    {color: "#4a90d9", width: 1.6}
     railways:     {color: "#707070", width: 1.4, dash: [6, 4]}
+    raceway:      {color: "#ffc0cb", width: 5, width_zoom: {14: 1, 16: 3, 18: 13, 20: 50}}   # osm-carto's raceway pink (Circuit de Monaco), as wide as a road
+    other_ways:   {color: "#999999", width: 1.4, dash: [3, 3]}      # a way that no network holds: footway, steps, service, lift, platform
   points:                            # per-category: colour (tints the SVG), size (MULTIPLIER on the icon curve), icon (SVG file in mapstyle/icons/), min_zoom
     train_stations:  {color: "#8b008b", size: 1.4,  icon: "train.svg", min_zoom: 12}
     parking_p:       {color: "#2b6cb0", size: 1.0,  icon: "parking_p.svg", min_zoom: 16}  # bare blue "P" letter (no box) at the parking polygon's centroid (the polygon itself is styled under features.areas.parking)

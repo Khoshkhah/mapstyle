@@ -148,6 +148,15 @@ def mode_settings(mode, paths=PATHS, theme="osm"):
     return name, json.loads(json.dumps({"palettes": {name: palette}, "roads": roads, "config": config}))
 
 
+def _network_ways(con):
+    """SQL for the OSM ids of the ways that a mode network holds (``<mode>.edges``, ``private_edges`` and the ways merged into an
+    edge, ``edge_id_map``), or "" when the database has no mode network."""
+    modes = ", ".join(f"'{m}'" for m in MODES)
+    return " UNION ".join(f'SELECT osm_id FROM "{s}"."{t}"' for s, t in con.execute(
+        f"SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ({modes}) "
+        "AND table_name IN ('edges', 'private_edges', 'edge_id_map')").fetchall())
+
+
 def load_layers(db, names=None):
     """``{name: FeatureCollection}`` for the ``styles/layers.yaml`` layers (``names``: a subset),
     in draw order. A missing ``features.*`` table or column skips the layer with a logged hint."""
@@ -162,21 +171,30 @@ def load_layers(db, names=None):
         _spatial(con)
         have = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables "
                                           "WHERE table_schema = 'features'").fetchall()}
+        main = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables "
+                                          "WHERE table_schema = 'main'").fetchall()}
         if not have:
             log.warning("%s has no features.* (build it with duckOSM's build_features: true): "
                         "roads only", db)
+        nets = _network_ways(con)
         for s in specs:
-            if s["table"] not in have:
+            if s.get("schema") == "main":              # a table outside features.*: the boundary (kind = the layer's name)
+                if s["table"] not in main:
+                    continue
+            elif s["table"] not in have:
                 if have:
                     log.warning("features.%s missing: layer %r skipped", s["table"], s["name"])
                 continue
+            if s.get("outside_networks") and not nets:
+                continue                    # no road tables: every way would be drawn twice (or the roads are not in this database)
             g = "ST_Centroid(geom)" if s.get("centroid") else "geom"
             def query(tags):
                 return con.execute(
-                    f"SELECT CAST(osm_id AS VARCHAR), kind, COALESCE(name, ''), "
+                    f"SELECT CAST(osm_id AS VARCHAR), {repr(s['name']) if s.get('schema') else 'kind'}, COALESCE(name, ''), "
                     f"{'bearing' if s.get('bearing') else 'NULL'}, {tags}, ST_Area(geom), ST_AsGeoJSON({g}) "
-                    f"FROM features.{s['table']} WHERE geom IS NOT NULL"
-                    + (f" AND ({s['where']})" if s.get("where") else "")).fetchall()
+                    f"FROM {s.get('schema', 'features')}.{s['table']} WHERE geom IS NOT NULL"
+                    + (f" AND ({s['where']})" if s.get("where") else "")
+                    + (f" AND osm_id NOT IN ({nets})" if s.get("outside_networks") else "")).fetchall()
             try:
                 try:
                     rows = query("tags['building:levels'][1], tags['height'][1]" if s.get("height") else "NULL, NULL")
@@ -365,6 +383,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
             ln = lines.get(name, {})
             ov.update(color=ln.get("color"), width=ln.get("width"))
             L["dash"] = ln.get("dash")
+            L["width_zoom"] = [[z, w] for z, w in sorted(ln["width_zoom"].items())] if ln.get("width_zoom") else None   # px by zoom (a road's width)
         else:
             p = {**points["default"], **points.get(name, {})}
             ov.update(color=p["color"], radius=4)
@@ -378,7 +397,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                              "size": [[z, px * p["size"] / 48] for z, px in icon["size"].items()]}
         # built clickable with a tooltip so rsSetInteraction can switch both ways (layers.js);
         # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
-        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved") or kind == "line"),
+        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved", "background") or kind == "line"),
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")

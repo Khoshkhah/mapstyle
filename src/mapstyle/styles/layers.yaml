@@ -14,6 +14,9 @@
 # the columns a feature's popup and tooltip show (the page and the GeoLibre look)
 popup: [name, kind]
 layers:
+  # background: the boundary polygon of the database (main.boundary, not a features table), under everything. It adds no OSM data: it only
+  # fills the places that OSM has no area for, so a satellite or photo base map does not show through. The sea (ocean) is drawn over it.
+  - {name: background,      table: boundary,         kind: polygon, show: true, schema: main, ticked: false}
   - {name: ocean,           table: ocean,            kind: polygon, show: true}   # the sea (duckOSM sea: overture), under everything
   - {name: landcover,       table: land,             kind: polygon, show: true}
   # institutional / sport GROUNDS (school, university, hospital, sports_centre, prison, kindergarten,
@@ -25,6 +28,11 @@ layers:
   - {name: waterways,       table: water_lines,      kind: line,    show: true}
   - {name: paved,           table: paved,            kind: polygon, show: true}   # squares, pedestrian areas, piers, helipads (duckOSM 0.6.0)
   - {name: buildings,       table: buildings,        kind: polygon, show: true, height: true}
+  # the ways that OSM has and no mode network holds (outside_networks: not in <mode>.edges, private_edges or edge_id_map): the raceway
+  # (Circuit de Monaco), small pieces that touch no network, platforms, lifts. The roads of the page come from the networks.
+  - {name: raceway,         table: streets,          kind: line,    show: true, where: "kind = 'raceway'", outside_networks: true}
+  - {name: other_ways,      table: streets,          kind: line,    show: true, outside_networks: true,
+     where: "kind NOT IN ('raceway','rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')"}
   - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')", ticked: false}
   - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'", ticked: false}
   - {name: parking_p,       table: sites,            kind: point,   show: true, where: "kind = 'parking'", centroid: true, ticked: false}   # blue "P"

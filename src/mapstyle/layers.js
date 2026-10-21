@@ -114,6 +114,7 @@ const run = async () => {
     if (L.color_by) map.setPaintProperty(body, p, swap(map.getPaintProperty(body, p), match(L.color_by)));
     if (L.outline_by) map.setPaintProperty(ov.layers[1], "line-color", match(L.outline_by));
     if (L.dash) map.setPaintProperty(body, "line-dasharray", L.dash);
+    if (L.width_zoom) map.setPaintProperty(body, "line-width", ["interpolate", ["linear"], ["zoom"], ...L.width_zoom.flat()]);
     if (L.patterns && Object.keys(L.patterns).length) add({id: ov.source + "-pattern", type: "fill",
       filter: ["match", ["get", "kind"], Object.keys(L.patterns), true, false],
       paint: {"fill-pattern": ["match", ["get", "kind"], ...Object.entries(L.patterns).flat(),

@@ -45,6 +45,8 @@ def _restyle(style, config):
                 b.setdefault("paint", {})[p] = _swap(b["paint"].get(p), _match(L["color_by"]["map"], L["color_by"]["default"]))
             if L.get("dash") and body_type == "line":
                 b.setdefault("paint", {})["line-dasharray"] = L["dash"]
+            if L.get("width_zoom") and body_type == "line":
+                b.setdefault("paint", {})["line-width"] = ["interpolate", ["linear"], ["zoom"], *[v for stop in L["width_zoom"] for v in stop]]
         for x in lys:
             if x["id"].endswith("-outline") and L.get("outline_by"):
                 x["paint"]["line-color"] = _match(L["outline_by"]["map"], L["outline_by"]["default"])
