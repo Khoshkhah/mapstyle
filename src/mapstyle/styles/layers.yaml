@@ -20,9 +20,10 @@ layers:
   # construction, bridge deck) — coloured area fills in OSM-Carto. Merged INTO landcover so the one
   # largest-first sort nests them correctly (a school's own pitch/grass draws on top of the school).
   - {name: institutional,   table: sites,            kind: polygon, show: true, merge_into: landcover,
-     where: "kind IN ('school','university','college','kindergarten','hospital','prison','sports_centre','construction','bridge')"}
+     where: "kind IN ('school','university','college','kindergarten','hospital','prison','sports_centre','construction','bridge','zoo')"}
   - {name: water,           table: water_polygons,   kind: polygon, show: true}   # incl. the river (smart clip)
   - {name: waterways,       table: water_lines,      kind: line,    show: true}
+  - {name: paved,           table: paved,            kind: polygon, show: true}   # squares, pedestrian areas, piers, helipads (duckOSM 0.6.0)
   - {name: buildings,       table: buildings,        kind: polygon, show: true, height: true}
   - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')", ticked: false}
   - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'", ticked: false}

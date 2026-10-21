@@ -36,6 +36,7 @@ features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
     ocean:       {fill: "#aad3df", outline: null,      opacity: 1.0}   # the sea, as water
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
+    paved:       {fill: "#ededed", outline: "#bbbbbb", opacity: 1.0}   # squares, pedestrian areas, piers, helipads: osm-carto's pedestrian area
     buildings:   {fill: "#d9d0c9", outline: "#c2b8ac", opacity: 0.9,  min_zoom: 15}
     parking:     {fill: "#eeeeee", outline: "#dddddd", opacity: 0.7,  min_zoom: 15}
     bus_station: {fill: "#d6e4f0", outline: "#9db8d2", opacity: 0.85, min_zoom: 15}  # bus terminal footprint (light blue, matches the bus icon)
@@ -58,6 +59,9 @@ features:
       orchard: "#aedfa3"
       vineyard: "#aedfa3"
       allotments: "#c9e1bf"
+      beach_resort: "#fff1ba"          # a beach resort: the sand colour
+      shrubbery: "#c8d7ab"             # osm-carto scrub
+      zoo: "#d8eecf"
       cemetery: "#aacbaf"
       scrub: "#c8d7ab"
       heath: "#d6d99f"

@@ -1,4 +1,6 @@
 """export_style: the base map's layers.js values go into the exported style."""
+import pytest
+
 from mapstyle.export import _restyle
 
 
@@ -42,3 +44,21 @@ def test_buildings_3d_is_a_hidden_layer_over_the_roads():
     assert b["type"] == "fill-extrusion" and b["layout"]["visibility"] == "none" and b["source"] == "ov0"
     assert b["metadata"]["roadstyle:group"] == "buildings 3D"
     assert b["paint"] == {"fill-extrusion-color": "#d9d0c9", "fill-extrusion-height": ["get", "height"], "fill-extrusion-opacity": 0.9}
+
+
+def test_paved_is_a_group_of_the_export(tmp_path):
+    """The export has the layer paved as a group of its own (a row in the GeoLibre plugin), from the database's features.paved."""
+    import os
+    db = os.environ.get("MAPSTYLE_TEST_DB")
+    if not db:
+        pytest.skip("set MAPSTYLE_TEST_DB to a duckOSM database")
+    import duckdb
+    con = duckdb.connect(db, read_only=True)
+    has = con.execute("SELECT count(*) FROM duckdb_tables() WHERE schema_name = 'features' AND table_name = 'paved'").fetchone()[0]
+    con.close()
+    if not has:
+        pytest.skip("this database has no features.paved")
+    from mapstyle.export import export_inline
+    style = export_inline(db)
+    groups = {(l.get("metadata") or {}).get("roadstyle:group") for l in style["layers"]}
+    assert "paved" in groups

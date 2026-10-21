@@ -18,6 +18,7 @@ In drawing order, bottom first. Each has a row in the **LAYERS** box, so it can 
 | `landcover` | `features.land` (+ school, hospital and sports grounds from `sites`) | parks, grass, forest, residential and industrial land, cemeteries, beaches…; forests, orchards, cemeteries, wetland and scrub get openstreetmap.org's textures | |
 | `water` | `features.water_polygons` | lakes, rivers, basins, docks | |
 | `waterways` | `features.water_lines` | rivers, streams, canals, ditches | |
+| `paved` | `features.paved` | squares, pedestrian areas, piers and quays, helipads, marketplaces (needs duckOSM 0.6.0; an older database has no such table, and the layer is left out) | |
 | `buildings` | `features.buildings` | building footprints | 15 |
 | `railways` | `features.streets` | rail, tram, light rail, subway, funicular, monorail | |
 | `parking` | `features.sites` | car parks | 15 |

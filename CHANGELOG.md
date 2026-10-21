@@ -6,6 +6,15 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-21
+
+### Added
+- **A layer `paved`** from duckOSM's new `features.paved` (duckOSM 0.6.0): squares (Place du Casino), pedestrian areas, piers and quays, helipads and
+  marketplaces, drawn as filled areas between the waterways and the buildings. In Monaco it fills 83 places that were empty. An older
+  database has no such table, and the layer is left out. It is a group of the export, so a row in the GeoLibre plugin.
+- Colours for the new `landcover` classes `beach_resort`, `shrubbery` and `zoo` (from `leisure=beach_resort`, `natural=shrubbery`, `tourism=zoo`). The
+  swimming pools of `features.water_polygons` are water.
+
 ## [0.7.1] — 2026-10-21
 
 ### Fixed

@@ -590,3 +590,25 @@ def test_every_data_file_is_in_the_package():
             if p.is_file() and p.suffix not in (".py", ".pyc") and "__pycache__" not in p.parts]
     missing = [f for f in data if not any(fnmatch.fnmatch(f, g) and f.count("/") == g.count("/") for g in globs)]
     assert data and not missing, missing
+
+
+def _has_paved(db):
+    import duckdb
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        return bool(con.execute("SELECT count(*) FROM duckdb_tables() WHERE schema_name = 'features' AND table_name = 'paved'").fetchone()[0])
+    finally:
+        con.close()
+
+
+def test_paved_layer(monaco):
+    """features.paved (duckOSM 0.6.0): squares, pedestrian areas, piers. An older database has no such table: the layer is left out."""
+    fcs = load_layers(monaco)
+    if not _has_paved(monaco):
+        assert "paved" not in fcs
+        pytest.skip("this database has no features.paved (built by a duckOSM before 0.6.0)")
+    kinds = {f["properties"]["kind"] for f in fcs["paved"]["features"]}
+    assert {"square", "pier", "pedestrian"} <= kinds
+    html = render_map(monaco, "walking").html
+    layer = next(L for L in _ms(html)["layers"] if L["label"] == "paved")
+    assert layer["interaction"]["clickable"] is False and layer["ticked"] is True        # ground: a click reaches the road under it

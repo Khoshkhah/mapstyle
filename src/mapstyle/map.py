@@ -378,7 +378,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                              "size": [[z, px * p["size"] / 48] for z, px in icon["size"].items()]}
         # built clickable with a tooltip so rsSetInteraction can switch both ways (layers.js);
         # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
-        L["interaction"] = {"clickable": not (name in ("landcover", "water") or kind == "line"),
+        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved") or kind == "line"),
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")
