@@ -6,6 +6,20 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-10-20
+
+### Added
+- **`mapstyle.export`: the map for other apps.** `export_style(db, out_dir, base_url=...)` writes the map as `style.json` + vector
+  tiles + sprite (for GeoLibre with the roadstyle plugin, RustGIS, QGIS), and `export_inline(db)` returns one style with the data
+  inside (GeoJSON sources, no files), which the GeoLibre plugin makes in the browser with Pyodide. Command line:
+  `mapstyle DB --export DIR --base-url URL`. The base map's layers carry the values of `layers.yaml` (colour by kind, outlines,
+  dashes, textures, icons, zoom ranges); a layer that is unticked there starts hidden.
+- A look for the base map (`export_look`) and the hover and popup of a layer read from the config: the popup columns are in
+  `layers.yaml` now.
+
+### Changed
+- **Needs roadstyle 0.24.0** (`export_style` and `export_inline`).
+
 ## [0.5.1] — 2026-10-20
 
 ### Changed

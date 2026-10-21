@@ -32,6 +32,20 @@ ms.render_map("monaco.duckdb", theme="grey", dashboard=True)
 ms.render_map("monaco.duckdb", layers=["buildings", "water"], basemap="positron")
 ```
 
+## `export_style` and `export_inline`
+
+```python
+from mapstyle.export import export_style, export_inline
+export_style(db, out_dir, *, base_url, mode=None, paths="google", theme="osm", **kwargs)
+export_inline(db, *, mode=None, paths="google", theme="osm", **kwargs)
+```
+
+The same map as `render_map`, for another map app instead of a page. Needs roadstyle 0.24.0 or later. `export_style` writes
+`style.json`, vector tiles and a sprite into `out_dir` (served at `base_url`) and returns the path of `style.json`. `export_inline`
+returns one style with the data inside (GeoJSON sources, no files). The base map's layers keep the values of `layers.yaml`:
+colour by kind, outlines, dashes, textures, icons and zoom ranges. A layer that is unticked there starts hidden. The images go
+into the style's `metadata["roadstyle:images"]`. `**kwargs` go to `render_map`.
+
 ## `load_roads`
 
 ```python

@@ -18,9 +18,12 @@ mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm
 | `--dashboard` | a [dashboard](../guides/dashboard.md): filter by mode, class, layer and kind |
 | `--tiles` | the roads as vector tiles inside the page, for large areas (needs `mapstyle[tiles]`) |
 | `--basemap` | a roadstyle base map to open on, e.g. `blank` (default), `positron`, `satellite` |
+| `--export DIR` | write the map as `style.json` + vector tiles + sprite into `DIR` for another app (GeoLibre, RustGIS, QGIS), not a page; needs `--base-url` |
+| `--base-url` | with `--export`: the URL where `DIR` is served |
 
 ```bash
 mapstyle monaco.duckdb
 mapstyle monaco.duckdb --mode cycling --paths cyclosm -o cycling.html
 mapstyle stockholm.duckdb --tiles --basemap positron
+mapstyle monaco.duckdb --export out/monaco --base-url http://localhost:8000/monaco/
 ```
