@@ -24,10 +24,27 @@ OPTIONAL_COLS = ("walk_type", "junction", "edge_ref", "lanes")   # roadstyle rea
 _OV_KIND = {"polygon": "fill", "line": "line", "point": "circle"}
 
 
+
+def _spatial(con):
+    """DuckDB's spatial functions on ``con``: the spatial extension. In the browser (Pyodide: the roadstyle GeoLibre plugin) DuckDB
+    has no spatial extension, so the three functions a map reads with (ST_AsGeoJSON, ST_Area, ST_Centroid) are shapely's, over the
+    ST_AsWKB of DuckDB's core (the planner's other functions are not there)."""
+    import sys
+    if sys.platform != "emscripten":
+        con.execute("INSTALL spatial; LOAD spatial;")
+        return
+    import shapely
+    con.create_function("_ms_geojson", lambda b: json.dumps(shapely.geometry.mapping(shapely.from_wkb(b))), ["BLOB"], "VARCHAR")
+    con.create_function("_ms_area", lambda b: float(shapely.from_wkb(b).area), ["BLOB"], "DOUBLE")
+    con.create_function("_ms_centroid", lambda b: shapely.to_wkb(shapely.from_wkb(b).centroid), ["BLOB"], "BLOB")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_AsGeoJSON(g) AS _ms_geojson(ST_AsWKB(g))")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_Area(g) AS _ms_area(ST_AsWKB(g))")
+    con.execute("CREATE OR REPLACE TEMP MACRO ST_Centroid(g) AS ST_GeomFromWKB(_ms_centroid(ST_AsWKB(g)))")
+
 def _roads_union(con, db, only=None):
     """The SQL that stacks every mode's ``edges`` (and ``private_edges``) with ``walk_type`` / ``mode`` / ``pmode`` /
     ``access`` columns; loads the spatial extension on ``con``. ``only``: a list of modes: just those (docs/design/one_mode_map.md)."""
-    con.execute("INSTALL spatial; LOAD spatial;")
+    _spatial(con)
     have = {r[0] for r in con.execute(
         "SELECT table_schema FROM information_schema.tables WHERE table_name = 'edges'").fetchall()}
     modes = [m for m in MODES if m in have and (only is None or m in only)]
@@ -140,7 +157,7 @@ def load_layers(db, names=None):
     out, area = {}, {}
     con = duckdb.connect(str(db), read_only=True)
     try:
-        con.execute("INSTALL spatial; LOAD spatial;")
+        _spatial(con)
         have = {r[0] for r in con.execute("SELECT table_name FROM information_schema.tables "
                                           "WHERE table_schema = 'features'").fetchall()}
         if not have:
@@ -323,7 +340,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")
-        overlays.append(rs.Overlay(**ov, popup=["name", "kind"], tooltip=["name", "kind"], visible=False))
+        overlays.append(rs.Overlay(**ov, popup=load_style("layers")["popup"], tooltip=load_style("layers")["popup"], visible=False))
         layers.append(L)
     kinds = {n: dict(Counter(f["properties"]["kind"] for f in fc["features"]).most_common())
              for n, fc in fcs.items()}
@@ -354,7 +371,7 @@ def planner_data(db, roads):
 
     con = duckdb.connect(str(db), read_only=True)
     try:
-        con.execute("INSTALL spatial; LOAD spatial;")
+        _spatial(con)
         have = {tuple(r) for r in con.execute(
             "SELECT table_schema, table_name FROM information_schema.tables").fetchall()}
         cols = {tuple(r) for r in con.execute("SELECT table_schema, table_name, column_name FROM information_schema.columns").fetchall()}
@@ -460,7 +477,7 @@ LEVEL_COLS = dict(casing_start_col="casing_start", casing_level_col="casing_leve
 
 
 def render_map(db, mode=None, layers=True, planner=False, dashboard=False, interaction=None,
-               paths=PATHS, theme="osm", only=False, **kwargs):
+               paths=PATHS, theme="osm", only=False, _export=None, **kwargs):
     """``rs.render_edges`` of the db's roads (all modes' edges) in the ``mode``'s style, over the
     ``features.*`` base map, with mapstyle's rs* functions (``rsSetModes``, ``rsSetKinds``,
     ``rsSetInteraction``: layers.js). ``layers``: True = every styles/layers.yaml layer, a list of
@@ -544,13 +561,15 @@ def render_map(db, mode=None, layers=True, planner=False, dashboard=False, inter
     # private or bus-only has its own direction, so it has arrows too (Kaveh, 2026-10-19: driving.private_edges had none)
     roads["has_arrows"] = roads["driving"] | roads["access"].isin(["private", "bus"]) if "access" in roads else roads["driving"]
     kw["driving_col"] = "has_arrows"
+    if _export is not None:                    # export_style: the same map as style + tiles for another app
+        return _export(roads, palette, settings, {**kw, **kwargs}, config)
     m = render(roads, palette=palette, settings=settings, **{**kw, **kwargs})
     return _inject(m, html)
 
 
 def main(argv=None):
     """``mapstyle db.duckdb [-o map.html] [--mode walking] [--no-layers] [--planner | --dashboard]
-    [--tiles] [--basemap KEY]``"""
+    [--tiles] [--basemap KEY] [--export DIR --base-url URL]``"""
     import argparse
 
     ap = argparse.ArgumentParser(prog="mapstyle", description="A duckOSM db as one interactive HTML map.")
@@ -568,12 +587,20 @@ def main(argv=None):
     ap.add_argument("--dashboard", action="store_true", help="a dashboard: filter by mode, class, layer, kind")
     ap.add_argument("--tiles", action="store_true", help="roads as vector tiles in the page (large areas)")
     ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
+    ap.add_argument("--export", metavar="DIR", help="write the map as style.json + tiles into DIR for another app (GeoLibre, RustGIS), not a page")
+    ap.add_argument("--base-url", help="with --export: the URL where DIR is served")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     kw = {"tiles": True} if a.tiles else {}
     if a.basemap:
         kw["basemap"] = a.basemap
     mode = a.mode or "all"
+    if a.export:
+        if not a.base_url:
+            ap.error("--export needs --base-url (the URL where the folder is served)")
+        from mapstyle.export import export_style
+        print(export_style(a.db, a.export, base_url=a.base_url, mode=mode, paths=a.paths, theme=a.theme, layers=not a.no_layers, only=a.only))
+        return
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"
     render_map(a.db, mode, layers=not a.no_layers, planner=a.planner, dashboard=a.dashboard,

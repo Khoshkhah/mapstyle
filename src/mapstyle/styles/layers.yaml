@@ -10,6 +10,8 @@
 #   where     optional SQL filter on the table
 #   centroid  true = use the polygon centroid (a point from an area, e.g. the parking "P")
 #   bearing   true = carry the road bearing (oriented crossings)
+# the columns a feature's popup and tooltip show (the page and the GeoLibre look)
+popup: [name, kind]
 layers:
   - {name: ocean,           table: ocean,            kind: polygon, show: true}   # the sea (duckOSM sea: overture), under everything
   - {name: landcover,       table: land,             kind: polygon, show: true}
