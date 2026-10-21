@@ -6,6 +6,10 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **Needs roadstyle 0.22.2.** roadstyle sizes the arrows of a tilted (3D) map by the zoom now, so `layers.js` no longer scales the arrow thresholds
+  (with both, a tilted map had too many arrows). `render_map(only=True)` reads the stored drawing order with `load_area_levels(subset=True)`.
+
 ## [0.5.0] — 2026-10-19
 
 ### Fixed

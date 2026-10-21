@@ -203,20 +203,6 @@ const run = async () => {
     document.querySelectorAll(".flt-ctrl .flt-body label").forEach((l) => { if (l.textContent.trim() === "pedestrian") l.remove(); });
   }
   window.RS_ACCESS = Object.fromEntries(restricted.map(([k]) => [k, rsQuery((p) => p.access === k).length]));
-  // roadstyle sizes a road in pixels by the vertical pixels per degree at the centre: a tilted (3D) map squashes it (zoom 17: 8 times), every
-  // road looks too short and the arrows are thinned to a few. The thresholds are scaled by the same squash (1 on a flat map), on every move,
-  // before roadstyle's `moveend` places the arrows.
-  if (typeof _RS_ARROW !== "undefined") {
-    const arrowScale = () => {
-      const c = map.getCenter();
-      const ideal = 111320 / (78271.51696 * Math.cos(c.lat * Math.PI / 180) / 2 ** map.getZoom());
-      const got = Math.abs(map.project([c.lng, c.lat + 0.01]).y - map.project(c).y) / 0.01;
-      const s = Math.min(1, got / ideal);
-      _RS_ARROW.minLenPx = 100 * s; _RS_ARROW.minGapPx = 150 * s;
-    };
-    map.on("move", arrowScale);
-    arrowScale();
-  }
   fire("ms:ready", {});
 };
 run();

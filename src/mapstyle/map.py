@@ -439,24 +439,17 @@ def _band(roads):
 def stored_levels(db, roads, only=False):
     """``roads`` with the drawing order stored in the file by ``duckosm levels`` (its level area: the four numbers and each edge's ends),
     or None when the file has none. A ``ValueError`` if it was solved for other roads (the file was rebuilt): run ``duckosm levels`` again.
-    Nothing is recomputed (docs/design/stored_levels.md). ``only``: ``roads`` are one mode's roads (render_map(only=True)): the order is
-    read for the roads of every mode, which is what it was solved for, and the rows of ``roads`` get theirs."""
+    Nothing is recomputed (docs/design/stored_levels.md). ``only``: ``roads`` are one mode's roads (render_map(only=True)): the order was solved
+    for the roads of every mode together, so roadstyle reads it for these roads alone (``load_area_levels(subset=True)``, roadstyle 0.22.2)."""
     import duckdb
     import roadstyle as rs
-    from roadstyle.levels_store import AREA_COLS
 
     con = duckdb.connect(str(db), read_only=True)
     try:
         if not con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'visualization' AND table_name = 'edge_levels'").fetchone()[0]:
             return None
         try:
-            if not only:
-                return rs.load_area_levels(con, roads)
-            every = rs.load_area_levels(con, load_roads(db)).set_index("edge_id")
-            out = roads.copy()
-            for c in AREA_COLS:
-                out[c] = out["edge_id"].map(every[c])
-            return out
+            return rs.load_area_levels(con, roads, subset=bool(only))
         except ValueError as e:
             raise ValueError(f"{e}; run `duckosm levels {db}` again") from None
     finally:
