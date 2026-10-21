@@ -71,7 +71,8 @@ Every page is a roadstyle page: `rsQuery(p => bool)` returns feature ids, then `
 `rsColor(ids, "#hex")`, `rsSetClasses([...])`, `rsSetOverlay("buildings", false)`, event
 `rs:select`; `window.map` is the MapLibre map. mapstyle adds `rsSetModes(["walking"])`,
 `rsSetKinds("landcover", ["park"])`, `rsSetInteraction("crossings", {tooltip: true})`,
-`rsSetAccess("private" | "bus", on)` (roads you may not use, drawn grey / blue) and their
+`rsSetAccess("private" | "bus", on)` (roads you may not use, drawn grey / blue), `rsSetBuildings3D(on)`
+(buildings as 3D blocks; heights from `building:levels`, `height`, else by kind) and their
 `rsGet*`, and `RS_KINDS`. Wait for `ms:ready` before calling them:
 
 ```js

@@ -4,7 +4,7 @@
 //    here is pushed into the overlay's `layers`, so rsSetOverlay / the Layers control hide it too.
 // 2. The rs* functions mapstyle adds, defined like roadstyle's own (and only where the page has
 //    none yet): rsSetModes / rsGetModes, rsSetAccess / rsGetAccess / RS_ACCESS, rsSetKinds /
-//    rsGetKinds / RS_KINDS, rsSetInteraction / rsGetInteraction; and the colour and Roads-box rows
+//    rsGetKinds / RS_KINDS, rsSetInteraction / rsGetInteraction, rsSetBuildings3D / rsGetBuildings3D; and the colour and Roads-box rows
 //    of the roads you may not use (private, bus).
 // 3. The Roads and Layers boxes: both folded at the start, Layers under Roads and foldable like it.
 // 3. (below) the Roads and Layers boxes: folded at the start, Layers under Roads; map.py keeps both
@@ -92,6 +92,15 @@ const run = async () => {
   const state = {};                                   // label -> {clickable, tooltip, popup}
   const base = {};                                    // label -> {layer id: own filter}
   const kinds = {};                                   // label -> kinds shown, or null
+  // ---- Buildings 3D (docs/design/buildings_3d.md): the blocks are one more layer of the buildings overlay (its zoom range,
+  // rsSetKinds), shown only while that overlay is on AND rsSetBuildings3D is on; rsSetOverlay shows every layer, so this hides it again
+  let b3d = null, b3dOn = false;
+  const show3d = () => {
+    if (!b3d) return;
+    const on = b3dOn && map.getLayoutProperty(b3d.ov.layers[0], "visibility") !== "none";
+    map.setLayoutProperty(b3d.id, "visibility", on ? "visible" : "none");
+  };
+  document.addEventListener("rs:overlaychange", (e) => { if (b3d && e.detail.overlay === b3d.ov.label) show3d(); });
   MS.layers.forEach(L => {
     const ov = byLabel[L.label]; if (!ov) return;
     const body = ov.layers[0], vis = ov.visible === false ? "none" : "visible";
@@ -130,6 +139,13 @@ const run = async () => {
           ["interpolate", ["linear"], ["zoom"], ...L.icon.size.map(([z, s]) => [z, s * 24]).flat()]);
       });
     }
+    if (L.extrude) {
+      // above the roads and the points on them, under roadstyle's arrows, labels and highlight and the icons: a block hides the roads behind it
+      const before = ["roads-arrows", "roads-labels", "roads-highlight"].find((id) => map.getLayer(id));
+      add({id: ov.source + "-3d", type: "fill-extrusion", paint: {"fill-extrusion-color": L.extrude.color,
+        "fill-extrusion-height": ["get", "height"], "fill-extrusion-opacity": L.extrude.opacity}}, before);
+      b3d = {ov, id: ov.source + "-3d"};
+    }
     if (L.min_zoom) ov.layers.forEach(id => map.setLayerZoomRange(id, L.min_zoom, 24));
     base[L.label] = Object.fromEntries(ov.layers.map((id) => [id, map.getFilter(id) || null]));
     kinds[L.label] = null;
@@ -140,6 +156,37 @@ const run = async () => {
     setInteraction(L.label, L.interaction);
     rsSetOverlay(L.label, L.ticked !== false);         // built hidden (map.py): shown once styled, unless layers.yaml says `ticked: false`
   });
+
+  define("rsSetBuildings3D", (on) => {
+    b3dOn = !!on; show3d();
+    const cb = document.getElementById("ms-b3d"); if (cb) cb.checked = b3dOn;
+    const bt = document.getElementById("ms-b3d-btn"); if (bt) { bt.classList.toggle("rs-on", b3dOn); bt.title = b3dOn ? "Flat buildings" : "Buildings in 3D"; }
+    fire("ms:buildings3d", {on: b3dOn});
+  });
+  // its button: in roadstyle's button column, right under the 2D/3D button (roadstyle's look, `rs-on` while on)
+  if (b3d) map.addControl({onAdd() {
+    const d = document.createElement("div"), bt = document.createElement("button");
+    d.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    bt.type = "button"; bt.id = "ms-b3d-btn"; bt.title = "Buildings in 3D";
+    bt.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" style="display:block;margin:auto" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
+      + '<path d="M3 21h18M5 21V8l6-3v16M11 21V10l8 2v9"/><path d="M8 10v1M8 14v1M14 14v1M17 14v1"/></svg>';
+    bt.onclick = () => rsSetBuildings3D(!b3dOn);
+    d.appendChild(bt);
+    return d;
+  }, onRemove() {}});
+  const view = [...document.querySelectorAll(".maplibregl-ctrl-group button")].find((x) => /^[23]D$/.test(x.textContent));
+  const mine = document.getElementById("ms-b3d-btn");
+  if (view && mine) view.parentNode.after(mine.parentNode);
+  define("rsGetBuildings3D", () => b3dOn);
+  // its row in the Layers box, under the buildings row
+  const bRow = b3d && [...document.querySelectorAll(".ov-ctrl label")].find((l) => l.textContent.trim() === b3d.ov.label);
+  if (bRow) {
+    const lab = document.createElement("label"), cb = document.createElement("input");
+    cb.type = "checkbox"; cb.id = "ms-b3d"; cb.onchange = () => rsSetBuildings3D(cb.checked);
+    lab.style.paddingLeft = "18px";
+    lab.append(cb, document.createTextNode(" Buildings 3D"));
+    bRow.after(lab);
+  }
 
   // ---- rsSetInteraction: a layer's clicks, hover tooltip and click popup ----------------------
   // roadstyle reads ov.interactive on every click and ov.tooltip on every hover; its hover recolour

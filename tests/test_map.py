@@ -9,7 +9,7 @@ import pytest
 import roadstyle as rs
 from roadstyle import _settings
 
-from mapstyle.map import LOOKS, MODES, load_layers, load_roads, main, mode_settings, render_map
+from mapstyle.map import LOOKS, MODES, building_height, load_layers, load_roads, main, mode_settings, render_map
 from mapstyle.style import load_style
 
 DUCKOSM = Path(os.environ.get("DUCKOSM_DIR") or Path(__file__).resolve().parents[2] / "duckOSM")
@@ -287,6 +287,22 @@ def test_load_layers(monaco):
     assert sum(b) > 0.9 * len(b)                             # Monaco: 546 of 553
     assert fcs["parking_p"]["features"][0]["geometry"]["type"] == "Point"    # centroid
     assert list(load_layers(monaco, ["crossings"])) == ["crossings"]
+
+
+def test_building_height():
+    cfg = load_style()["features"]["buildings_3d"]
+    assert building_height("4", "30", "office", cfg) == 12           # levels first
+    assert building_height(None, "12.5 m", "yes", cfg) == 12.5       # height in metres, a unit read off
+    assert building_height(None, "1", "apartments", cfg) == 15       # Tartu's ETAK code: not a height, the kind's
+    assert building_height("0", None, "house", cfg) == 6             # no levels: the kind's
+    assert building_height(None, None, "castle", cfg) == cfg["heights"]["default"]
+
+
+def test_buildings_carry_a_height_and_the_page_its_3d_layer(monaco):
+    fc = load_layers(monaco, ["buildings"])["buildings"]
+    assert all(f["properties"]["height"] > 0 for f in fc["features"])
+    html = render_map(monaco, "walking").html
+    assert "rsSetBuildings3D" in html and '"extrude"' in html
 
 
 def test_no_features_is_roads_only(tmp_path, caplog):

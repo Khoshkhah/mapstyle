@@ -10,6 +10,7 @@
 #   where     optional SQL filter on the table
 #   centroid  true = use the polygon centroid (a point from an area, e.g. the parking "P")
 #   bearing   true = carry the road bearing (oriented crossings)
+#   height    true = carry a height in metres for 3D (buildings; osm_carto.yaml features.buildings_3d)
 # the columns a feature's popup and tooltip show (the page and the GeoLibre look)
 popup: [name, kind]
 layers:
@@ -22,7 +23,7 @@ layers:
      where: "kind IN ('school','university','college','kindergarten','hospital','prison','sports_centre','construction','bridge')"}
   - {name: water,           table: water_polygons,   kind: polygon, show: true}   # incl. the river (smart clip)
   - {name: waterways,       table: water_lines,      kind: line,    show: true}
-  - {name: buildings,       table: buildings,        kind: polygon, show: true}
+  - {name: buildings,       table: buildings,        kind: polygon, show: true, height: true}
   - {name: railways,        table: streets,          kind: line,    show: true, where: "kind IN ('rail','tram','light_rail','subway','narrow_gauge','funicular','monorail')", ticked: false}
   - {name: parking,         table: sites,            kind: polygon, show: true, where: "kind = 'parking'", ticked: false}
   - {name: parking_p,       table: sites,            kind: point,   show: true, where: "kind = 'parking'", centroid: true, ticked: false}   # blue "P"

@@ -49,8 +49,9 @@ def _restyle(style, config):
             if x["id"].endswith("-outline") and L.get("outline_by"):
                 x["paint"]["line-color"] = _match(L["outline_by"]["map"], L["outline_by"]["default"])
         def new(spec, after):
-            spec = {**spec, "source": lys[0]["source"], **({"source-layer": f"ov{i}"} if "source-layer" in lys[0] else {}), "metadata": meta,
-                    "layout": {**spec.get("layout", {}), "visibility": vis}}
+            spec = {**spec, "source": lys[0]["source"], **({"source-layer": f"ov{i}"} if "source-layer" in lys[0] else {}),
+                    "metadata": {**meta, **spec.get("metadata", {})},
+                    "layout": {**spec.get("layout", {}), "visibility": spec.get("layout", {}).get("visibility", vis)}}
             extra.setdefault(after, []).append(spec)
             lys.append(spec)
         if L.get("patterns"):
@@ -70,12 +71,22 @@ def _restyle(style, config):
                 # the circle stays as the click / hover target, unseen and as big as the icon (an icon is 48 px x icon-size)
                 b["paint"].update({"circle-opacity": 0, "circle-stroke-width": 0,
                                    "circle-radius": ["interpolate", ["linear"], ["zoom"], *[x for z, sz in ic["size"] for x in (z, sz * 24)]]})
+        if L.get("extrude"):                              # buildings in 3D (docs/design/buildings_3d.md): blocks from the `height` property
+            ex = L["extrude"]                             # its own row ("buildings 3D"), off until the user switches it on, as on the page
+            new({"id": f"ov{i}-3d", "type": "fill-extrusion", "metadata": {"roadstyle:group": "buildings 3D", "roadstyle:over": True},
+                 "layout": {"visibility": "none"},
+                 "paint": {"fill-extrusion-color": ex["color"], "fill-extrusion-height": ["get", "height"],
+                           "fill-extrusion-opacity": ex["opacity"]}}, lys[-1]["id"])
         if L.get("min_zoom"):
             for x in lys:
                 x["minzoom"] = L["min_zoom"]
     for lyr in layers:
         out.append(lyr)
-        out.extend(extra.get(lyr["id"], []))
+        out.extend(x for x in extra.get(lyr["id"], []) if not x.get("metadata", {}).get("roadstyle:over"))
+    over = [x for v in extra.values() for x in v if x.get("metadata", {}).get("roadstyle:over")]
+    if over:                                              # over the roads and the points on them, under the arrows, labels and highlight (as the page)
+        at = next((k for k, x in enumerate(out) if x["id"] in ("roads-arrows", "roads-labels", "roads-highlight")), len(out))
+        out[at:at] = over
     style["layers"] = out
     style.setdefault("metadata", {})["roadstyle:images"] = config["images"]
 

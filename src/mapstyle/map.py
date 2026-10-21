@@ -9,6 +9,7 @@ import base64
 import json
 from collections import Counter
 import logging
+import re
 from pathlib import Path
 
 from mapstyle.style import _walk, load_style, load_theme, themes
@@ -154,6 +155,7 @@ def load_layers(db, names=None):
 
     specs = [s for s in load_style("layers")["layers"] if s.get("show", True)
              and (names is None or s["name"] in names or s.get("merge_into") in names)]
+    b3d = load_style()["features"]["buildings_3d"]
     out, area = {}, {}
     con = duckdb.connect(str(db), read_only=True)
     try:
@@ -169,20 +171,23 @@ def load_layers(db, names=None):
                     log.warning("features.%s missing: layer %r skipped", s["table"], s["name"])
                 continue
             g = "ST_Centroid(geom)" if s.get("centroid") else "geom"
+            tags = "tags['building:levels'][1], tags['height'][1]" if s.get("height") else "NULL, NULL"
             try:
                 rows = con.execute(
                     f"SELECT CAST(osm_id AS VARCHAR), kind, COALESCE(name, ''), "
-                    f"{'bearing' if s.get('bearing') else 'NULL'}, ST_Area(geom), ST_AsGeoJSON({g}) "
+                    f"{'bearing' if s.get('bearing') else 'NULL'}, {tags}, ST_Area(geom), ST_AsGeoJSON({g}) "
                     f"FROM features.{s['table']} WHERE geom IS NOT NULL"
                     + (f" AND ({s['where']})" if s.get("where") else "")).fetchall()
             except duckdb.Error as e:
                 log.warning("layer %r skipped: %s", s["name"], e)
                 continue
             name = s.get("merge_into") or s["name"]
-            for osm_id, kind, nm, bearing, a, gj in rows:
+            for osm_id, kind, nm, bearing, levels, height, a, gj in rows:
                 props = {"osm_id": osm_id, "kind": kind, "name": nm}
                 if bearing is not None:
                     props["bearing"] = bearing
+                if s.get("height"):
+                    props["height"] = building_height(levels, height, kind, b3d)
                 out.setdefault(name, []).append(
                     {"type": "Feature", "properties": props, "geometry": json.loads(gj)})
                 area.setdefault(name, []).append(a or 0)
@@ -193,6 +198,23 @@ def load_layers(db, names=None):
                 "features": [f for _, f in sorted(zip(area[n], fs), key=lambda p: -p[0])]
                 if _kind(n) == "polygon" else fs}
             for n, fs in out.items()}
+
+
+def _number(text):
+    """The number at the start of a tag value (``"12 m"`` -> 12.0), else None."""
+    m = re.match(r"\s*(\d+(?:\.\d+)?)", text or "")
+    return float(m[1]) if m else None
+
+
+def building_height(levels, height, kind, cfg):
+    """A building's height in metres for 3D (docs/design/buildings_3d.md): ``building:levels`` x
+    ``m_per_level``, else its ``height`` tag when at least ``min_height``, else ``heights`` by kind."""
+    lv, h = _number(levels), _number(height)
+    if lv:
+        return lv * cfg["m_per_level"]
+    if h is not None and h >= cfg["min_height"]:
+        return h
+    return cfg["heights"].get(kind, cfg["heights"]["default"])
 
 
 def _kind(name):
@@ -319,6 +341,8 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
             ov.update(color=a.get("fill"), outline=a.get("outline"), opacity=a.get("opacity", 1.0),
                       width=0.5)
             L["min_zoom"] = a.get("min_zoom")
+            if fc["features"] and "height" in fc["features"][0]["properties"]:   # 3D blocks, off until rsSetBuildings3D
+                L["extrude"] = {"color": a.get("fill"), "opacity": st["buildings_3d"]["opacity"]}
         elif kind == "line":
             ln = lines.get(name, {})
             ov.update(color=ln.get("color"), width=ln.get("width"))

@@ -6,6 +6,16 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-21
+
+### Added
+- **Buildings in 3D**: a "Buildings 3D" row in the Layers box and `rsSetBuildings3D(on)` / `rsGetBuildings3D()` (event `ms:buildings3d`).
+  Each building is a block above the roads. Its height: `building:levels` x 3 m, else its `height` tag (2 m or more), else a height
+  for its kind, else 9 m (`features.buildings_3d` in `osm_carto.yaml`). `load_layers` gives each building a `height` property.
+  Design: `docs/design/buildings_3d.md`.
+- **`mapstyle.export` has the 3D buildings too**: a layer `ov<i>-3d` (type `fill-extrusion`, group `buildings 3D`) over the roads and under the
+  arrows, off at first, with the `height` of each building. The roadstyle GeoLibre plugin shows it as a row.
+
 ## [0.6.0] — 2026-10-21
 
 ### Added

@@ -67,7 +67,7 @@ ms.render_map("monaco.duckdb", dashboard=True).save("dashboard.html") # a dashbo
   itself is duckOSM's job).
 - **A dashboard**: filter by mode, road class and layer, colour by mode, inspect what you click.
 - **A JavaScript API**: every page is a [roadstyle](https://github.com/Khoshkhah/roadstyle) page
-  (`rsQuery`, `rsFilter`, `rsColor`, …) plus `rsSetModes`, `rsSetKinds` and `rsSetInteraction`;
+  (`rsQuery`, `rsFilter`, `rsColor`, …) plus `rsSetModes`, `rsSetKinds`, `rsSetInteraction` and `rsSetBuildings3D`;
   3D, Street View and vector tiles for large areas come with it.
 
 <table>

@@ -44,7 +44,7 @@ The same map as `render_map`, for another map app instead of a page. Needs roads
 `style.json`, vector tiles and a sprite into `out_dir` (served at `base_url`) and returns the path of `style.json`. `export_inline`
 returns one style with the data inside (GeoJSON sources, no files). The base map's layers keep the values of `layers.yaml`:
 colour by kind, outlines, dashes, textures, icons and zoom ranges. A layer that is unticked there starts hidden. The images go
-into the style's `metadata["roadstyle:images"]`. `**kwargs` go to `render_map`.
+into the style's `metadata["roadstyle:images"]`. The buildings in 3D are a layer `ov<i>-3d` (`fill-extrusion`, from the `height` of each building; off at first). `**kwargs` go to `render_map`.
 
 ## `load_roads`
 

@@ -63,6 +63,16 @@ ms.render_map(db, interaction={"crossings": {"tooltip": True}, "landcover": {"cl
 From JavaScript, `rsSetInteraction`, `rsSetKinds` (only some kinds of a layer, e.g. just parks) and
 roadstyle's `rsSetOverlay` change them on the page ([JavaScript API](../reference/javascript.md)).
 
+## Buildings in 3D
+
+The Layers box has a "Buildings 3D" row under "buildings". It is off when the page opens. When it is on, each building is a block,
+and you see the blocks when you tilt the map (the 2D/3D button or right-drag). The blocks hide the roads behind them.
+From JavaScript: `rsSetBuildings3D(true)`.
+
+The height of a building is `building:levels` x 3 m. If the building has no levels, its `height` tag (2 m or more).
+If it has neither, a height for its kind (house 6 m, apartments 15 m, garage 3 m, and so on), else 9 m.
+The values are in `features.buildings_3d` of `styles/osm_carto.yaml`.
+
 ## Change the look
 
 The base map is data: `styles/layers.yaml` says which layers, in which order, with which filter;
