@@ -132,6 +132,7 @@ features:
   buildings_3d:
     m_per_level: 3
     min_height: 2              # a lower `height` is no height in metres (Tartu's ETAK import: codes 0-9)
+    max_height: 200            # metres: a block is not higher than this (a typo such as building:levels=100 would be 300 m)
     opacity: 0.9
     heights:
       house: 6

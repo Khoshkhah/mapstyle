@@ -298,6 +298,34 @@ def test_building_height():
     assert building_height(None, None, "castle", cfg) == cfg["heights"]["default"]
 
 
+def test_building_height_limits_and_units():
+    cfg = load_style()["features"]["buildings_3d"]
+    assert building_height("100", None, "yes", cfg) == cfg["max_height"]          # a typo: not a 300 m tower
+    assert building_height(None, "5000", "yes", cfg) == cfg["max_height"]
+    assert abs(building_height(None, "40 ft", "yes", cfg) - 12.192) < 1e-9        # feet
+    assert abs(building_height(None, "40'", "yes", cfg) - 12.192) < 1e-9
+    assert building_height(None, "12,5", "yes", cfg) == 12.5                       # a decimal comma
+    assert building_height("3,5", None, "yes", cfg) == 10.5
+    assert building_height(None, "12.5 m", "yes", cfg) == 12.5                     # metres, as before
+
+
+def test_buildings_without_a_tags_column_stay(tmp_path):
+    """A database from an older duckOSM: features.buildings has no tags column. The buildings stay, with the height of their kind."""
+    duckdb = pytest.importorskip("duckdb")
+    db = tmp_path / "old.duckdb"
+    con = duckdb.connect(str(db))
+    try:
+        con.execute("INSTALL spatial; LOAD spatial")
+    except duckdb.Error as e:
+        pytest.skip(f"no spatial extension: {e}")
+    con.execute("CREATE SCHEMA features")
+    con.execute("CREATE TABLE features.buildings (osm_id BIGINT, kind VARCHAR, name VARCHAR, geom GEOMETRY)")
+    con.execute("INSERT INTO features.buildings VALUES (1, 'house', 'A', ST_GeomFromText('POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))'))")
+    con.close()
+    fc = load_layers(db, ["buildings"])["buildings"]
+    assert len(fc["features"]) == 1 and fc["features"][0]["properties"]["height"] == 6      # a house: 6 m
+
+
 def test_buildings_carry_a_height_and_the_page_its_3d_layer(monaco):
     fc = load_layers(monaco, ["buildings"])["buildings"]
     assert all(f["properties"]["height"] > 0 for f in fc["features"])

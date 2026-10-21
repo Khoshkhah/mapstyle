@@ -38,6 +38,10 @@ The height of a building, in this order:
 3. The height for the building's `kind` in the style file.
 4. The `default` height in the style file.
 
+No block is higher than `max_height` (200 m): a typo such as `building:levels=100` is not a 300 m tower. A `height` in feet
+(`40 ft`, `40'`) is converted to metres, and a decimal comma (`12,5`) is read. A database whose `features.buildings` has no `tags`
+column (an older duckOSM) keeps its buildings, with the height of their kind.
+
 `building:levels` comes before `height` because the levels are correct in all three areas, and
 `height` is not correct in Tartu. A `height` value with a unit (`12 m`) is read as a number.
 

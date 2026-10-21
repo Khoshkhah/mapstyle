@@ -6,6 +6,13 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-10-21
+
+### Fixed
+- **3D buildings: no block is higher than `max_height`** (200 m, `features.buildings_3d` in `osm_carto.yaml`). A typo such as `building:levels=100` gave a 300 m tower.
+- **3D buildings: units.** A `height` in feet (`40 ft`, `40'`) is converted to metres, and a decimal comma (`12,5`) is read.
+- **A database with no `tags` column in `features.buildings`** (an older duckOSM) keeps its buildings: they get the height of their kind. Before, the whole buildings layer was skipped.
+
 ### Added
 - **A building button** under the 2D/3D button (in 0.7.0, not in its notes): it turns the 3D buildings on and off, like the
   "Buildings 3D" row of the Layers box. The docs now name it.

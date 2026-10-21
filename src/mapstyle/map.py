@@ -171,13 +171,21 @@ def load_layers(db, names=None):
                     log.warning("features.%s missing: layer %r skipped", s["table"], s["name"])
                 continue
             g = "ST_Centroid(geom)" if s.get("centroid") else "geom"
-            tags = "tags['building:levels'][1], tags['height'][1]" if s.get("height") else "NULL, NULL"
-            try:
-                rows = con.execute(
+            def query(tags):
+                return con.execute(
                     f"SELECT CAST(osm_id AS VARCHAR), kind, COALESCE(name, ''), "
                     f"{'bearing' if s.get('bearing') else 'NULL'}, {tags}, ST_Area(geom), ST_AsGeoJSON({g}) "
                     f"FROM features.{s['table']} WHERE geom IS NOT NULL"
                     + (f" AND ({s['where']})" if s.get("where") else "")).fetchall()
+            try:
+                try:
+                    rows = query("tags['building:levels'][1], tags['height'][1]" if s.get("height") else "NULL, NULL")
+                except duckdb.Error:
+                    if not s.get("height"):
+                        raise
+                    # a database from an older duckOSM has no `tags` column: the buildings stay, with the height of their kind
+                    log.warning("features.%s has no tags: the heights of the buildings come from their kind", s["table"])
+                    rows = query("NULL, NULL")
             except duckdb.Error as e:
                 log.warning("layer %r skipped: %s", s["name"], e)
                 continue
@@ -201,19 +209,29 @@ def load_layers(db, names=None):
 
 
 def _number(text):
-    """The number at the start of a tag value (``"12 m"`` -> 12.0), else None."""
-    m = re.match(r"\s*(\d+(?:\.\d+)?)", text or "")
-    return float(m[1]) if m else None
+    """The number at the start of a tag value (``"12 m"`` -> 12.0, ``"12,5"`` -> 12.5), else None."""
+    m = re.match(r"\s*(\d+(?:[.,]\d+)?)", text or "")
+    return float(m[1].replace(",", ".")) if m else None
+
+
+def _metres(text):
+    """A ``height`` tag in metres: the number, times 0.3048 when the unit is feet (``"40 ft"``, ``40'``), else None."""
+    h = _number(text)
+    if h is not None and re.match(r"\s*\d+(?:[.,]\d+)?\s*(?:ft|feet|foot|')", text, re.I):
+        h *= 0.3048
+    return h
 
 
 def building_height(levels, height, kind, cfg):
     """A building's height in metres for 3D (docs/design/buildings_3d.md): ``building:levels`` x
-    ``m_per_level``, else its ``height`` tag when at least ``min_height``, else ``heights`` by kind."""
-    lv, h = _number(levels), _number(height)
+    ``m_per_level``, else its ``height`` tag when at least ``min_height``, else ``heights`` by kind. No block is
+    higher than ``max_height`` (a typo such as ``building:levels=100``)."""
+    lv, h = _number(levels), _metres(height)
+    top = cfg.get("max_height", 200)
     if lv:
-        return lv * cfg["m_per_level"]
+        return min(lv * cfg["m_per_level"], top)
     if h is not None and h >= cfg["min_height"]:
-        return h
+        return min(h, top)
     return cfg["heights"].get(kind, cfg["heights"]["default"])
 
 
