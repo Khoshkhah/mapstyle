@@ -19,7 +19,6 @@ roads:
     platform:      {fill: "#dedede", casing: "#c9c9c9"}
 features:
   areas:
-    background: {fill: "#f0f0ee"}   # as the land default
     ocean:     {fill: "#d5dde0"}    # a hint of blue
     water:     {fill: "#d5dde0"}
     buildings: {fill: "#e6e5e2", outline: "#d9d8d4"}

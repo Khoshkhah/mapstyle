@@ -14,7 +14,7 @@ In drawing order, bottom first. Each has a row in the **LAYERS** box, so it can 
 
 | Layer | From duckOSM | Shows | From zoom |
 |---|---|---|---|
-| `background` | `main.boundary` | the boundary polygon in the land colour, under everything (starts unticked; no OSM data) | |
+| `background` | `main.boundary` | the boundary polygon in the land colour (the `landcover` default), under everything (starts unticked; no OSM data) | |
 | `ocean` | `features.ocean` | the sea | |
 | `landcover` | `features.land` (+ school, hospital and sports grounds from `sites`) | parks, grass, forest, residential and industrial land, cemeteries, beaches…; forests, orchards, cemeteries, wetland and scrub get openstreetmap.org's textures | |
 | `water` | `features.water_polygons` | lakes, rivers, basins, docks | |

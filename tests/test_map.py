@@ -271,6 +271,8 @@ def test_every_layer_has_a_style():
     st, here = load_style()["features"], Path(__file__).resolve().parents[1] / "src/mapstyle"
     for s in load_style("layers")["layers"]:
         name = s.get("merge_into") or s["name"]
+        if name == "background":           # no entry of its own: the colour of landcover's default (map.feature_overlays)
+            continue
         if s["kind"] == "polygon":
             assert name in st["areas"], name
         elif s["kind"] == "line":

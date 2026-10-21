@@ -11,8 +11,7 @@ All notable changes to **mapstyle** are documented here. The format is based on
   `edge_id_map`). The page draws its roads from the networks, so these ways were not on the map. `raceway` is the Circuit de Monaco and
   its pit lane, in OSM-Carto's pink. `other_ways` is a thin grey dashed line for small pieces that touch no network, platforms and lifts (Monaco: 10 and 41 ways).
   A layer row has the new key `outside_networks: true`. A database with no mode network skips both layers.
-- **A layer `background`** (unticked): the boundary polygon of the database (`main.boundary`), drawn under everything in the land colour of the
-  theme. It adds no OSM data. It only fills the places that OSM has no area for, so that a satellite base map does not show through. The sea is drawn over it.
+- **A layer `background`** (unticked): the boundary polygon of the database (`main.boundary`), drawn under everything in the land colour of the theme (the `landcover` default). It adds no OSM data. It only fills the places that OSM has no area for, so that a satellite base map does not show through. The sea is drawn over it.
   A layer row can have `schema: main` to read a table outside `features`.
 - A line style can have `width_zoom` (px by zoom): the raceway is as wide as a road.
 

@@ -34,7 +34,6 @@ roads:
 # Landcover fills / outlines / textures key by the feature's `kind`; `default` catches the rest.
 features:
   areas:                             # polygon fills (+ optional outline, fill opacity 0..1)
-    background:  {fill: "#f2efe9", outline: null,      opacity: 1.0}   # the boundary polygon, as OSM-Carto's land colour
     ocean:       {fill: "#aad3df", outline: null,      opacity: 1.0}   # the sea, as water
     water:       {fill: "#aad3df", outline: null,      opacity: 1.0}
     paved:       {fill: "#ededed", outline: "#bbbbbb", opacity: 1.0}   # squares, pedestrian areas, piers, helipads: osm-carto's pedestrian area

@@ -198,7 +198,9 @@ const run = async () => {
     ov.interactive = s.clickable;
     ov.tooltip = s.tooltip ? s.tip : null;
     const c = s.color;
-    s.bodies.forEach((id) => map.setPaintProperty(id, s.paint, s.clickable || !Array.isArray(c) || c[0] !== "case" ? c : c[c.length - 1]));
+    // not clickable: the colour without its hover / select `case` (roadstyle may wrap the case in a `coalesce` for the layer's opacity state)
+    const plain = (x) => !Array.isArray(x) ? x : x[0] === "case" ? x[x.length - 1] : x[0] === "coalesce" ? [x[0], ...x.slice(1, -1), plain(x[x.length - 1])] : x;
+    s.bodies.forEach((id) => map.setPaintProperty(id, s.paint, s.clickable ? c : plain(c)));
     fire("rs:interactionchange", {overlay: ov.label, clickable: s.clickable, tooltip: s.tooltip, popup: s.popup});
   }
   // popup off: roadstyle opens a popup for every clicked layer and sends rs:select right after, so

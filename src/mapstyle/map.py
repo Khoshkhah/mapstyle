@@ -374,6 +374,8 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                 L["patterns"][k] = f"ms-pat-{k}"
         elif kind == "polygon":
             a = areas.get(name, {})
+            if name == "background":          # the boundary polygon is plain land: the colour of landcover's default, in every theme
+                a = {"fill": areas["landcover"]["default"], "outline": None, "opacity": 1.0}
             ov.update(color=a.get("fill"), outline=a.get("outline"), opacity=a.get("opacity", 1.0),
                       width=0.5)
             L["min_zoom"] = a.get("min_zoom")
