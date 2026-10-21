@@ -6,7 +6,7 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-10-20
+## [0.6.0] — 2026-10-21
 
 ### Added
 - **`mapstyle.export`: the map for other apps.** `export_style(db, out_dir, base_url=...)` writes the map as `style.json` + vector
