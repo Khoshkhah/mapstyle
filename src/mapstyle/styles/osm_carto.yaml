@@ -62,6 +62,7 @@ features:
       beach_resort: "#fff1ba"          # a beach resort: the sand colour
       shrubbery: "#c8d7ab"             # osm-carto scrub
       zoo: "#d8eecf"
+      grave_yard: "#aacbaf"            # osm-carto grave yard
       cemetery: "#aacbaf"
       scrub: "#c8d7ab"
       heath: "#d6d99f"
