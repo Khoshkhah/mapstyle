@@ -6,6 +6,11 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-10-22
+
+### Changed
+- **Needs roadstyle 0.24.2.** Its pages cut no tiles of the roads source in simple mode, so a zoom no longer freezes the page at each tile (the page took 40 to 70 ms to read the reply of each tile). A road is picked on the pieces of the road layer.
+
 ## [0.10.0] — 2026-10-22
 
 ### Added
