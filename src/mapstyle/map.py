@@ -381,8 +381,6 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                 L["patterns"][k] = f"ms-pat-{k}"
         elif kind == "polygon":
             a = areas.get(name, {})
-            if name == "background":          # the boundary polygon is plain land: the colour of landcover's default, in every theme
-                a = {"fill": areas["landcover"]["default"], "outline": None, "opacity": 1.0}
             ov.update(color=a.get("fill"), outline=a.get("outline"), opacity=a.get("opacity", 1.0),
                       width=0.5)
             L["min_zoom"] = a.get("min_zoom")
@@ -406,7 +404,7 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                              "size": [[z, px * p["size"] / 48] for z, px in icon["size"].items()]}
         # built clickable with a tooltip so rsSetInteraction can switch both ways (layers.js);
         # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
-        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved", "background") or kind == "line"),
+        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved") or kind == "line"),
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")

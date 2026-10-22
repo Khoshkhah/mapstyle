@@ -14,9 +14,10 @@
 # the columns a feature's popup and tooltip show (the page and the GeoLibre look)
 popup: [name, kind]
 layers:
-  # background: the land of the boundary of the database (main.boundary minus features.ocean), under everything. It adds no OSM data: it only
-  # fills the places that OSM has no area for, so a satellite or photo base map does not show through. The sea (ocean) is drawn over it.
-  - {name: background,      table: boundary,         kind: polygon, show: true, schema: main, ticked: false}
+  # background: the land of the boundary of the database (main.boundary minus features.ocean), merged INTO landcover (kind `background`, the
+  # landcover default colour, the biggest polygon so the bottom one). It adds no OSM data: it only fills the places that OSM has no area for,
+  # so a satellite or photo base map does not show through. The sea (ocean) is under it, and not covered.
+  - {name: background,      table: boundary,         kind: polygon, show: true, schema: main, merge_into: landcover}
   - {name: ocean,           table: ocean,            kind: polygon, show: true}   # the sea (duckOSM sea: overture), under everything
   - {name: landcover,       table: land,             kind: polygon, show: true}
   # institutional / sport GROUNDS (school, university, hospital, sports_centre, prison, kindergarten,

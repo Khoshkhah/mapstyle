@@ -271,8 +271,6 @@ def test_every_layer_has_a_style():
     st, here = load_style()["features"], Path(__file__).resolve().parents[1] / "src/mapstyle"
     for s in load_style("layers")["layers"]:
         name = s.get("merge_into") or s["name"]
-        if name == "background":           # no entry of its own: the colour of landcover's default (map.feature_overlays)
-            continue
         if s["kind"] == "polygon":
             assert name in st["areas"], name
         elif s["kind"] == "line":
@@ -633,9 +631,16 @@ def test_ways_outside_the_networks(monaco):
     assert "rail" not in {f["properties"]["kind"] for f in fcs["other_ways"]["features"]}   # rails are the layer railways
 
 
-def test_background_is_the_boundary(monaco):
-    """background: the boundary polygon of main.boundary, unticked, not clickable (it adds no OSM data)."""
+def test_background_is_landcover_of_kind_background(monaco):
+    """background: the land of the boundary (main.boundary minus the sea), a feature of the layer landcover with the kind `background`,
+    the largest polygon: so the bottom one, in landcover's default colour."""
+    import json
+    from shapely.geometry import shape
     fcs = load_layers(monaco)
-    assert [f["properties"]["kind"] for f in fcs["background"]["features"]] == ["background"]
-    layer = next(L for L in _ms(render_map(monaco, "walking").html)["layers"] if L["label"] == "background")
-    assert layer["ticked"] is False and layer["interaction"]["clickable"] is False
+    bg = [f for f in fcs["landcover"]["features"] if f["properties"]["kind"] == "background"]
+    assert len(bg) == 1 and "background" not in fcs
+    areas = [shape(f["geometry"]).area for f in fcs["landcover"]["features"]]
+    assert fcs["landcover"]["features"][0] is bg[0] and shape(bg[0]["geometry"]).area == max(areas)      # largest first: the bottom
+    ms = _ms(render_map(monaco, "walking").html)
+    layer = next(L for L in ms["layers"] if L["label"] == "landcover")
+    assert "background" not in layer["color_by"]["map"] and layer["interaction"]["clickable"] is False    # so its colour is the default
