@@ -6,6 +6,8 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-22
+
 ### Added
 - **Layers `raceway` and `other_ways`**: the OSM ways of `features.streets` that no mode network holds (not in `<mode>.edges`, `private_edges` or
   `edge_id_map`). The page draws its roads from the networks, so these ways were not on the map. `raceway` is the Circuit de Monaco and
