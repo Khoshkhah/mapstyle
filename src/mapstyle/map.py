@@ -671,6 +671,8 @@ def main(argv=None):
     ap.add_argument("--basemap", help="a roadstyle base map key (e.g. blank, positron, satellite)")
     ap.add_argument("--export", metavar="DIR", help="write the map as style.json + tiles into DIR for another app (GeoLibre, RustGIS), not a page")
     ap.add_argument("--base-url", help="with --export: the URL where DIR is served")
+    ap.add_argument("--inline", metavar="FILE", help="write the map as one style.json with the data inside (export_inline), for the roadstyle GeoLibre plugin: "
+                    "roadstyle > Add a roadstyle layer > a file. Opens in seconds; with --planner it has the route planner's data")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     kw = {"tiles": True} if a.tiles else {}
@@ -682,6 +684,14 @@ def main(argv=None):
             ap.error("--export needs --base-url (the URL where the folder is served)")
         from mapstyle.export import export_style
         print(export_style(a.db, a.export, base_url=a.base_url, mode=mode, paths=a.paths, theme=a.theme, layers=not a.no_layers, only=a.only))
+        return
+    if a.inline:
+        import json
+
+        from mapstyle.export import export_inline
+        style = export_inline(a.db, mode=mode, paths=a.paths, theme=a.theme, planner=a.planner, layers=not a.no_layers, only=a.only)
+        Path(a.inline).write_text(json.dumps(style, separators=(",", ":")))
+        print(a.inline)
         return
     kind = "planner" if a.planner else "dashboard" if a.dashboard else mode
     out = a.out or f"{Path(a.db).stem}_{kind}.html"

@@ -8,14 +8,23 @@ import colorsys
 import re
 from pathlib import Path
 
+import copy
+import functools
+
 import yaml
 
 _STYLES = Path(__file__).parent / "styles"
 
 
-def load_style(name: str = "osm_carto") -> dict:
+@functools.lru_cache(maxsize=None)
+def _read(name: str) -> dict:
     with open(_STYLES / f"{name}.yaml") as f:
         return yaml.safe_load(f)
+
+
+def load_style(name: str = "osm_carto") -> dict:
+    """The style file ``styles/<name>.yaml`` as a dict. It is parsed once; a caller gets its own copy, so it may change it."""
+    return copy.deepcopy(_read(name))
 
 
 def themes() -> tuple:

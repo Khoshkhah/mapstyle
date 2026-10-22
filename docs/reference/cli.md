@@ -20,6 +20,7 @@ mapstyle DB [-o OUT] [--mode {all,driving,walking,cycling}] [--paths {google,osm
 | `--basemap` | a roadstyle base map to open on, e.g. `blank` (default), `positron`, `satellite` |
 | `--export DIR` | write the map as `style.json` + vector tiles + sprite into `DIR` for another app (GeoLibre, RustGIS, QGIS), not a page; needs `--base-url` |
 | `--base-url` | with `--export`: the URL where `DIR` is served |
+| `--inline FILE` | write the map as one `style.json` with the data inside, for the roadstyle GeoLibre plugin (roadstyle › Add a roadstyle layer › a file). It opens in seconds, also for a big area. With `--planner` it holds the route planner's data |
 
 ```bash
 mapstyle monaco.duckdb

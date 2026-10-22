@@ -6,6 +6,15 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-22
+
+### Added
+- **`mapstyle db.duckdb --inline FILE`** writes the map as one `style.json` with the data inside (`export_inline`), for the roadstyle GeoLibre plugin. The plugin opens such
+  a file in seconds, where it needs about 35 seconds to make the map of Monaco from the `.duckdb` in the browser. With `--planner` the file has the route planner's data.
+
+### Changed
+- `load_style` parses each style file once (a map read the style files 92 times).
+
 ## [0.11.0] — 2026-10-22
 
 ### Added

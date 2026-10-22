@@ -680,3 +680,12 @@ def test_export_inline_carries_the_planner_data_when_asked(monaco):
     assert d["n"] == len(roads) and d["eid"] == [str(e) for e in roads["edge_id"]] and d["modes"]
     assert len(d["start"]) == 2 and len(d["end"]) == 2 and d["start"] != d["end"]
     assert all(set(g) >= {"k", "cost", "len", "next"} for g in d["graphs"].values())
+
+
+def test_cli_inline_writes_a_style_file(monaco, tmp_path):
+    """mapstyle db --inline FILE: the style of export_inline in one file (the GeoLibre plugin opens it); --planner adds the planner data."""
+    import json
+    out = tmp_path / "style.json"
+    main([str(monaco), "--inline", str(out), "--planner"])
+    st = json.loads(out.read_text())
+    assert st["layers"] and "roads" in st["sources"] and st["metadata"]["roadstyle:planner"]["n"] > 0
