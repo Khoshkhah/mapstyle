@@ -8,6 +8,7 @@ It combines with any travel mode and path style.</p>
 | `osm` (default) | detailed and colourful, as openstreetmap.org | exploring an area, checking the data |
 | `google` | clean and friendly: light land, white streets, yellow main roads, light blue water, soft green parks | maps for everyone |
 | `grey` | quiet greys, a hint of blue water and green parks | your own data on top: flows, routes, sensors |
+| `roadstyle` | the roads in roadstyle's own palette `amber` (the colours of the duckOSM level editor): yellow main roads, blue-grey small roads, salmon dashed footways; the base map as in `osm` | seeing the same roads as in the level editor |
 
 <div class="ms-shots" markdown>
 <figure markdown>![Monte-Carlo in the osm theme](../img/theme_osm_city.jpg)<figcaption>osm</figcaption></figure>

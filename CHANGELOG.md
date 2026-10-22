@@ -6,6 +6,13 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-22
+
+### Added
+- **A theme `roadstyle`**: the look of roadstyle's own defaults (its palette `amber`, the one the duckOSM level editor draws): yellow main roads, blue-grey small roads,
+  salmon dashed footways. The feature layers keep their OSM-Carto colours, and a class that `amber` lacks keeps its OSM-Carto colour. Choose it with
+  `--theme roadstyle` or `render_map(theme="roadstyle")`. The default stays `osm`. Design: `docs/design/roadstyle_look.md`.
+
 ## [0.9.0] — 2026-10-22
 
 ### Added

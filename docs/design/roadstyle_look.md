@@ -1,6 +1,6 @@
 # Design: the roadstyle look as a theme
 
-**Status:** proposal, 2026-10-22. Waits for sign-off. Nothing is coded.
+**Status:** done in mapstyle 0.10.0 (2026-10-22). Kaveh chose it as a choice, with `osm` as the default.
 
 ## Problem
 

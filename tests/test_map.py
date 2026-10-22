@@ -480,7 +480,7 @@ def test_grey_theme_is_muted_except_the_water_and_green_hints():
 
 def test_theme_osm_is_todays_page_and_an_unknown_theme_names_the_choices(monaco):
     assert render_map(monaco, layers=False).html == render_map(monaco, layers=False, theme="osm").html
-    with pytest.raises(ValueError, match="unknown theme 'nope'; choose from \\('osm', 'google', 'grey'\\)"):
+    with pytest.raises(ValueError, match="unknown theme 'nope'; choose from \\('osm', 'google', 'grey', 'roadstyle'\\)"):
         render_map(monaco, theme="nope")
     html = render_map(monaco, theme="grey").html
     assert "blank_grey" in html and "#f5f5f3" in html
@@ -644,3 +644,18 @@ def test_background_is_landcover_of_kind_background(monaco):
     ms = _ms(render_map(monaco, "walking").html)
     layer = next(L for L in ms["layers"] if L["label"] == "landcover")
     assert "background" not in layer["color_by"]["map"] and layer["interaction"]["clickable"] is False    # so its colour is the default
+
+
+def test_theme_roadstyle_is_the_palette_amber(monaco):
+    """The theme `roadstyle` is the look of roadstyle's own defaults (the level editor's): its road colours are the palette `amber`
+    (docs/design/roadstyle_look.md). The default theme stays `osm`."""
+    from mapstyle.style import themes
+    assert "roadstyle" in themes() and themes()[0] == "osm"
+    amber = rs.palette_to_dict("amber")
+    th = __import__("yaml").safe_load((Path(__file__).resolve().parents[1] / "src/mapstyle/styles/themes/roadstyle.yaml").read_text())
+    for c, v in th["roads"]["colors"].items():
+        assert (v["fill"], v["casing"]) == (amber[c]["fill"], amber[c]["casing"]), c
+    for c, v in th["paths"].items():
+        assert v["fill"] == amber[c]["fill"] and v["dash"] == amber[c]["dash"], c
+    html = render_map(monaco, "all", theme="roadstyle").html
+    assert "#f4c542" in html and "#fcd6a4" not in html              # the primary fill of amber, not OSM-Carto's (Monaco has no motorway)
