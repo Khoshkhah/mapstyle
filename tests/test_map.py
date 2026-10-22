@@ -667,3 +667,16 @@ def test_raceway_is_clickable(monaco):
     assert layers["raceway"]["interaction"]["clickable"] is True and layers["other_ways"]["interaction"]["clickable"] is True
     if "railways" in layers:
         assert layers["railways"]["interaction"]["clickable"] is False
+
+
+def test_export_inline_carries_the_planner_data_when_asked(monaco):
+    """planner=True puts the route planner's graphs in the style's metadata (the GeoLibre plugin's route planner); without it, nothing."""
+    import mapstyle
+    from mapstyle.export import export_inline
+    plain = export_inline(monaco)
+    assert "roadstyle:planner" not in plain.get("metadata", {})
+    d = export_inline(monaco, planner=True)["metadata"]["roadstyle:planner"]
+    roads = mapstyle.load_roads(str(monaco))
+    assert d["n"] == len(roads) and d["eid"] == [str(e) for e in roads["edge_id"]] and d["modes"]
+    assert len(d["start"]) == 2 and len(d["end"]) == 2 and d["start"] != d["end"]
+    assert all(set(g) >= {"k", "cost", "len", "next"} for g in d["graphs"].values())

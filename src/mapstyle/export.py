@@ -111,9 +111,14 @@ def export_style(db, out_dir, *, base_url, mode=None, paths=PATHS, theme="osm", 
     return render_map(db, mode, paths=paths, theme=theme, _export=write, **kwargs)
 
 
-def export_inline(db, *, mode=None, paths=PATHS, theme="osm", **kwargs):
+PLANNER_MAX_EDGES = 150_000          # a bigger database gets no route planner data in its style (the page would be heavy)
+
+
+def export_inline(db, *, mode=None, paths=PATHS, theme="osm", planner=False, **kwargs):
     """The map of ``db`` as ``export_style`` makes it, but as one style with the data inside (GeoJSON sources, no files), for the
-    roadstyle GeoLibre plugin, which runs this in the browser (Pyodide). ``kwargs`` go to ``render_map``."""
+    roadstyle GeoLibre plugin, which runs this in the browser (Pyodide). ``kwargs`` go to ``render_map``.
+    ``planner=True`` adds the route planner's graphs (``planner_data``) to the style's metadata ``roadstyle:planner``; a database with more than
+    ``PLANNER_MAX_EDGES`` roads gets ``roadstyle:planner_skipped`` (its number of roads) instead."""
     import roadstyle as rs
 
     def make(roads, palette, settings, kw, config):
@@ -126,4 +131,13 @@ def export_inline(db, *, mode=None, paths=PATHS, theme="osm", **kwargs):
         style["metadata"]["roadstyle:images"] = {**style["metadata"]["roadstyle:images"], **images}
         return style
 
-    return render_map(db, mode, paths=paths, theme=theme, _export=make, **kwargs)
+    style = render_map(db, mode, paths=paths, theme=theme, _export=make, **kwargs)
+    if planner:
+        from mapstyle.map import load_roads, planner_data
+        roads = load_roads(str(db))
+        meta = style.setdefault("metadata", {})
+        if len(roads) > PLANNER_MAX_EDGES:
+            meta["roadstyle:planner_skipped"] = len(roads)
+        else:
+            meta["roadstyle:planner"] = planner_data(db, roads)
+    return style

@@ -432,6 +432,25 @@ def _inject(m, html):
     return m
 
 
+def _planner_ends(roads, mode):
+    """The planner opens with a route: the midpoints of the roads of ``mode`` nearest to 30 % and 70 % along the diagonal of their box. Shapely, not
+    DuckDB's spatial functions: the browser's DuckDB (Pyodide, the roadstyle GeoLibre plugin) has none."""
+    import numpy as np
+
+    r = roads[roads[mode].astype(bool)] if mode in roads.columns else roads
+    if not len(r):
+        r = roads
+    x0, y0, x1, y1 = r.total_bounds
+    cen = r.geometry.centroid                     # degrees: flat distances are enough to pick a road
+    cx, cy = cen.x.to_numpy(), cen.y.to_numpy()
+    out = []
+    for f in (0.3, 0.7):
+        i = int(np.argmin((cx - (x0 + (x1 - x0) * f)) ** 2 + (cy - (y0 + (y1 - y0) * f)) ** 2))
+        p = r.geometry.iloc[i].interpolate(0.5, normalized=True)
+        out.append([p.x, p.y])
+    return out
+
+
 def planner_data(db, roads):
     """The route planner's graphs (the page's ``RM``), as duckOSM's route_map.py builds them: per mode
     its turn graph (``edge_graph``) over the feature indices of ``roads`` (``load_roads``), and
@@ -464,7 +483,8 @@ def planner_data(db, roads):
         node_ids = sorted({x for s, t, *_ in ends.values() for x in (s, t)})
         n_of = {n: i for i, n in enumerate(node_ids)}
         row = [ends[int(e)] for e in roads["edge_id"]]
-        data = {"modes": modes, "n": len(roads), "src": [n_of[r[0]] for r in row],
+        data = {"modes": modes, "n": len(roads), "eid": [str(e) for e in roads["edge_id"]],   # each index's edge_id: a page finds the map's road by it
+                "src": [n_of[r[0]] for r in row],
                 "tgt": [n_of[r[1]] for r in row], "name": list(roads["name"]),
                 "len": [round(r[2] or 0.0, 1) for r in row],
                 "hw": [h or "" for h in roads["highway"]],       # for the turn-by-turn directions
@@ -495,14 +515,7 @@ def planner_data(db, roads):
                          "SELECT node_id, from_mode, to_mode, cost_s FROM mm.transfers").fetchall()
                      if fm in mi and tm in mi and n in n_of]
             data["mm"] = {"edges": mm_edges, "transfers": mm_tr, "nodes": len(node_ids)}
-        # the page opens with a route: markers on the roads nearest 30 % and 70 % along the diagonal
-        x0, y0, x1, y1 = con.execute(
-            f"SELECT min(ST_XMin(geometry)), min(ST_YMin(geometry)), max(ST_XMax(geometry)), "
-            f"max(ST_YMax(geometry)) FROM {modes[0]}.edges").fetchone()
-        near = (f"SELECT ST_X(p), ST_Y(p) FROM (SELECT ST_LineInterpolatePoint(geometry, 0.5) AS p "
-                f"FROM {modes[0]}.edges ORDER BY ST_Distance(ST_Centroid(geometry), ST_Point(?, ?)) LIMIT 1)")
-        data["start"], data["end"] = (list(con.execute(near, [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]).fetchone())
-                                      for f in (0.3, 0.7))
+        data["start"], data["end"] = _planner_ends(roads, modes[0])
     finally:
         con.close()
     return data

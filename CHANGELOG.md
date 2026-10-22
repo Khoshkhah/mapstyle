@@ -6,6 +6,13 @@ All notable changes to **mapstyle** are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-22
+
+### Added
+- `export_inline(db, planner=True)` adds the route planner's graphs (`planner_data`) to the style's metadata `roadstyle:planner`, for the roadstyle GeoLibre
+  plugin's route planner. A database with more than 150,000 roads gets `roadstyle:planner_skipped` (the number of roads) instead.
+- `planner_data` has `eid` (the edge_id of each index), and finds the planner's start and end with shapely, not DuckDB's spatial functions (the browser's DuckDB has none).
+
 ## [0.10.1] — 2026-10-22
 
 ### Changed
