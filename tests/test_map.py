@@ -659,3 +659,11 @@ def test_theme_roadstyle_is_the_palette_amber(monaco):
         assert v["fill"] == amber[c]["fill"] and v["dash"] == amber[c]["dash"], c
     html = render_map(monaco, "all", theme="roadstyle").html
     assert "#f4c542" in html and "#fcd6a4" not in html              # the primary fill of amber, not OSM-Carto's (Monaco has no motorway)
+
+
+def test_raceway_is_clickable(monaco):
+    """The raceway and the other ways are roads that no network holds: a click selects them (the other lines, rails and waterways, are decoration)."""
+    layers = {L["label"]: L for L in _ms(render_map(monaco, "walking").html)["layers"]}
+    assert layers["raceway"]["interaction"]["clickable"] is True and layers["other_ways"]["interaction"]["clickable"] is True
+    if "railways" in layers:
+        assert layers["railways"]["interaction"]["clickable"] is False

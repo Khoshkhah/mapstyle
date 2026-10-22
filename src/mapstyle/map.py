@@ -402,9 +402,10 @@ def feature_overlays(fcs, interaction=None, style=None, edge_attached=()):
                 # the SVGs are 48 px: icon-size = px / 48, scaled by the category's size
                 L["icon"] = {"image": f"ms-icon-{name}", "opacity": icon["opacity"],
                              "size": [[z, px * p["size"] / 48] for z, px in icon["size"].items()]}
+        # the lines are decoration (a click reaches the road), but a raceway and the other ways are roads: a click selects them
         # built clickable with a tooltip so rsSetInteraction can switch both ways (layers.js);
         # decoration (landcover, water, lines) opens not clickable, so a click reaches the road
-        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved") or kind == "line"),
+        L["interaction"] = {"clickable": not (name in ("landcover", "water", "paved") or (kind == "line" and name not in ("raceway", "other_ways"))),
                             "tooltip": False, "popup": True, **(interaction or {}).get(name, {})}
         # starts hidden: layers.js shows it once styled (icons, zoom range, colours), so the page
         # never flashes plain dots / every building first (Kaveh: "it shows all POI and then removes them")
