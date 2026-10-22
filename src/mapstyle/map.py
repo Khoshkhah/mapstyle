@@ -188,6 +188,8 @@ def load_layers(db, names=None):
             if s.get("outside_networks") and not nets:
                 continue                    # no road tables: every way would be drawn twice (or the roads are not in this database)
             g = "ST_Centroid(geom)" if s.get("centroid") else "geom"
+            if s["name"] == "background" and "ocean" in have:     # the land of the boundary: without the sea, so a map with no sea layer does not paint the sea as land
+                g = "ST_Difference(geom, (SELECT ST_Union_Agg(geom) FROM features.ocean))"
             def query(tags):
                 return con.execute(
                     f"SELECT CAST(osm_id AS VARCHAR), {repr(s['name']) if s.get('schema') else 'kind'}, COALESCE(name, ''), "
@@ -205,8 +207,13 @@ def load_layers(db, names=None):
                     log.warning("features.%s has no tags: the heights of the buildings come from their kind", s["table"])
                     rows = query("NULL, NULL")
             except duckdb.Error as e:
-                log.warning("layer %r skipped: %s", s["name"], e)
-                continue
+                if s["name"] == "background" and g != "geom":
+                    log.warning("background: no land without the sea (%s): the whole boundary", e)
+                    g = "geom"
+                    rows = query("NULL, NULL")
+                else:
+                    log.warning("layer %r skipped: %s", s["name"], e)
+                    continue
             name = s.get("merge_into") or s["name"]
             for osm_id, kind, nm, bearing, levels, height, a, gj in rows:
                 props = {"osm_id": osm_id, "kind": kind, "name": nm}
